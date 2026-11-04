@@ -1,0 +1,21 @@
+# scratch / caches (see CLAUDE.md, Disk hygiene)
+.scratch/
+.worktrees/
+.pytest_cache/
+__pycache__/
+node_modules/
+vendor/
+.venv/
+dist/
+build/
+coverage/
+
+# local runtime data
+/data/
+/media/
+*.sqlite
+*.sqlite3
+.env
+
+# local agent settings
+.claude/settings.local.json
