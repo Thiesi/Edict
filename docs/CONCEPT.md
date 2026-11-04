@@ -18,10 +18,17 @@ Guiding principles:
 | | Decision |
 |---|---|
 | ✅ Stack | PHP 8.3 (php-fpm) + PostgreSQL 16 on Roanoke |
-| ✅ Media tools | ffmpeg, libvips, exiftool, installed via pkgin with your approval and a dry run first |
-| ✅ Deploy | CGP model: CI builds a release, it lands in `releases/<sha-timestamp>`, the `current` symlink is flipped, a healthcheck runs, and rollback is instant |
-| ✅ Domain | a subdomain of one of your domains. ❓ The exact name is still open |
-| ❓ Design | worked out together in a dedicated track (§7) |
+| ✅ Media tools | ffmpeg, libvips, exiftool, poppler, installed via pkgin with your approval and a dry run first |
+| ✅ Deploy | CGP model: CI builds a release, it lands in `releases/<sha-timestamp>`, the `current` symlink is flipped, a healthcheck runs, and rollback is instant. Carried out via Ops: Roanoke (§8) |
+| ✅ Domain | a subdomain of one of your domains. ❓ The exact name is still open; it's needed before S1 |
+| ✅ URLs | `/slug` for articles and static pages in one namespace |
+| ✅ Language | English interface. Each article is marked `de` or `en` |
+| ✅ Comments | posted immediately, fully nested threads |
+| ✅ Feed | Atom feed with full text, at launch |
+| ✅ Uploads | any file type is accepted; unknown types are always served as downloads |
+| ✅ Local dev | the dev PC uses a dev DB on Roanoke through an SSH tunnel |
+| ✅ Import | none, fresh start |
+| ✅ Design | an independent look, worked out together in a dedicated track (§7) |
 
 ## 3. Architecture
 
@@ -65,7 +72,8 @@ Browser ──HTTPS──▶ Apache (macro vhost, TLS via acme.sh)
 - When logged in, the public site shows inline admin controls: edit, delete comment, adjust votes, unpublish.
 
 **Articles**
-- Fields: title, slug (auto-generated, editable), teaser, cover image, body, tags, status (draft / published / unpublished).
+- Fields: title, slug (auto-generated, editable), language (`de`/`en`, defaulting to the last one used), teaser, cover image, body, tags, status (draft / published / unpublished).
+- Each article's language sets the page's `lang` attribute, hyphenation, quote style and date format inside the article. The interface around it stays English. Overview pages show a small DE/EN marker.
 - **Autosave** every few seconds, plus a warning before closing the page with unsaved changes. Losing text is unacceptable.
 - Previews render a draft exactly as the public will see it.
 - Static pages (About, Imprint/Impressum, Privacy) use the same editor but are not listed as articles.
@@ -93,9 +101,9 @@ Browser ──HTTPS──▶ Apache (macro vhost, TLS via acme.sh)
   - The public count is `real likes + royal adjustment`. You set the adjustment to anything, any time ("+100" button), and the admin view shows both numbers.
 - **Comments:**
   - Readers comment without an account: name, optional email (never shown publicly), and text. Comments are plain text with auto-linked URLs. No HTML, no images.
-  - Moderation can be one of two modes, switchable per site and per article:
-    - *post immediately* (you remove what you don't like)
-    - *hold for approval*
+  - **Fully nested threads.** Any comment can be answered. Indentation is capped visually (about 5 levels on desktop, 3 on mobile); deeper replies continue at the cap, with an "↳ in reply to *name*" marker. Each subtree can be collapsed.
+  - Moderation has two modes, switchable per site and per article. The default is ✅ *post immediately* (you remove what you don't like); the other is *hold for approval*. Word-filter hits and banned users are always held.
+  - Deleting a comment that has replies offers two choices: *remove only this one* (it shows as "[removed]" and the replies stay), or *remove the whole subtree*.
 - **Moderation powers (one click each, inline on the article page and in an admin queue):**
   - delete
   - edit
@@ -109,7 +117,9 @@ Browser ──HTTPS──▶ Apache (macro vhost, TLS via acme.sh)
 
 **Public site**
 - Home page (latest articles), article page, archive with pagination, tag pages, static pages, and a styled 404/500.
-- Clean URLs (`/2026/11/my-article-slug` or `/my-article-slug`, ❓ your choice), with redirects when a slug changes.
+- ✅ Clean URLs: `/my-article-slug`. Articles and static pages share one namespace. System paths (`/tag/…`, `/archive`, `/feed.atom`, `/media/…`, `/assets/…`, the admin path, `/sitemap.xml`, …) are reserved and can't be used as slugs. Renamed slugs redirect permanently (301).
+- ✅ **Atom feed with full text** (`/feed.atom`, plus a per-tag feed). Each entry carries its article's language. Images are included; audio and video appear as links or enclosures.
+- Legal page templates for Impressum and Datenschutz (in German, since the operator is German).
 - SEO basics: `<title>`/meta description, OpenGraph and Twitter cards (cover image), canonical URLs, `sitemap.xml`, `robots.txt`.
 - Accessible markup: semantic HTML, alt texts (the editor asks for them), keyboard-operable players and lightbox.
 
@@ -127,9 +137,8 @@ Browser ──HTTPS──▶ Apache (macro vhost, TLS via acme.sh)
 
 | Feature | Notes |
 |---|---|
-| **Atom/RSS feed** | Very cheap (half a day). I'd suggest pulling it into the launch. Full-text or teaser ❓ |
 | Scheduled publishing | "Publish at" timestamp, picked up by the worker |
-| Full-text search | PostgreSQL full-text search with German and English stemming, no extra service |
+| Full-text search | PostgreSQL full-text search, stemming each article in its own language (de/en), no extra service |
 | Revision history | Diff and restore of earlier versions. Autosave already gives us the data |
 | Email notifications | A new comment awaiting moderation, sent via local Postfix |
 | Secret preview links | Share a draft with someone before publishing |
@@ -140,12 +149,11 @@ Browser ──HTTPS──▶ Apache (macro vhost, TLS via acme.sh)
 | Reader subscriptions | Email when a new article appears (double opt-in) |
 | Fediverse | Publish articles as ActivityPub posts, or have Akkoma (already on Roanoke) announce them |
 | Adaptive video (HLS) | Only worthwhile if videos get long or large |
-| Import | From your current website, if wanted ❓ |
 | Dark mode | Ties into the design work |
 
 ### 4.3 Explicitly out of scope
 
-Multiple authors and roles, a plugin system, a page-tree builder, multi-language content, e-commerce, public user accounts.
+Multiple authors and roles, a plugin system, a page-tree builder, translated versions of the same article (each article is in exactly one language), content import, e-commerce, public user accounts.
 
 ## 5. Media handling in detail
 
@@ -159,8 +167,8 @@ After upload, a file is hashed (SHA-256) and stored once at `media/ab/cd/<sha256
 | **Gallery** | multiple images | as above | Grid or masonry, opening into the lightbox |
 | **Audio** | MP3, M4A/AAC, FLAC, WAV, OGG/Opus | Transcodes to AAC 192 kbit/s M4A (plays everywhere) and computes waveform peaks (ffmpeg). Keeps the original | Styled player with waveform, scrubbing, speed control and duration; native `<audio>` underneath. Optional "download original" |
 | **Video** | MP4, MOV, MKV, WebM, AVI | Transcodes to H.264 + AAC MP4, max 1080p, `faststart`. Extracts a poster frame at about 10%, which can be changed in the editor | Inline player with poster, native controls, no autoplay. Apache serves Range requests directly, so seeking is instant |
-| **PDF** | PDF | First-page preview image (needs poppler or ghostscript, a second small package install, ❓) | Card with preview, title and size; click opens it in the browser's PDF viewer |
-| **Other** | ZIP, Office files, anything on an allow-list ❓ | Stored as-is, filename sanitised, `Content-Disposition: attachment` | Download card with icon, name and size |
+| **PDF** | PDF | ✅ First-page preview image (poppler, via libvips) | Card with preview, title and size; click opens it in the browser's PDF viewer |
+| **Other** | ✅ anything | Stored as-is with the original filename recorded. On disk it lives only under its hash, so the uploaded name never becomes a path. Served with `Content-Disposition: attachment`, as `application/octet-stream` unless the type is known and harmless, plus `nosniff`. Apache never runs scripts from the media directory | Download card with an icon for the type, name and size |
 
 \*HEIC only if pkgsrc's libvips includes libheif. To be checked during the install dry run.
 
@@ -176,15 +184,15 @@ Every limit fails loudly, before anything is written.
 
 ## 6. Data model (first cut)
 
-`admin` (credentials, passkeys, TOTP) · `session` · `article` (status, slug, title, teaser, body_json, body_html_cache, cover_media_id, published_at, comments_mode, vote_adjustment) · `article_revision` · `slug_redirect` · `tag` / `article_tag` · `media` (sha256, mime, bytes, original_name, meta_json) · `media_variant` (media_id, preset, path, bytes) · `article_media` · `job` (type, payload, state, attempts, run_after) · `vote` (article_id, voter_hash, created_at) · `comment` (article_id, parent_id?, name, email, body, state, ip_hash, created_at) · `ban` · `setting`.
+`admin` (credentials, passkeys, TOTP) · `session` · `article` (status, slug, lang, title, teaser, body_json, body_html_cache, cover_media_id, published_at, comments_mode, vote_adjustment) · `article_revision` · `slug_redirect` · `tag` / `article_tag` · `media` (sha256, mime, bytes, original_name, meta_json) · `media_variant` (media_id, preset, path, bytes) · `article_media` · `job` (type, payload, state, attempts, run_after) · `vote` (article_id, voter_hash, created_at) · `comment` (article_id, parent_id, path, depth, name, email, body, state, ip_hash, created_at) · `ban` · `setting`.
 
-❓ Comment threading: flat (simpler, calmer) or one level of replies? I recommend **flat with one level of replies**, so you can answer directly.
+✅ Comments are fully nested. `path` is a materialised path (e.g. `0007.0012.0003`), so a whole thread loads with a single ordered query, and removing a subtree is a single `DELETE … WHERE path LIKE`.
 
 ## 7. Design track
 
 The design is decided together and runs in parallel to the technical slices:
 
-1. **Brief.** You tell me sites you like or dislike, the tone you want, and whether the new site should relate visually to your existing one.
+1. **Brief.** You tell me sites you like or dislike and the tone you want. ✅ The site gets its own identity, independent of your existing website.
 2. **Three directions.** I build three clickable sample pages: home and article, with real-looking content including an image, audio and video. You pick one, or mix them.
 3. **Design tokens.** Typography, colour (light/dark), spacing and widths, as CSS custom properties.
 4. **Templates.** The chosen direction goes into the Twig templates in slice S9.
@@ -195,7 +203,7 @@ Each slice is one PR (or a few small ones), ends in something you can see on **s
 
 | # | Slice | Delivers | Size |
 |---|---|---|---|
-| **S0** | Foundations | Composer project (platform pinned to PHP 8.3), Slim/Twig skeleton, PHPUnit with the scratch guard, PHPStan, PHP-CS-Fixer, GitHub Actions CI with a PostgreSQL service, `docs/` conventions, local dev setup | M |
+| **S0** | Foundations | Composer project (platform pinned to PHP 8.3, `composer.phar` run with the PHP already on your PC), Slim/Twig skeleton, PHPUnit with the scratch guard, PHPStan, PHP-CS-Fixer, GitHub Actions CI with a PostgreSQL service, `docs/` conventions. Dev environment: a handoff to Ops for `edict_dev` and `edict_test` databases plus SSH tunnel access, and a `bin/tunnel` helper | M |
 | **S1** | Staging on Roanoke | Edict side: deploy scripts (release/symlink/healthcheck/rollback), CI build artifact, and a written deploy handoff (vhost snippets, fpm pool, DB/role, users, paths). **The Ops: Roanoke session carries out the initial setup and first deploy** (subdomain, DNS, certificate, macro vhosts, pool, DB), so the host owner side knows everything that changed. Shows "Hello, Edict" on staging. *Needs your approvals: vhost diff, deploy key* | M |
 | **S2** | Auth | Admin CLI, passkey + password/TOTP login, DB sessions, CSRF, rate limiting, logout-everywhere | M |
 | **S3** | Articles core | Schema + migrations, minimal admin list and form, draft/publish, slugs + redirects, tags, public home/article/archive/tag pages on a plain placeholder theme | M |
@@ -206,8 +214,8 @@ Each slice is one PR (or a few small ones), ends in something you can see on **s
 | **S8** | Votes | Like button, dedupe, royal adjustment UI (inline + admin) | S |
 | **S9** | Design implementation | The chosen direction (design track §7) applied to all public templates, light/dark, responsive, accessibility pass | L |
 | **S10** | Comments & moderation | Comment form, spam measures, moderation modes, inline + queue moderation, bans, word filter, closing rules | L |
-| **S11** | Launch hardening | CSP, SEO bits (meta/OG/sitemap/robots), error pages, newsyslog, disk alerts, cleanup sweeps, restore test, production vhost, **go-live** | M |
-| S12+ | Post-launch | Atom feed (or pulled into S11), search, scheduled publishing, notifications, … in the order you choose | — |
+| **S11** | Launch hardening | Full-text Atom feed, CSP, SEO bits (meta/OG/sitemap/robots), legal page templates, error pages, newsyslog, disk alerts, cleanup sweeps, restore test, production vhost via Ops, **go-live** | M |
+| S12+ | Post-launch | Search, scheduled publishing, notifications, … in the order you choose | — |
 
 Order rationale: deploying early (S1) removes the biggest risks, which are on the host side. Writing (S3–S4) comes before reader features because you'll want to write real content while the rest is built. Design (S9) waits until real content exists to design against, but its exploration starts right after this concept is approved.
 
@@ -217,18 +225,7 @@ Order rationale: deploying early (S1) removes the biggest risks, which are on th
 
 ## 9. Open questions for you
 
-1. **Subdomain:** which exact name?
-2. **URL scheme:** `/2026/11/slug` or `/slug`?
-3. **Comments:** post immediately or hold for approval by default? Flat or one reply level?
-4. **Feed:** pull Atom/RSS into the launch? Full text or teaser?
-5. **PDF previews:** OK to also install poppler (or ghostscript) for first-page thumbnails?
-6. **Allowed "other" file types:** an allow-list (my preference) or anything?
-7. **Language:** is the site's UI German, English, or both? (This affects date formats, the stemmer for search, and legal pages like Impressum and Datenschutz.)
-8. **Local development:** your PC has PHP 8.4 but no PostgreSQL or Composer. Options:
-   - **(a)** install PostgreSQL + Composer on Windows (simple, fast)
-   - **(b)** develop against a dev DB on Roanoke through an SSH tunnel
-   - **(c)** rely on CI + staging only
+1. **Subdomain:** which exact name? This is needed before S1.
+2. **Design brief:** examples of sites you like or dislike, and the tone you want. This starts the design track once the concept is merged.
 
-   I recommend **(a)**.
-9. **Import:** is there existing content to bring over?
-10. **Design brief:** examples of sites you like, and should the new site resemble your current one?
+All other questions were answered on 2026-11-04 and are recorded as ✅ above.
