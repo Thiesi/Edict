@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/brand/edict-banner.png" alt="Edict: a CMS for one sovereign. Publish, moderate, rule." width="100%"></p>
+
 # Edict
 
 A small, opinionated, single-author CMS for self-hosted websites (Apache on NetBSD).
