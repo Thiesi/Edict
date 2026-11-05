@@ -1,0 +1,16 @@
+#!/bin/sh
+# Forward local port 55432 to PostgreSQL on Roanoke (127.0.0.1:5432) over SSH.
+# Usage: bin/tunnel            (reads EDICT_TUNNEL_SSH from .env or the environment)
+#        bin/tunnel user@host
+set -eu
+cd "$(dirname "$0")/.."
+target="${1:-${EDICT_TUNNEL_SSH:-}}"
+if [ -z "$target" ] && [ -f .env ]; then
+    target=$(sed -n 's/^EDICT_TUNNEL_SSH=//p' .env | tr -d '"\r')
+fi
+if [ -z "$target" ]; then
+    echo "Set EDICT_TUNNEL_SSH in .env (e.g. you@Roanoke.NetWorkXXIII.de) or pass it as an argument." >&2
+    exit 1
+fi
+echo "Tunnel: 127.0.0.1:55432 -> $target:5432 (Ctrl+C to close)"
+exec ssh -N -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -L 55432:127.0.0.1:5432 "$target"

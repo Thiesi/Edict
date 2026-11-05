@@ -19,3 +19,7 @@ coverage/
 
 # local agent settings
 .claude/settings.local.json
+
+# PHP tooling (fixed paths, see CLAUDE.md)
+.phpunit.cache/
+/var/
