@@ -24,6 +24,8 @@ Guiding principles:
 | ✅ URLs | `/slug` for articles and static pages in one namespace |
 | ✅ Language | English interface. Each article is marked `de` or `en` |
 | ✅ Comments | posted immediately, fully nested threads |
+| ✅ Reader login | Twitch and Google OAuth. Anonymous visitors can read only; commenting and voting need a login |
+| ✅ Admin login | allow-listed Twitch/Google accounts, or passkey, or password + TOTP (the fallback that works when a provider is down) |
 | ✅ Feed | Atom feed with full text, at launch |
 | ✅ Uploads | any file type is accepted; unknown types are always served as downloads |
 | ✅ Local dev | the dev PC uses a dev DB on Roanoke through an SSH tunnel |
@@ -66,9 +68,13 @@ Browser ──HTTPS──▶ Apache (macro vhost, TLS via acme.sh)
 ### 4.1 Required (MVP / launch)
 
 **Authentication & admin**
-- Single admin account, created via a CLI command on the host. There is no public sign-up at all.
-- Login with a **passkey** (WebAuthn) as the primary method, and **password + TOTP** as the fallback.
-- The login endpoint is rate-limited. Sessions are bound to a secure, HttpOnly, SameSite=Strict cookie, and every admin action is CSRF-protected.
+- **Readers log in with Twitch or Google** (OAuth 2.0 / OpenID Connect, authorisation-code flow with `state`). There are no local reader passwords. The first login creates the account.
+- **Minimal data:** provider, the provider's stable user ID, and a display name, with the smallest scopes that provide them. No email, no friend or channel data. No avatars at launch, because hotlinking them would leak readers' IP addresses to Google and Twitch; initials instead.
+- **Accounts are never merged by email or name.** A reader can link a second provider explicitly while signed in. Identities are keyed on the provider's stable ID, never on a changeable name.
+- **Self-service for readers:** edit display name, sign out everywhere, delete account (comments stay as "[deleted user]" or are removed, votes are removed). Required for GDPR.
+- **Admin role.** The admin account is created via a CLI command on the host, which also allow-lists your own Twitch and Google IDs. There is no way to become admin from the web.
+- **Admin login:** an allow-listed Twitch/Google account, a passkey, or password + TOTP. The last one is the fallback that keeps you in when a provider is down, and CLI reset on the host is the final recovery. Whoever controls your Google or Twitch account controls the site, so both need 2FA.
+- Login endpoints are rate-limited. Sessions are stored in the DB with a secure, HttpOnly, `SameSite=Lax` cookie (`Strict` would drop the cookie on the redirect back from the provider), and every state-changing action is CSRF-protected.
 - When logged in, the public site shows inline admin controls: edit, delete comment, adjust votes, unpublish.
 
 **Articles**
@@ -97,23 +103,23 @@ Browser ──HTTPS──▶ Apache (macro vhost, TLS via acme.sh)
 
 **Reader interaction**
 - **Votes:**
-  - A single "like" per article. Readers stay anonymous, with deduplication per browser (cookie) plus a salted IP hash that rotates daily.
+  - A single "like" per article, per logged-in account. Anonymous visitors see the count and a "log in to like" prompt.
   - The public count is `real likes + royal adjustment`. You set the adjustment to anything, any time ("+100" button), and the admin view shows both numbers.
 - **Comments:**
-  - Readers comment without an account: name, optional email (never shown publicly), and text. Comments are plain text with auto-linked URLs. No HTML, no images.
+  - Commenting needs a login. The display name comes from the account. Comments are plain text with auto-linked URLs. No HTML, no images.
   - **Fully nested threads.** Any comment can be answered. Indentation is capped visually (about 5 levels on desktop, 3 on mobile); deeper replies continue at the cap, with an "↳ in reply to *name*" marker. Each subtree can be collapsed.
-  - Moderation has two modes, switchable per site and per article. The default is ✅ *post immediately* (you remove what you don't like); the other is *hold for approval*. Word-filter hits and banned users are always held.
+  - Moderation has two modes, switchable per site and per article. The default is ✅ *post immediately* (you remove what you don't like); the other is *hold for approval*. Word-filter hits are always held, and banned accounts can't post or vote.
   - Deleting a comment that has replies offers two choices: *remove only this one* (it shows as "[removed]" and the replies stay), or *remove the whole subtree*.
 - **Moderation powers (one click each, inline on the article page and in an admin queue):**
   - delete
   - edit
   - pin
   - mark as "approved author" (their future comments skip the queue)
-  - ban (by IP hash and/or email, with optional expiry)
+  - ban (by account, with optional expiry)
   - close comments on an article
   - auto-close comments after N days
   - word filter (hold or reject comments containing listed words)
-- **Spam protection without third parties:** a honeypot field, a minimum time on the form, per-IP rate limits and the word filter. No reCAPTCHA, no external services.
+- **Spam protection:** the login requirement does most of the work, plus per-account rate limits and the word filter. No reCAPTCHA. Google and Twitch are the only third parties involved, and only when someone chooses to log in.
 
 **Public site**
 - Home page (latest articles), article page, archive with pagination, tag pages, static pages, and a styled 404/500.
@@ -153,7 +159,7 @@ Browser ──HTTPS──▶ Apache (macro vhost, TLS via acme.sh)
 
 ### 4.3 Explicitly out of scope
 
-Multiple authors and roles, a plugin system, a page-tree builder, translated versions of the same article (each article is in exactly one language), content import, e-commerce, public user accounts.
+Multiple authors and roles, a plugin system, a page-tree builder, translated versions of the same article (each article is in exactly one language), content import, e-commerce, local reader accounts with passwords, other login providers (for now).
 
 ## 5. Media handling in detail
 
@@ -184,7 +190,7 @@ Every limit fails loudly, before anything is written.
 
 ## 6. Data model (first cut)
 
-`admin` (credentials, passkeys, TOTP) · `session` · `article` (status, slug, lang, title, teaser, body_json, body_html_cache, cover_media_id, published_at, comments_mode, vote_adjustment) · `article_revision` · `slug_redirect` · `tag` / `article_tag` · `media` (sha256, mime, bytes, original_name, meta_json) · `media_variant` (media_id, preset, path, bytes) · `article_media` · `job` (type, payload, state, attempts, run_after) · `vote` (article_id, voter_hash, created_at) · `comment` (article_id, parent_id, path, depth, name, email, body, state, ip_hash, created_at) · `ban` · `setting`.
+`user` (display_name, is_admin, banned_until, deleted_at) · `user_identity` (user_id, provider, provider_user_id, unique on provider + ID) · `admin_credential` (password hash, TOTP secret, last TOTP step) · `passkey` · `session` (token hash, user_id, csrf_token, expires_at) · `oauth_state` · `article` (status, slug, lang, title, teaser, body_json, body_html_cache, cover_media_id, published_at, comments_mode, vote_adjustment) · `article_revision` · `slug_redirect` · `tag` / `article_tag` · `media` (sha256, mime, bytes, original_name, meta_json) · `media_variant` (media_id, preset, path, bytes) · `article_media` · `job` (type, payload, state, attempts, run_after) · `vote` (article_id, user_id, created_at, unique on both) · `comment` (article_id, user_id, parent_id, path, depth, body, state, created_at) · `ban` · `setting`.
 
 ✅ Comments are fully nested. `path` is a materialised path (e.g. `0007.0012.0003`), so a whole thread loads with a single ordered query, and removing a subtree is a single `DELETE … WHERE path LIKE`.
 
@@ -205,16 +211,18 @@ Each slice is one PR (or a few small ones), ends in something you can see on **s
 |---|---|---|---|
 | **S0** | Foundations | Composer project (platform pinned to PHP 8.3, `composer.phar` run with the PHP already on your PC), Slim/Twig skeleton, PHPUnit with the scratch guard, PHPStan, PHP-CS-Fixer, GitHub Actions CI with a PostgreSQL service, `docs/` conventions. Dev environment: a handoff to Ops for `edict_dev` and `edict_test` databases plus SSH tunnel access, and a `bin/tunnel` helper | M |
 | **S1** | Staging on Roanoke | Edict side: deploy scripts (release/symlink/healthcheck/rollback), CI build artifact, and a written deploy handoff (vhost snippets, fpm pool, DB/role, users, paths). **The Ops: Roanoke session carries out the initial setup and first deploy** (subdomain, DNS, certificate, macro vhosts, pool, DB), so the host owner side knows everything that changed. Shows "Hello, Edict" on staging. *Needs your approvals: vhost diff, deploy key* | M |
-| **S2** | Auth | Admin CLI, passkey + password/TOTP login, DB sessions, CSRF, rate limiting, logout-everywhere | M |
+| **S2a** | Auth core | Migrations, users, DB sessions, CSRF, rate limiting, admin CLI, password + TOTP login, logout-everywhere | M |
+| **S2b** | Twitch + Google login | OAuth flows, reader accounts, admin allow-list, account page (rename, link provider, delete). *Needs from you: OAuth apps at Google and Twitch* | M |
+| **S2c** | Passkeys | WebAuthn registration and login for the admin | S |
 | **S3** | Articles core | Schema + migrations, minimal admin list and form, draft/publish, slugs + redirects, tags, public home/article/archive/tag pages on a plain placeholder theme | M |
 | **S4** | Editor | Full-screen TipTap editor, autosave + unsaved-changes guard, JSON→HTML server renderer with allow-list, preview, static pages | L |
 | **S5** | Media core + images | Chunked upload, content-addressed store, quotas/limits, job queue + rc.d worker, libvips variants, metadata stripping, image and gallery blocks, lightbox, media library panel. *Needs your approval: pkgin install* | L |
 | **S6** | Audio & video | ffmpeg transcode presets, poster frames, waveform peaks, player UI, processing states in the editor | M |
 | **S7** | Files & PDFs | Download cards, allow-list, PDF preview (if poppler is approved) | S |
-| **S8** | Votes | Like button, dedupe, royal adjustment UI (inline + admin) | S |
+| **S8** | Votes | Like button (one per account), login prompt for visitors, royal adjustment UI (inline + admin) | S |
 | **S9** | Design implementation | The chosen direction (design track §7) applied to all public templates, light/dark, responsive, accessibility pass | L |
-| **S10** | Comments & moderation | Comment form, spam measures, moderation modes, inline + queue moderation, bans, word filter, closing rules | L |
-| **S11** | Launch hardening | Full-text Atom feed, CSP, SEO bits (meta/OG/sitemap/robots), legal page templates, error pages, newsyslog, disk alerts, cleanup sweeps, restore test, production vhost via Ops, **go-live** | M |
+| **S10** | Comments & moderation | Comment form for logged-in readers, rate limits, moderation modes, inline + queue moderation, bans, word filter, closing rules | L |
+| **S11** | Launch hardening | Full-text Atom feed, CSP, SEO bits (meta/OG/sitemap/robots), legal page templates (the privacy page must cover Twitch/Google login), error pages, newsyslog, disk alerts, cleanup sweeps, restore test, production vhost via Ops, **go-live** | M |
 | S12+ | Post-launch | Search, scheduled publishing, notifications, … in the order you choose | — |
 
 Order rationale: deploying early (S1) removes the biggest risks, which are on the host side. Writing (S3–S4) comes before reader features because you'll want to write real content while the rest is built. Design (S9) waits until real content exists to design against, but its exploration starts right after this concept is approved.
@@ -227,5 +235,7 @@ Order rationale: deploying early (S1) removes the biggest risks, which are on th
 
 1. **Subdomain:** which exact name? This is needed before S1.
 2. **Design brief:** examples of sites you like or dislike, and the tone you want. This starts the design track once the concept is merged.
+
+3. **OAuth apps:** only you can register these, in the Google Cloud Console and the Twitch Developer Console. Their redirect URLs need the subdomain, plus `http://localhost:8080/auth/{google,twitch}/callback` for development. Client secrets go directly into `.env`, never into chats or commits.
 
 All other questions were answered on 2026-11-04 and are recorded as ✅ above.
