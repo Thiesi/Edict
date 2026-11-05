@@ -17,3 +17,12 @@ These rules exist because of an incident in the Blacksite repo, where millions o
 - Sessions and caches live in the DB or in memory, never one file per item. Any file cache has a TTL sweeper and a hard cap.
 - Media jobs write to a per-job temp dir that is removed in `finally`. A periodic sweep removes anything stale left by crashed jobs.
 - Hard caps on total media bytes and file count fail loudly before a write.
+- Exception: Twig's compiled-template cache (`var/cache/twig`, production/staging only) is a file cache bounded by the number of templates. It lives inside each release directory and is removed with the release.
+
+## Commands
+
+See `docs/DEVELOPMENT.md`. Before pushing, run `composer check` (code style, PHPStan level 9, PHPUnit). DB tests need `bin/tunnel` running; without it they are skipped.
+
+## Host changes
+
+Never change Roanoke directly. Deployments, DNS/TLS, vhosts, packages, DBs and services go to the **Ops: Roanoke** session as a written handoff.
