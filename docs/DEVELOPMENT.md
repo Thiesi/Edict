@@ -19,6 +19,15 @@ Fill in `.env`:
 - `EDICT_TUNNEL_SSH=thiesi@Roanoke.NetWorkXXIII.de`
 - the `edict_dev` password in `DATABASE_URL` and `TEST_DATABASE_URL`. It is stored on Roanoke in `~/.edict-dev-pw` (mode 0600); fetch it yourself, e.g. `ssh thiesi@Roanoke.NetWorkXXIII.de cat .edict-dev-pw`. Never paste it into chats, issues or commits.
 
+Then, with the tunnel running, create the schema and your admin account:
+
+```sh
+php bin/edict migrate
+php bin/edict admin:create <username>   # prompts for a password, then shows a QR code for your authenticator app
+```
+
+Open the site as `http://localhost:8080`, not `127.0.0.1`: `APP_URL` must match for the CSRF origin check, and passkeys and OAuth need the name.
+
 ## Daily use
 
 ```sh
@@ -28,13 +37,24 @@ composer check        # code style + PHPStan (level 9) + PHPUnit, as CI runs the
 composer cs-fix       # apply code style
 ```
 
-Tests in the `db` group need `TEST_DATABASE_URL` (and so the tunnel). Without it they are skipped, not failed. `vendor/bin/phpunit --exclude-group db` runs everything else offline.
+Tests in the `db` group need `TEST_DATABASE_URL` (and so the tunnel). Without it they are skipped, not failed. They wipe that database, so they refuse any database whose name doesn't end in `_test`. `vendor/bin/phpunit --exclude-group db` runs everything else offline.
 
 Database facts (from Ops, 2026-11-05):
 
 - Role `edict_dev` owns `edict_dev` and `edict_test`, with no superuser or createdb rights.
 - The cluster collation is `C` (byte order). Use explicit ICU collations where locale-aware sorting matters.
 - Both DBs are included in Roanoke's nightly `pg_dumpall`.
+
+## Admin commands
+
+| Command | Purpose |
+|---|---|
+| `php bin/edict migrate` | Apply pending migrations from `migrations/` |
+| `php bin/edict admin:create <username>` | Create the single admin account |
+| `php bin/edict admin:reset` | New password and authenticator secret; ends all admin sessions. The recovery path if you are locked out |
+| `php bin/edict admin:revoke-sessions` | End all admin sessions, e.g. after losing a device |
+
+`EDICT_ADMIN_PASSWORD` supplies the password for non-interactive runs. Changing `APP_SECRET` makes stored authenticator secrets unreadable, so run `admin:reset` afterwards.
 
 ## Disk hygiene
 

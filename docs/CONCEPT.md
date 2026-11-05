@@ -20,7 +20,7 @@ Guiding principles:
 | ✅ Stack | PHP 8.3 (php-fpm) + PostgreSQL 16 on Roanoke |
 | ✅ Media tools | ffmpeg, libvips, exiftool, poppler, installed via pkgin with your approval and a dry run first |
 | ✅ Deploy | CGP model: CI builds a release, it lands in `releases/<sha-timestamp>`, the `current` symlink is flipped, a healthcheck runs, and rollback is instant. Carried out via Ops: Roanoke (§8) |
-| ✅ Domain | a subdomain of one of your domains. ❓ The exact name is still open; it's needed before S1 |
+| ✅ Domain | `Edict.NetWorkXXIII.de` for now, staging proposed as `Staging.Edict.NetWorkXXIII.de`. DNS and TLS are set up by Ops: Roanoke |
 | ✅ URLs | `/slug` for articles and static pages in one namespace |
 | ✅ Language | English interface. Each article is marked `de` or `en` |
 | ✅ Comments | posted immediately, fully nested threads |
@@ -190,7 +190,7 @@ Every limit fails loudly, before anything is written.
 
 ## 6. Data model (first cut)
 
-`user` (display_name, is_admin, banned_until, deleted_at) · `user_identity` (user_id, provider, provider_user_id, unique on provider + ID) · `admin_credential` (password hash, TOTP secret, last TOTP step) · `passkey` · `session` (token hash, user_id, csrf_token, expires_at) · `oauth_state` · `article` (status, slug, lang, title, teaser, body_json, body_html_cache, cover_media_id, published_at, comments_mode, vote_adjustment) · `article_revision` · `slug_redirect` · `tag` / `article_tag` · `media` (sha256, mime, bytes, original_name, meta_json) · `media_variant` (media_id, preset, path, bytes) · `article_media` · `job` (type, payload, state, attempts, run_after) · `vote` (article_id, user_id, created_at, unique on both) · `comment` (article_id, user_id, parent_id, path, depth, body, state, created_at) · `ban` · `setting`.
+`app_user` (display_name, is_admin, banned_until, deleted_at) · `user_identity` (user_id, provider, provider_user_id, unique on provider + ID) · `admin_credential` (password hash, TOTP secret, last TOTP step) · `passkey` · `session` (token hash, user_id, csrf_token, expires_at) · `oauth_state` · `article` (status, slug, lang, title, teaser, body_json, body_html_cache, cover_media_id, published_at, comments_mode, vote_adjustment) · `article_revision` · `slug_redirect` · `tag` / `article_tag` · `media` (sha256, mime, bytes, original_name, meta_json) · `media_variant` (media_id, preset, path, bytes) · `article_media` · `job` (type, payload, state, attempts, run_after) · `vote` (article_id, user_id, created_at, unique on both) · `comment` (article_id, user_id, parent_id, path, depth, body, state, created_at) · `ban` · `setting`.
 
 ✅ Comments are fully nested. `path` is a materialised path (e.g. `0007.0012.0003`), so a whole thread loads with a single ordered query, and removing a subtree is a single `DELETE … WHERE path LIKE`.
 
@@ -233,9 +233,8 @@ Order rationale: deploying early (S1) removes the biggest risks, which are on th
 
 ## 9. Open questions for you
 
-1. **Subdomain:** which exact name? This is needed before S1.
-2. **Design brief:** examples of sites you like or dislike, and the tone you want. This starts the design track once the concept is merged.
+1. **Design brief:** examples of sites you like or dislike, and the tone you want. This starts the design track once the concept is merged.
 
-3. **OAuth apps:** only you can register these, in the Google Cloud Console and the Twitch Developer Console. Their redirect URLs need the subdomain, plus `http://localhost:8080/auth/{google,twitch}/callback` for development. Client secrets go directly into `.env`, never into chats or commits.
+2. **OAuth apps:** only you can register these, in the Google Cloud Console and the Twitch Developer Console. Redirect URLs (lowercase host): `https://edict.networkxxiii.de/auth/{google,twitch}/callback`, the same on `staging.edict.networkxxiii.de`, plus `http://localhost:8080/auth/{google,twitch}/callback` for development. Client secrets go directly into `.env`, never into chats or commits.
 
 All other questions were answered on 2026-11-04 and are recorded as ✅ above.

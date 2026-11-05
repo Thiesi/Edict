@@ -5,11 +5,15 @@
     "license": "proprietary",
     "require": {
         "php": "~8.3.0 || ~8.4.0",
+        "ext-mbstring": "*",
+        "ext-openssl": "*",
         "ext-pdo": "*",
         "ext-pdo_pgsql": "*",
+        "bacon/bacon-qr-code": "^3.1",
         "php-di/php-di": "^7.0",
         "slim/psr7": "^1.7",
         "slim/slim": "^4.14",
+        "symfony/console": "^7.4",
         "twig/twig": "^3.14",
         "vlucas/phpdotenv": "^5.6"
     },
