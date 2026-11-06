@@ -27,7 +27,8 @@ final class ArticleFlowTest extends DbTestCase
         $id = $this->pdo->query('SELECT id FROM app_user WHERE is_admin');
         self::assertNotFalse($id);
         $sessions = $this->service(SessionStore::class);
-        $token = $sessions->create((int) $id->fetchColumn(), 3600);
+        // Long enough to outlive the clock jumps in these tests.
+        $token = $sessions->create((int) $id->fetchColumn(), 365 * 86400);
         $session = $sessions->load($token);
         self::assertNotNull($session);
         $this->admin = [self::SESSION => $token];
