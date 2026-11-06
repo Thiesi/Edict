@@ -83,6 +83,9 @@ Browser ──HTTPS──▶ Apache (macro vhost, TLS via acme.sh)
 - **Autosave** every few seconds, plus a warning before closing the page with unsaved changes. Losing text is unacceptable.
 - Previews render a draft exactly as the public will see it.
 - Static pages (About, Imprint/Impressum, Privacy) use the same editor but are not listed as articles.
+- **Published-version history.** Each publish keeps the version it replaces, the last 20 per article, with one-click restore into the draft. There is no diff view. Autosaved drafts are not kept, so without this, pressing Update would replace the live text with no way back.
+- **Writing conveniences:** word count and reading time in the editor, tag suggestions from existing tags, renaming a tag everywhere, and an "updated on" date on articles changed after publishing.
+- **Export everything** as a JSON download (articles, pages, tags), so the content is never locked in. Media files are already plain files in the backups.
 - Hard delete with confirmation, and a 30-day trash before that.
 
 **Full-screen WYSIWYG editor**
@@ -120,11 +123,15 @@ Browser ──HTTPS──▶ Apache (macro vhost, TLS via acme.sh)
   - auto-close comments after N days
   - word filter (hold or reject comments containing listed words)
 - **Spam protection:** the login requirement does most of the work, plus per-account rate limits and the word filter. No reCAPTCHA. Google and Twitch are the only third parties involved, and only when someone chooses to log in.
+- **Comment alerts for you:** an email for each new or held comment, sent through local Postfix to an address set in `.env`, plus a pending count on the dashboard. Comments post immediately by default, so without this, abuse stays up until you happen to look. Reader email addresses are still never stored.
 
 **Public site**
 - Home page (latest articles), article page, archive with pagination, tag pages, static pages, and a styled 404/500.
+- **Menu and footer**, edited in the admin area, plus site settings (title, description). Static pages are not listed anywhere else, and Impressum and Datenschutz must be reachable from every page under German law, so the site doesn't launch without this.
+- **Full-text search** with PostgreSQL, stemming each article in its own language (de/en), with no extra service.
+- **Language filter** on the home page and archive, for readers who follow only German or only English.
 - ✅ Clean URLs: `/my-article-slug`. Articles and static pages share one namespace. System paths (`/login`, `/auth/…`, `/account`, `/healthz`, `/tag/…`, `/archive`, `/feed.atom`, `/media/…`, `/assets/…`, the admin path, `/sitemap.xml`, …) are reserved and can't be used as slugs. Renamed slugs redirect permanently (301).
-- ✅ **Atom feed with full text** (`/feed.atom`, plus a per-tag feed). Each entry carries its article's language. Images are included; audio and video appear as links or enclosures.
+- ✅ **Atom feed with full text** (`/feed.atom`, plus a per-tag and a per-language feed). Each entry carries its article's language. Images are included; audio and video appear as links or enclosures.
 - Legal page templates for Impressum and Datenschutz (in German, since the operator is German).
 - SEO basics: `<title>`/meta description, OpenGraph and Twitter cards (cover image), canonical URLs, `sitemap.xml`, `robots.txt`.
 - Accessible markup: semantic HTML, alt texts (the editor asks for them), keyboard-operable players and lightbox.
@@ -144,9 +151,6 @@ Browser ──HTTPS──▶ Apache (macro vhost, TLS via acme.sh)
 | Feature | Notes |
 |---|---|
 | Scheduled publishing | "Publish at" timestamp, picked up by the worker |
-| Full-text search | PostgreSQL full-text search, stemming each article in its own language (de/en), no extra service |
-| Revision history | Diff and restore of earlier versions. Autosave already gives us the data |
-| Email notifications | A new comment awaiting moderation, sent via local Postfix |
 | Secret preview links | Share a draft with someone before publishing |
 | Embeds | YouTube/Vimeo/Mastodon, click-to-load so nothing loads from third parties until the reader clicks |
 | Series / collections | Group articles into an ordered series with prev/next navigation |
@@ -192,6 +196,8 @@ Every limit fails loudly, before anything is written.
 
 `app_user` (display_name, is_admin, banned_until, deleted_at) · `user_identity` (user_id, provider, provider_user_id, unique on provider + ID) · `admin_credential` (password hash, TOTP secret, last TOTP step) · `passkey` · `session` (token hash, user_id, csrf_token, expires_at) · `article` (status, slug, lang, title, teaser, body_json, published_at, deleted_at; cover_media_id, comments_mode and vote_adjustment arrive with their slices) · `article_revision` · `slug_redirect` · `tag` / `article_tag` · `media` (sha256, mime, bytes, original_name, meta_json) · `media_variant` (media_id, preset, path, bytes) · `article_media` · `job` (type, payload, state, attempts, run_after) · `vote` (article_id, user_id, created_at, unique on both) · `comment` (article_id, user_id, parent_id, path, depth, body, state, created_at) · `ban` · `setting`.
 
+Added for the launch features above: `article_version` (article_id, title, teaser, body_json, lang, created_at; this is the `article_revision` above), `menu_item` (location, label, target, position). Site title and description live in `setting`.
+
 ✅ Comments are fully nested. `path` is a materialised path (e.g. `0007.0012.0003`), so a whole thread loads with a single ordered query, and removing a subtree is a single `DELETE … WHERE path LIKE`.
 
 ## 7. Design track
@@ -216,13 +222,14 @@ Each slice is one PR (or a few small ones), ends in something you can see on **s
 | **S2c** | Passkeys | WebAuthn registration and login for the admin | S |
 | **S3** | Articles core | Schema + migrations, minimal admin list and form, draft/publish, slugs + redirects, tags, public home/article/archive/tag pages on a plain placeholder theme | M |
 | **S4** | Editor | Full-screen TipTap editor, autosave + unsaved-changes guard, JSON→HTML server renderer with allow-list, preview, static pages | L |
-| **S5** | Media core + images | Chunked upload, content-addressed store, quotas/limits, job queue + rc.d worker, libvips variants, metadata stripping, image and gallery blocks, lightbox, media library panel. *Needs your approval: pkgin install* | L |
+| **S5** | Media core + images | Chunked upload, content-addressed store, quotas/limits, job queue + rc.d worker, libvips variants, metadata stripping, image and gallery blocks, lightbox, media library panel. *Needs your approval: pkgin install*. Also test writing and uploading from a phone | L |
 | **S6** | Audio & video | ffmpeg transcode presets, poster frames, waveform peaks, player UI, processing states in the editor | M |
 | **S7** | Files & PDFs | Download cards, allow-list, PDF preview (if poppler is approved) | S |
 | **S8** | Votes | Like button (one per account), login prompt for visitors, royal adjustment UI (inline + admin) | S |
-| **S9** | Design implementation | The chosen direction (design track §7) applied to all public templates, light/dark, responsive, accessibility pass | L |
-| **S10** | Comments & moderation | Comment form for logged-in readers, rate limits, moderation modes, inline + queue moderation, bans, word filter, closing rules | L |
-| **S11** | Launch hardening | Full-text Atom feed, CSP, SEO bits (meta/OG/sitemap/robots), legal page templates (the privacy page must cover Twitch/Google login), error pages, newsyslog, disk alerts, cleanup sweeps, restore test, production vhost via Ops, **go-live** | M |
+| **S9** | Design implementation | The chosen direction (design track §7) applied to all public templates, light/dark, responsive, accessibility pass. Menu and footer editor, site settings | L |
+| **S10** | Comments & moderation | Comment form for logged-in readers, rate limits, moderation modes, inline + queue moderation, bans, word filter, closing rules. Comment alerts by email (*needs Ops: Postfix relay check*) and a pending count on the dashboard | L |
+| **S10b** | Search, versions & conveniences | Published-version history with restore, full-text search, language filter, word count and reading time, tag suggestions and renaming, "updated on" date, JSON export | M |
+| **S11** | Launch hardening | Full-text Atom feed, CSP, SEO bits (meta/OG/sitemap/robots), legal page templates (the privacy page must cover Twitch/Google login), error pages, newsyslog, disk alerts, cleanup sweeps, restore test, production vhost via Ops, **go-live**. Per-language feeds | M |
 | S12+ | Post-launch | Search, scheduled publishing, notifications, … in the order you choose | — |
 
 Order rationale: deploying early (S1) removes the biggest risks, which are on the host side. Writing (S3–S4) comes before reader features because you'll want to write real content while the rest is built. Design (S9) waits until real content exists to design against, but its exploration starts right after this concept is approved.
