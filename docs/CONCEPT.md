@@ -88,9 +88,9 @@ Browser ──HTTPS──▶ Apache (macro vhost, TLS via acme.sh)
 - **Export everything** as a JSON download (articles, pages, tags), so the content is never locked in. Media files are already plain files in the backups.
 - Hard delete with confirmation, and a 30-day trash before that.
 
-**Full-screen WYSIWYG editor**
+**WYSIWYG editor**
 - Built on **TipTap/ProseMirror**. Its output is structured JSON, not soup HTML. We store the JSON as the source of truth and render HTML on the server through an allow-list. Malformed or malicious markup cannot get in, and the editor can be swapped later.
-- Distraction-free full-screen mode. A toolbar appears on text selection, plus `/` commands to insert blocks.
+- The editor fills the browser window, with nothing else on the page. A toolbar appears on text selection, plus `/` commands to insert blocks.
 - Blocks: headings, paragraphs, bold/italic/strike/code, links, quotes, lists, horizontal rule, code blocks with syntax highlighting, tables, image, gallery, audio, video, file attachment, embed (nice-to-have).
 - Markdown shortcuts (`##`, `**`, `>`, `-`) work while typing.
 - **Attachments:**

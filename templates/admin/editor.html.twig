@@ -10,7 +10,6 @@
             <a href="/admin/articles?kind={{ article.kind }}">Back</a>
             <span id="save-status" role="status">Up to date</span>
             <span class="editor-bar-end">
-                <button type="button" id="fullscreen">Full screen</button>
                 <a id="preview" href="/admin/articles/{{ article.id }}/preview" target="_blank" rel="noopener">Preview</a>
                 {% if article.isPublished and not article.deletedAt %}<a href="/{{ article.slug }}" target="_blank" rel="noopener">View</a>{% endif %}
                 {% if not article.deletedAt %}
