@@ -4,7 +4,7 @@ Host changes go through **Ops: Roanoke** (see `CLAUDE.md`). This is the runbook 
 
 ## How a deploy works
 
-CI builds a release bundle on every push to `main`: a tarball with production dependencies only, plus `edict-deploy`. On the host, `edict-deploy`:
+CI builds a release bundle on every push and pull request: a tarball with production dependencies only, plus `edict-deploy`. On the host, `edict-deploy`:
 
 1. Refuses a tarball that is too large, unreadable, contains unsafe paths or isn't an Edict release.
 2. Unpacks it into `releases/<UTC timestamp>-<sha12>`, writes `RELEASE` and links `shared/.env`.
@@ -22,17 +22,20 @@ Until the first deploy creates `current`, Apache's configtest warns that the Doc
 
 ## Deploying and rolling back
 
-Get the bundle from the dev PC, then send the tarball through the deploy key:
+**Staging:** every push to `main` that passes CI deploys through the `deploy-staging` job, so merging a PR is the go. There is no other route, because the key exists only in CI.
+
+**Rollback:** Actions → "Staging rollback" → Run workflow, from `main`. Leave the release empty for the previous one. Or:
 
 ```sh
-gh run download --repo Thiesi/Edict --name edict-<sha> --dir <empty temp dir>
-ssh edictstg-deploy@Roanoke.NetWorkXXIII.de deploy < edict-<sha>.tar.gz
-ssh edictstg-deploy@Roanoke.NetWorkXXIII.de releases
-ssh edictstg-deploy@Roanoke.NetWorkXXIII.de rollback             # to the previous release
-ssh edictstg-deploy@Roanoke.NetWorkXXIII.de rollback <release>
+gh workflow run staging-rollback.yml --repo Thiesi/Edict
+gh workflow run staging-rollback.yml --repo Thiesi/Edict -f release=<release>
 ```
 
-CI doesn't deploy by itself. Giving CI a key is the owner's decision, and hasn't been made.
+The log of that run lists the releases afterwards. The next push to `main` deploys forward again.
+
+**The key:** `EDICT_STAGING_DEPLOY_KEY` is a secret of the GitHub environment `staging`, whose deployments are restricted to `main`. Pull requests never reach it. The workflows pin Roanoke's host key instead of scanning for it. If the host key ever changes, update both workflows.
+
+**Production** isn't set up yet. It comes with S11, and each deploy will need an approval in GitHub.
 
 ## Host setup for staging
 
@@ -47,7 +50,7 @@ Facts below were confirmed by Ops on 2026-11-06.
 | Staging only | `X-Robots-Tag: noindex` |
 | Pool user | `edictstg`, nologin, with its own pool and socket |
 | Deploy user | `edictstg-deploy`, `/bin/sh`, home = `/usr/local/share/edict-staging`, member of group `edictstg`. Owns the code, so a compromised worker can't rewrite it |
-| Deploy key | `command="/usr/local/sbin/edict-deploy staging ssh",no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding` in `/usr/pkg/etc/ssh/authorized_keys/edictstg-deploy`. The public key comes from the owner. That path applies only through sshd's `Match User` block, so `edictstg-deploy` must be added to it, followed by an sshd reload |
+| Deploy key | `command="/usr/local/sbin/edict-deploy staging ssh",no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding` in `/usr/pkg/etc/ssh/authorized_keys/edictstg-deploy`. That path applies only through sshd's `Match User` block, so `edictstg-deploy` must be added to it, followed by an sshd reload |
 | Script | `deploy/edict-deploy` installed root-owned as `/usr/local/sbin/edict-deploy`. It changes only through Ops |
 | PHP extensions | `mbstring`, `openssl`, `pdo`, `pdo_pgsql` and `iconv`, for both the CLI and the pool |
 | Settings | `/usr/local/etc/edict-deploy.staging.conf`, root-owned |
@@ -102,7 +105,7 @@ Secrets are put in place directly on the host, never through chats or commits. A
 
 The OAuth redirect URLs to register are `https://staging.edict.networkxxiii.de/auth/{google,twitch}/callback`.
 
-**The deploy key is a code-execution credential.** Each tarball's PHP runs as the deploy user, who can read `.env`, so holding the key means access to the staging secrets. Keep one key per instance and keep it off CI unless the owner decides otherwise.
+**The deploy key is a code-execution credential.** Each tarball's PHP runs as the deploy user, who can read `.env`, so holding the key means access to the staging secrets. Keep one key per instance, held only by that instance's GitHub environment.
 
 If a machine dies mid-deploy, the lock stays and the forced-command key can't clear it. Ops removes it with `rmdir /usr/local/share/edict-staging/.deploy.lock`, after checking that no deploy is running.
 

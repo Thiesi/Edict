@@ -1,0 +1,63 @@
+name: Staging rollback
+
+# Actions → "Staging rollback" → Run workflow, from main. This restores code only:
+# migrations stay applied. The next push to main deploys forward again.
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: Release name; leave empty for the previous release
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  rollback:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: staging
+    # Shared with the deploy job, so the two never overlap.
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: false
+    env:
+      DEPLOY_TARGET: edictstg-deploy@roanoke.networkxxiii.de
+    steps:
+      - name: Check the release name
+        env:
+          RELEASE: ${{ inputs.release }}
+        run: |
+          if [ -n "$RELEASE" ] && ! printf '%s' "$RELEASE" | grep -Eq '^[0-9]{14}-[0-9a-f]{12}$'; then
+              echo "::error::Not a release name: expected <14-digit timestamp>-<12 hex digits>"
+              exit 1
+          fi
+
+      - name: Prepare SSH
+        env:
+          DEPLOY_KEY: ${{ secrets.EDICT_STAGING_DEPLOY_KEY }}
+        run: |
+          umask 077
+          mkdir "$RUNNER_TEMP/ssh"
+          printf '%s\n' "$DEPLOY_KEY" >"$RUNNER_TEMP/ssh/key"
+          # Pinned, never scanned: this is Roanoke's public host key.
+          echo 'roanoke.networkxxiii.de ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAK5ya0+YqAGmWL/7WDzh4BsxMuxchOSC3zvOoDQ9qHo' >"$RUNNER_TEMP/ssh/known_hosts"
+
+      - name: Roll back
+        env:
+          RELEASE: ${{ inputs.release }}
+        run: |
+          remote() {
+              ssh -i "$RUNNER_TEMP/ssh/key" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=20 \
+                  -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/ssh/known_hosts" \
+                  "$DEPLOY_TARGET" "$@"
+          }
+          remote rollback $RELEASE
+          remote releases
+
+      - name: Remove the key
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/ssh"

@@ -10,8 +10,13 @@ use Dotenv\Dotenv;
 use Edict\Http\Middleware\CsrfMiddleware;
 use Edict\Http\Middleware\RawCookieMiddleware;
 use Edict\Http\Middleware\SessionMiddleware;
+use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\ServerRequestInterface;
 use Slim\App;
+use Slim\Exception\HttpMethodNotAllowedException;
+use Slim\Exception\HttpNotFoundException;
 use Slim\Factory\AppFactory;
+use Slim\Interfaces\ErrorHandlerInterface;
 
 /**
  * Builds the Slim application: environment, container, middleware, routes.
@@ -49,7 +54,18 @@ final class Kernel
         $app->addBodyParsingMiddleware();
         $app->addRoutingMiddleware();
         // Errors are logged except in tests, where log output would make tests risky.
-        $app->addErrorMiddleware($config->debug, $config->env !== 'test', true);
+        $errors = $app->addErrorMiddleware($config->debug, $config->env !== 'test', true);
+
+        // Scanners probe for files all day. A 404 or 405 is an answer, not an error
+        // worth a stack trace in the log, so these use the default handler unlogged.
+        $default = $errors->getDefaultErrorHandler();
+        if ($default instanceof ErrorHandlerInterface) {
+            $errors->setErrorHandler(
+                [HttpNotFoundException::class, HttpMethodNotAllowedException::class],
+                // Not static: Slim binds handlers to the container.
+                fn(ServerRequestInterface $request, \Throwable $error, bool $display): ResponseInterface => $default($request, $error, $display, false, false),
+            );
+        }
 
         return $app;
     }

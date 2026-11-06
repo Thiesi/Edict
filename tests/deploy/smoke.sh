@@ -84,5 +84,11 @@ location=$(curl -s -D - -o /dev/null -H "Cookie: %5F%5FHost-edict_oauth=$flow" "
 if curl -s "$url/does-not-exist" | grep -qi 'stack trace'; then
     fail "error page shows a stack trace"
 fi
+[ "$(curl -s -o /dev/null -w '%{http_code}' "$url/does-not-exist")" = 404 ] || fail "unknown path is not a 404"
+[ "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$url/healthz")" = 405 ] || fail "wrong method is not a 405"
+if grep -q 'HttpNotFound\|HttpMethodNotAllowed' "$work/server.log"; then
+    cat "$work/server.log"
+    fail "404s and 405s must not be logged as errors"
+fi
 
 echo 'smoke: OK'
