@@ -30,7 +30,7 @@ Guiding principles:
 | ✅ Uploads | any file type is accepted; unknown types are always served as downloads |
 | ✅ Local dev | the dev PC uses a dev DB on Roanoke through an SSH tunnel |
 | ✅ Import | none, fresh start |
-| ✅ Design | an independent look, worked out together in a dedicated track (§7) |
+| ✅ Design | Switchable themes: choose the site's look with one click, from a set of default themes (§7) |
 
 ## 3. Architecture
 
@@ -159,7 +159,6 @@ Browser ──HTTPS──▶ Apache (macro vhost, TLS via acme.sh)
 | Reader subscriptions | Email when a new article appears (double opt-in) |
 | Fediverse | Publish articles as ActivityPub posts, or have Akkoma (already on Roanoke) announce them |
 | Adaptive video (HLS) | Only worthwhile if videos get long or large |
-| Dark mode | Ties into the design work |
 
 ### 4.3 Explicitly out of scope
 
@@ -200,14 +199,34 @@ Added for the launch features above: `article_version` (article_id, title, tease
 
 ✅ Comments are fully nested. `path` is a materialised path (e.g. `0007.0012.0003`), so a whole thread loads with a single ordered query, and removing a subtree is a single `DELETE … WHERE path LIKE`.
 
-## 7. Design track
+## 7. Themes
 
-The design is decided together and runs in parallel to the technical slices:
+The site's look is a theme, and you change it with one click in the admin area. It takes effect immediately, with no deploy.
 
-1. **Brief.** You tell me sites you like or dislike and the tone you want. ✅ The site gets its own identity, independent of your existing website.
-2. **Three directions.** I build three clickable sample pages: home and article, with real-looking content including an image, audio and video. You pick one, or mix them.
-3. **Design tokens.** Typography, colour (light/dark), spacing and widths, as CSS custom properties.
-4. **Templates.** The chosen direction goes into the Twig templates in slice S9.
+**What a theme is:** a folder in the release with a stylesheet, tokens (typography, colour, spacing, widths) and its fonts. All themes style the same semantic HTML. They can change colours, type and layout freely, including where the navigation sits and how the home page is arranged, but not the page's content or structure.
+
+**How it works:**
+- **Choosing:** the admin area shows every theme with a picture and a live preview of the real site, visible only to you, before you apply it. The choice lives in `setting`.
+- **Light and dark:** every theme has both, following the reader's system setting.
+- **Readers** see the theme you chose. They can't pick their own.
+- **Fonts are self-hosted**, with nothing loaded from Google Fonts or other third parties. Embedding those can get a German site into legal trouble, and it would leak readers' IP addresses.
+- **Everything else follows the theme:** media players, comment threads, error pages and feed links are styled from the same tokens, so no theme leaves a page half-finished. The editor keeps its own neutral look.
+- **Deliberately not included:** uploading themes, a theme marketplace, a visual theme editor, or themes with their own PHP or templates. Those would be a plugin system, which §4.3 rules out. New themes arrive as code in a release.
+
+**Default themes at launch**, six that differ clearly from each other:
+
+| Theme | Character |
+|---|---|
+| **Decree** | Edict's own identity: heraldic, deep colour with a gold accent, formal serif headings |
+| **Broadsheet** | A newspaper: strong rules, dense multi-column home page, classic serif type |
+| **Quiet** | Minimal: one column, lots of white space, nothing competes with the text |
+| **Almanac** | Warm paper, a notebook feel, generous margins, friendly old-style type |
+| **Terminal** | Monospace and retro: dark by default, phosphor colours, for the nerdy articles |
+| **Zine** | Loud: big type, high contrast, asymmetrical layout, unapologetic colour |
+
+**Accessibility is a requirement for every theme:** WCAG AA contrast in light and dark, visible focus, and readable at 200% zoom. Browser tests check all six.
+
+**Process:** I build the theme system and the six themes against real content in S9, and publish a page where you can click through them. Tell me which to change, drop or replace. Your likes and dislikes still help, but no brief is needed to start.
 
 ## 8. Implementation plan
 
@@ -226,7 +245,7 @@ Each slice is one PR (or a few small ones), ends in something you can see on **s
 | **S6** | Audio & video | ffmpeg transcode presets, poster frames, waveform peaks, player UI, processing states in the editor | M |
 | **S7** | Files & PDFs | Download cards, allow-list, PDF preview (if poppler is approved) | S |
 | **S8** | Votes | Like button (one per account), login prompt for visitors, royal adjustment UI (inline + admin) | S |
-| **S9** | Design implementation | The chosen direction (design track §7) applied to all public templates, light/dark, responsive, accessibility pass. Menu and footer editor, site settings | L |
+| **S9** | Themes | Theme system and one-click switching with live preview (§7), the six default themes applied to all public templates, light/dark, responsive, accessibility pass, self-hosted fonts. Menu and footer editor, site settings | L |
 | **S10** | Comments & moderation | Comment form for logged-in readers, rate limits, moderation modes, inline + queue moderation, bans, word filter, closing rules. Comment alerts by email (*needs Ops: Postfix relay check*) and a pending count on the dashboard | L |
 | **S10b** | Search, versions & conveniences | Published-version history with restore, full-text search, language filter, word count and reading time, tag suggestions and renaming, "updated on" date, JSON export | M |
 | **S11** | Launch hardening | Full-text Atom feed, CSP, SEO bits (meta/OG/sitemap/robots), legal page templates (the privacy page must cover Twitch/Google login), error pages, newsyslog, disk alerts, cleanup sweeps, restore test, production vhost via Ops, **go-live**. Per-language feeds | M |
@@ -240,7 +259,7 @@ Order rationale: deploying early (S1) removes the biggest risks, which are on th
 
 ## 9. Open questions for you
 
-1. **Design brief:** examples of sites you like or dislike, and the tone you want. This starts the design track once the concept is merged.
+1. **Themes:** optionally, examples of sites you like or dislike. Otherwise you react to the six default themes (§7) once they exist.
 
 2. **OAuth apps:** only you can register these, in the Google Cloud Console and the Twitch Developer Console. Redirect URLs (lowercase host): `https://edict.networkxxiii.de/auth/{google,twitch}/callback`, the same on `staging.edict.networkxxiii.de`, plus `http://localhost:8080/auth/{google,twitch}/callback` for development. Client secrets go directly into `.env`, never into chats or commits.
 
