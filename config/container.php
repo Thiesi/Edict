@@ -7,6 +7,8 @@ use Edict\Auth\OAuth\StreamHttpClient;
 use Edict\Auth\SecretBox;
 use Edict\Clock;
 use Edict\Config;
+use Edict\Content\ArticleDate;
+use Edict\Content\Body;
 use Edict\Database\ConnectionFactory;
 use Edict\Database\Migrator;
 use Edict\SystemClock;
@@ -14,6 +16,7 @@ use Psr\Http\Message\ResponseFactoryInterface;
 use Slim\Psr7\Factory\ResponseFactory;
 use Twig\Environment;
 use Twig\Loader\FilesystemLoader;
+use Twig\TwigFilter;
 
 return [
     Clock::class => DI\autowire(SystemClock::class),
@@ -41,11 +44,17 @@ return [
     Environment::class => static function (Config $config): Environment {
         $cache = $config->cacheDir();
 
-        return new Environment(new FilesystemLoader($config->projectDir . '/templates', $config->projectDir), [
+        $twig = new Environment(new FilesystemLoader($config->projectDir . '/templates', $config->projectDir), [
             'cache' => $cache === null ? false : $cache . '/twig',
             'debug' => $config->debug,
             'strict_variables' => $config->debug,
             'autoescape' => 'html',
         ]);
+        $twig->addFilter(new TwigFilter('article_date', ArticleDate::format(...)));
+        $twig->addFilter(new TwigFilter('article_iso', ArticleDate::iso(...)));
+        // Safe because Body::toHtml() is an allow-list that escapes all text.
+        $twig->addFilter(new TwigFilter('body_html', Body::toHtml(...), ['is_safe' => ['html']]));
+
+        return $twig;
     },
 ];

@@ -1,0 +1,75 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}{{ article ? 'Edit article' : 'New article' }} · Edict{% endblock %}
+
+{% block body %}
+    <main>
+        <h1>{{ article ? 'Edit article' : 'New article' }}</h1>
+        <p><a href="/admin/articles">Back to articles</a></p>
+
+        {% if article %}
+            <p>
+                Status: <strong>{{ article.status }}</strong>{% if article.deletedAt %} (in the trash){% endif %}
+                · <a href="/admin/articles/{{ article.id }}/preview">Preview</a>
+                {% if article.status == 'published' and not article.deletedAt %}· <a href="/{{ article.slug }}">View</a>{% endif %}
+            </p>
+        {% endif %}
+
+        {% if errors %}<p role="alert">Please check the marked fields. Nothing was saved.</p>{% endif %}
+
+        <form method="post" action="{{ article ? '/admin/articles/' ~ article.id : '/admin/articles' }}">
+            <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+            <p>
+                <label>Title <input name="title" value="{{ input.title }}" maxlength="200" required></label>
+                {% if errors.title is defined %}<strong role="alert">{{ errors.title }}</strong>{% endif %}
+            </p>
+            <p>
+                <label>Address <input name="slug" value="{{ input.slug }}" maxlength="120" pattern="[a-z0-9]+(-[a-z0-9]+)*" aria-describedby="slug-help"></label>
+                <small id="slug-help">{{ article ? 'Empty keeps the current address. Changing the address of a published article redirects the old one.' : 'Empty derives it from the title.' }}</small>
+                {% if errors.slug is defined %}<strong role="alert">{{ errors.slug }}</strong>{% endif %}
+            </p>
+            <p>
+                <label>Language
+                    <select name="lang">
+                        <option value="de"{% if input.lang == 'de' %} selected{% endif %}>German</option>
+                        <option value="en"{% if input.lang == 'en' %} selected{% endif %}>English</option>
+                    </select>
+                </label>
+                {% if errors.lang is defined %}<strong role="alert">{{ errors.lang }}</strong>{% endif %}
+            </p>
+            <p>
+                <label>Teaser <textarea name="teaser" rows="3" maxlength="1000">{{ input.teaser }}</textarea></label>
+                {% if errors.teaser is defined %}<strong role="alert">{{ errors.teaser }}</strong>{% endif %}
+            </p>
+            <p>
+                <label>Text <textarea name="body" rows="20" aria-describedby="body-help">{{ input.body }}</textarea></label>
+                <small id="body-help">An empty line starts a new paragraph. The full editor comes later.</small>
+                {% if errors.body is defined %}<strong role="alert">{{ errors.body }}</strong>{% endif %}
+            </p>
+            <p>
+                <label>Tags <input name="tags" value="{{ input.tags }}" aria-describedby="tags-help"></label>
+                <small id="tags-help">Separated by commas.</small>
+                {% if errors.tags is defined %}<strong role="alert">{{ errors.tags }}</strong>{% endif %}
+            </p>
+            <p><button type="submit">Save</button></p>
+        </form>
+
+        {% if article and not article.deletedAt %}
+            {% if article.status == 'published' %}
+                <form method="post" action="/admin/articles/{{ article.id }}/unpublish">
+                    <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                    <button type="submit">Unpublish</button>
+                </form>
+            {% else %}
+                <form method="post" action="/admin/articles/{{ article.id }}/publish">
+                    <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                    <button type="submit">Publish</button>
+                </form>
+            {% endif %}
+            <form method="post" action="/admin/articles/{{ article.id }}/trash">
+                <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                <button type="submit">Move to trash</button>
+            </form>
+        {% endif %}
+    </main>
+{% endblock %}

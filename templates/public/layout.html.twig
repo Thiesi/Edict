@@ -1,11 +1,12 @@
 {% extends 'base.html.twig' %}
 
+{% block head %}<link rel="stylesheet" href="/assets/site.css">{% endblock %}
+
 {% block body %}
     <nav>
+        <a href="/">Edict</a>
+        <a href="/archive">Archive</a>
         {% if signed_in %}<a href="/account">Your account</a>{% else %}<a href="/login">Sign in</a>{% endif %}
     </nav>
-    <main>
-        <h1>Hello, Edict</h1>
-        <p>A CMS for one sovereign. Nothing to read yet.</p>
-    </main>
+    {% block main %}{% endblock %}
 {% endblock %}

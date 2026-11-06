@@ -48,7 +48,7 @@ abstract class DbTestCase extends TestCase
             (new Migrator($this->pdo, dirname(__DIR__) . '/migrations'))->migrate();
             self::$schemaReady = true;
         }
-        $this->pdo->exec('TRUNCATE app_user, session, login_attempt, webauthn_used_challenge RESTART IDENTITY CASCADE');
+        $this->pdo->exec('TRUNCATE app_user, session, login_attempt, webauthn_used_challenge, article, tag RESTART IDENTITY CASCADE');
 
         $this->clock = new FixedClock(1_800_000_000);
         $this->http = new FakeHttpClient();

@@ -42,6 +42,14 @@ final class Row
     /**
      * @param array<mixed> $row
      */
+    public static function intOrNull(array $row, string $column): ?int
+    {
+        return ($row[$column] ?? null) === null ? null : self::int($row, $column);
+    }
+
+    /**
+     * @param array<mixed> $row
+     */
     public static function bool(array $row, string $column): bool
     {
         $value = $row[$column] ?? null;

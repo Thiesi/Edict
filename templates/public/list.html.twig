@@ -1,0 +1,23 @@
+{% extends 'public/layout.html.twig' %}
+
+{% block title %}{{ heading }} · Edict{% endblock %}
+
+{% block main %}
+    <main>
+        <h1>{{ heading }}</h1>
+        {% if articles %}
+            <ul class="articles">
+                {% for article in articles %}{% include 'public/_summary.html.twig' %}{% endfor %}
+            </ul>
+        {% else %}
+            <p>Nothing to read yet.</p>
+        {% endif %}
+        {% if last_page > 1 %}
+            <nav aria-label="Pages">
+                {% if page > 1 %}<a rel="prev" href="{{ base_path }}{% if page > 2 %}?page={{ page - 1 }}{% endif %}">Newer</a>{% endif %}
+                Page {{ page }} of {{ last_page }}
+                {% if page < last_page %}<a rel="next" href="{{ base_path }}?page={{ page + 1 }}">Older</a>{% endif %}
+            </nav>
+        {% endif %}
+    </main>
+{% endblock %}
