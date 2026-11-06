@@ -48,11 +48,11 @@ return static function (App $app): void {
         $group->post('/passkeys/options', [PasskeyController::class, 'registerOptions']);
         $group->post('/passkeys/{id}/remove', [PasskeyController::class, 'remove']);
 
+        $group->get('/csrf', [ArticleAdminController::class, 'csrf']);
         $group->get('/articles', [ArticleAdminController::class, 'index']);
         $group->post('/articles', [ArticleAdminController::class, 'create']);
-        $group->get('/articles/new', [ArticleAdminController::class, 'new']);
         $group->get('/articles/{id:[0-9]+}', [ArticleAdminController::class, 'edit']);
-        $group->post('/articles/{id:[0-9]+}', [ArticleAdminController::class, 'update']);
+        $group->post('/articles/{id:[0-9]+}/autosave', [ArticleAdminController::class, 'autosave']);
         $group->get('/articles/{id:[0-9]+}/preview', [ArticleAdminController::class, 'preview']);
         $group->post('/articles/{id:[0-9]+}/publish', [ArticleAdminController::class, 'publish']);
         $group->post('/articles/{id:[0-9]+}/unpublish', [ArticleAdminController::class, 'unpublish']);

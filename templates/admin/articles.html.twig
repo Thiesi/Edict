@@ -1,20 +1,28 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}{{ trash ? 'Trash' : 'Articles' }} · Edict{% endblock %}
+{% set noun = kind == 'page' ? 'page' : 'article' %}
+{% set heading = trash ? 'Trash' : (kind == 'page' ? 'Pages' : 'Articles') %}
+
+{% block title %}{{ heading }} · Edict{% endblock %}
 
 {% block body %}
     <main>
-        <h1>{{ trash ? 'Trash' : 'Articles' }}</h1>
+        <h1>{{ heading }}</h1>
         <p>
             <a href="/admin">Back to admin</a>
-            {% if trash %}
-                · <a href="/admin/articles">Articles</a>
-            {% else %}
-                · <a href="/admin/articles/new">New article</a>
-                · <a href="/admin/articles?trash=1">Trash</a>
-            {% endif %}
+            · <a href="/admin/articles">Articles</a>
+            · <a href="/admin/articles?kind=page">Pages</a>
+            · <a href="/admin/articles?trash=1&amp;kind={{ kind }}">Trash</a>
         </p>
-        {% if trash %}<p>Articles are deleted permanently after {{ trash_days }} days in the trash.</p>{% endif %}
+        {% if not trash %}
+            <form method="post" action="/admin/articles">
+                <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                <input type="hidden" name="kind" value="{{ kind }}">
+                <button type="submit">New {{ noun }}</button>
+            </form>
+        {% else %}
+            <p>Deleted permanently after {{ trash_days }} days in the trash.</p>
+        {% endif %}
 
         {% if articles %}
             <table>
@@ -22,8 +30,8 @@
                 <tbody>
                     {% for article in articles %}
                         <tr>
-                            <td>{% if trash %}{{ article.title }}{% else %}<a href="/admin/articles/{{ article.id }}">{{ article.title }}</a>{% endif %}</td>
-                            <td>{{ article.status }}</td>
+                            <td>{% if trash %}{{ article.workingTitle }}{% else %}<a href="/admin/articles/{{ article.id }}">{{ article.workingTitle }}</a>{% endif %}</td>
+                            <td>{{ article.status }}{% if article.hasPendingChanges %}, changes pending{% endif %}</td>
                             <td>{{ article.lang|upper }}</td>
                             <td>/{{ article.slug }}</td>
                             {% if trash %}
@@ -44,7 +52,7 @@
                 </tbody>
             </table>
         {% else %}
-            <p>{{ trash ? 'The trash is empty.' : 'No articles yet.' }}</p>
+            <p>{{ trash ? 'The trash is empty.' : 'Nothing here yet.' }}</p>
         {% endif %}
     </main>
 {% endblock %}

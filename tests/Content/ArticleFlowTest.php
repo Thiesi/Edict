@@ -8,6 +8,7 @@ use Edict\Auth\AdminAccount;
 use Edict\Auth\SessionStore;
 use Edict\Content\Articles;
 use Edict\Content\Slugs;
+use Edict\Content\StaleDraft;
 use Edict\Tests\DbTestCase;
 use Psr\Http\Message\ResponseInterface;
 
@@ -36,26 +37,17 @@ final class ArticleFlowTest extends DbTestCase
     }
 
     /**
-     * @param array<string, string> $fields
+     * @param array<string, mixed> $fields
      */
     private function adminPost(string $path, array $fields = []): ResponseInterface
     {
+        /** @var array<string, string> $fields */
         return $this->post($path, $fields + ['_csrf' => $this->csrf], $this->admin);
     }
 
-    /**
-     * @param array<string, string> $fields
-     */
-    private function createArticle(array $fields = []): int
+    private function newRow(string $kind = 'article'): int
     {
-        $response = $this->adminPost('/admin/articles', $fields + [
-            'title' => 'Hello World',
-            'slug' => '',
-            'lang' => 'en',
-            'teaser' => 'A teaser',
-            'body' => "First paragraph\n\nSecond paragraph",
-            'tags' => 'PHP, Web',
-        ]);
+        $response = $this->adminPost('/admin/articles', ['kind' => $kind]);
         self::assertSame(303, $response->getStatusCode(), (string) $response->getBody());
         $id = substr($response->getHeaderLine('Location'), strlen('/admin/articles/'));
         self::assertTrue(ctype_digit($id));
@@ -64,29 +56,69 @@ final class ArticleFlowTest extends DbTestCase
     }
 
     /**
-     * @param array<string, string> $fields
+     * @return array<string, mixed>
      */
-    private function publishedArticle(array $fields = []): int
+    private static function defaults(): array
     {
-        $id = $this->createArticle($fields);
-        $this->adminPost("/admin/articles/$id/publish");
+        return [
+            'title' => 'Hello World',
+            'slug' => '',
+            'lang' => 'en',
+            'teaser' => 'A teaser',
+            'body' => json_decode(Doc::text("First paragraph\n\nSecond paragraph"), true),
+            'tags' => 'PHP, Web',
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $fields
+     */
+    private function save(int $id, array $fields = []): ResponseInterface
+    {
+        $version = $this->service(Articles::class)->find($id)?->draftVersion;
+
+        return $this->adminPost("/admin/articles/$id/autosave", ['version' => $version, 'writer' => 'test-tab', 'draft' => $fields + self::defaults()]);
+    }
+
+    private function publish(int $id): ResponseInterface
+    {
+        $version = $this->service(Articles::class)->find($id)?->draftVersion;
+
+        return $this->adminPost("/admin/articles/$id/publish", ['version' => $version]);
+    }
+
+    /**
+     * @param array<string, mixed> $fields
+     */
+    private function saved(array $fields = [], string $kind = 'article'): int
+    {
+        $id = $this->newRow($kind);
+        $response = $this->save($id, $fields);
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
 
         return $id;
     }
 
     /**
-     * @param array<string, string> $fields
+     * @param array<string, mixed> $fields
      */
-    private function updateArticle(int $id, array $fields): ResponseInterface
+    private function published(array $fields = [], string $kind = 'article'): int
     {
-        return $this->adminPost("/admin/articles/$id", $fields + [
-            'title' => 'Hello World',
-            'slug' => '',
-            'lang' => 'en',
-            'teaser' => '',
-            'body' => 'Text',
-            'tags' => '',
-        ]);
+        $id = $this->saved($fields, $kind);
+        $response = $this->publish($id);
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
+
+        return $id;
+    }
+
+    /**
+     * @param array<string, mixed> $fields
+     */
+    private function republish(int $id, array $fields): ResponseInterface
+    {
+        self::assertSame(200, $this->save($id, $fields)->getStatusCode());
+
+        return $this->publish($id);
     }
 
     private function rows(string $table): int
@@ -122,18 +154,37 @@ final class ArticleFlowTest extends DbTestCase
         self::assertSame(404, $this->get('/no-such-page')->getStatusCode());
     }
 
+    public function testNewRowOpensABlankEditor(): void
+    {
+        $id = $this->newRow();
+
+        $page = $this->get("/admin/articles/$id", $this->admin);
+
+        self::assertSame(200, $page->getStatusCode());
+        $body = (string) $page->getBody();
+        self::assertStringContainsString('id="editor-app"', $body);
+        self::assertStringContainsString('id="title" class="editor-title" value=""', $body);
+        self::assertStringContainsString('/assets/build/editor.js', $body);
+        self::assertSame('no-store', $page->getHeaderLine('Cache-Control'));
+        self::assertStringContainsString('Untitled', (string) $this->get('/admin/articles', $this->admin)->getBody());
+    }
+
     public function testDraftIsNotPublic(): void
     {
-        $this->createArticle();
+        $this->saved();
+        $untitled = $this->service(Articles::class)->adminList('article', false)[0]->slug;
 
-        self::assertSame(404, $this->get('/hello-world')->getStatusCode());
-        self::assertStringNotContainsString('Hello World', (string) $this->get('/')->getBody());
-        self::assertStringNotContainsString('Hello World', (string) $this->get('/archive')->getBody());
+        foreach (["/$untitled", '/hello-world'] as $path) {
+            self::assertSame(404, $this->get($path)->getStatusCode(), $path);
+        }
+        foreach (['/', '/archive'] as $path) {
+            self::assertStringNotContainsString('Hello World', (string) $this->get($path)->getBody(), $path);
+        }
     }
 
     public function testPublishedArticleAppearsEverywhere(): void
     {
-        $this->publishedArticle();
+        $this->published();
 
         $article = $this->get('/hello-world');
         self::assertSame(200, $article->getStatusCode());
@@ -150,7 +201,7 @@ final class ArticleFlowTest extends DbTestCase
 
     public function testArticleUsesItsLanguageOnThePage(): void
     {
-        $this->publishedArticle(['lang' => 'de', 'title' => 'Grüße']);
+        $this->published(['lang' => 'de', 'title' => 'Grüße']);
 
         $body = (string) $this->get('/gruesse')->getBody();
 
@@ -159,31 +210,236 @@ final class ArticleFlowTest extends DbTestCase
         self::assertStringContainsString('. Januar 2027', $body);
     }
 
-    public function testBodyAndFieldsAreEscaped(): void
+    public function testFieldsAreEscaped(): void
     {
-        $this->publishedArticle([
+        $this->published([
             'title' => '<script>a</script>',
             'slug' => 'escaped',
             'teaser' => '<script>b</script>',
-            'body' => '<script>c</script>',
+            'body' => json_decode(Doc::text('<script>c</script>'), true),
             'tags' => '<script>d</script>',
         ]);
 
-        foreach (['/escaped', '/'] as $path) {
-            self::assertStringNotContainsString('<script>', (string) $this->get($path)->getBody(), $path);
+        foreach (['/escaped', '/', '/admin/articles'] as $path) {
+            self::assertStringNotContainsString('<script>', (string) $this->get($path, $this->admin)->getBody(), $path);
         }
+    }
+
+    public function testAutosaveStoresOnlyCleanContent(): void
+    {
+        $id = $this->saved(['body' => ['type' => 'doc', 'content' => [
+            ['type' => 'rawHtml', 'html' => '<script>x</script>'],
+            ['type' => 'paragraph', 'attrs' => ['onclick' => 'x'], 'content' => [['type' => 'text', 'text' => 'kept']]],
+        ]]]);
+
+        $draft = $this->service(Articles::class)->find($id)?->draftJson;
+
+        self::assertIsString($draft);
+        self::assertStringContainsString('kept', $draft);
+        self::assertStringNotContainsString('script', $draft);
+        self::assertStringNotContainsString('onclick', $draft);
+    }
+
+    public function testAutosaveKeepsIncompleteDrafts(): void
+    {
+        $id = $this->newRow();
+
+        $response = $this->save($id, ['title' => '', 'slug' => 'Not A Valid Slug', 'lang' => '']);
+
+        self::assertSame(200, $response->getStatusCode());
+        $input = $this->service(Articles::class)->find($id)?->input();
+        self::assertSame('Not A Valid Slug', $input?->slug);
+    }
+
+    public function testAutosaveRefusesAStaleVersion(): void
+    {
+        $id = $this->newRow();
+        $version = $this->service(Articles::class)->find($id)?->draftVersion;
+        $this->save($id, ['title' => 'Newer']);
+
+        $stale = $this->adminPost("/admin/articles/$id/autosave", ['version' => $version, 'writer' => 'other-tab', 'draft' => ['title' => 'Older'] + self::defaults()]);
+
+        self::assertSame(409, $stale->getStatusCode());
+        self::assertSame('Newer', $this->service(Articles::class)->find($id)?->input()->title);
+    }
+
+    public function testTheSameEditorCanRepeatASaveWhoseAnswerGotLost(): void
+    {
+        $id = $this->newRow();
+        $version = $this->service(Articles::class)->find($id)?->draftVersion;
+        $this->save($id, ['title' => 'Committed, answer lost']);
+
+        $repeat = $this->adminPost("/admin/articles/$id/autosave", ['version' => $version, 'writer' => 'test-tab', 'draft' => ['title' => 'Repeated'] + self::defaults()]);
+
+        self::assertSame(200, $repeat->getStatusCode());
+        self::assertSame('Repeated', $this->service(Articles::class)->find($id)?->input()->title);
+    }
+
+    public function testASaveAfterAnotherEditorIsRefusedEvenForAnEarlierWriter(): void
+    {
+        $id = $this->newRow();
+        $version = $this->service(Articles::class)->find($id)?->draftVersion;
+        $this->save($id, ['title' => 'Mine']);
+        $other = $this->service(Articles::class)->saveDraft($id, (int) $version + 1, 'other-tab', '{"title":"Theirs"}');
+        self::assertNotNull($other);
+
+        $mine = $this->adminPost("/admin/articles/$id/autosave", ['version' => $version, 'writer' => 'test-tab', 'draft' => ['title' => 'Mine again'] + self::defaults()]);
+
+        self::assertSame(409, $mine->getStatusCode());
+        self::assertSame('Theirs', $this->service(Articles::class)->find($id)?->input()->title);
+    }
+
+    public function testASaveDuringPublishingIsNotWiped(): void
+    {
+        $id = $this->saved(['title' => 'Going live']);
+        $articles = $this->service(Articles::class);
+        $read = $articles->find($id);
+        self::assertNotNull($read);
+
+        // Autosave commits after the publish request read the article.
+        $articles->saveDraft($id, $read->draftVersion, 'test-tab', '{"title":"Typed meanwhile"}');
+
+        try {
+            $articles->publish($read, $read->input());
+            self::fail('Published over newer text');
+        } catch (StaleDraft) {
+            $this->addToAssertionCount(1);
+        }
+
+        $after = $articles->find($id);
+        self::assertNotNull($after);
+        self::assertSame('Typed meanwhile', $after->input()->title);
+        self::assertSame('draft', $after->status);
+        self::assertSame(404, $this->get('/going-live')->getStatusCode());
+    }
+
+    public function testTooDeeplyNestedTextIsRefusedNotCut(): void
+    {
+        $id = $this->saved(['title' => 'Kept']);
+        $node = ['type' => 'paragraph', 'content' => [['type' => 'text', 'text' => 'deep']]];
+        for ($i = 0; $i < 120; ++$i) {
+            $node = ['type' => 'blockquote', 'content' => [$node]];
+        }
+
+        $response = $this->save($id, ['title' => 'Replaced', 'body' => ['type' => 'doc', 'content' => [$node]]]);
+
+        self::assertSame(422, $response->getStatusCode());
+        self::assertSame('Kept', $this->service(Articles::class)->find($id)?->input()->title);
+    }
+
+    public function testAutosaveReportsItsNewVersion(): void
+    {
+        $id = $this->newRow();
+        $before = $this->service(Articles::class)->find($id)?->draftVersion;
+
+        $response = $this->save($id);
+
+        $data = json_decode((string) $response->getBody(), true);
+        self::assertIsArray($data);
+        self::assertSame($before + 1, $data['version']);
+    }
+
+    public function testMalformedSaveNeverWipesTheDraft(): void
+    {
+        $id = $this->saved(['title' => 'Precious']);
+        $version = $this->service(Articles::class)->find($id)?->draftVersion;
+
+        foreach ([
+            [],
+            ['version' => $version, 'writer' => 'tab'],
+            ['writer' => 'tab', 'draft' => self::defaults()],
+            ['version' => $version, 'draft' => self::defaults()],
+            ['version' => $version, 'writer' => 'tab', 'draft' => 'nonsense'],
+            ['version' => (string) $version, 'writer' => 'tab', 'draft' => self::defaults()],
+            ['version' => $version, 'writer' => 'not valid!', 'draft' => self::defaults()],
+        ] as $payload) {
+            self::assertSame(400, $this->adminPost("/admin/articles/$id/autosave", $payload)->getStatusCode());
+        }
+
+        self::assertSame('Precious', $this->service(Articles::class)->find($id)?->input()->title);
+    }
+
+    public function testOversizedDraftIsRefused(): void
+    {
+        $id = $this->newRow();
+
+        $response = $this->save($id, ['teaser' => str_repeat('x', 4_000_001)]);
+
+        self::assertSame(413, $response->getStatusCode());
+    }
+
+    public function testAutosaveInTheTrashIsRefused(): void
+    {
+        $id = $this->saved(['title' => 'Before']);
+        $this->adminPost("/admin/articles/$id/trash");
+
+        self::assertSame(409, $this->save($id, ['title' => 'After'])->getStatusCode());
+    }
+
+    public function testEditingAPublishedArticleStaysPrivateUntilPublished(): void
+    {
+        $id = $this->published();
+
+        $this->save($id, ['body' => json_decode(Doc::text('Half-finished thought'), true), 'title' => 'New title']);
+
+        $public = (string) $this->get('/hello-world')->getBody();
+        self::assertStringNotContainsString('Half-finished', $public);
+        self::assertStringContainsString('Hello World', $public);
+
+        $article = $this->service(Articles::class)->find($id);
+        self::assertNotNull($article);
+        self::assertTrue($article->hasPendingChanges());
+        self::assertStringContainsString('changes pending', (string) $this->get('/admin/articles', $this->admin)->getBody());
+
+        $preview = (string) $this->get("/admin/articles/$id/preview", $this->admin)->getBody();
+        self::assertStringContainsString('Half-finished', $preview);
+        self::assertStringContainsString('New title', $preview);
+
+        self::assertSame(200, $this->publish($id)->getStatusCode());
+
+        $public = (string) $this->get('/hello-world')->getBody();
+        self::assertStringContainsString('Half-finished', $public);
+        self::assertStringContainsString('New title', $public);
+        self::assertFalse($this->service(Articles::class)->find($id)?->hasPendingChanges());
+    }
+
+    public function testPublishRefusesAStaleVersion(): void
+    {
+        $id = $this->saved();
+
+        $response = $this->adminPost("/admin/articles/$id/publish", ['version' => 0]);
+
+        self::assertSame(409, $response->getStatusCode());
+        self::assertSame(404, $this->get('/hello-world')->getStatusCode());
+    }
+
+    public function testPublishReportsWhatIsWrongAndKeepsTheDraft(): void
+    {
+        $id = $this->saved(['title' => '', 'slug' => 'admin', 'lang' => 'fr']);
+
+        $response = $this->publish($id);
+
+        self::assertSame(422, $response->getStatusCode());
+        $data = json_decode((string) $response->getBody(), true);
+        self::assertIsArray($data);
+        self::assertIsArray($data['errors']);
+        self::assertSame(['title', 'slug', 'lang'], array_keys($data['errors']));
+        $article = $this->service(Articles::class)->find($id);
+        self::assertNotNull($article);
+        self::assertSame('draft', $article->status);
+        self::assertSame('admin', $article->input()->slug);
     }
 
     public function testUnpublishHidesAndRepublishKeepsTheDate(): void
     {
-        $id = $this->publishedArticle();
+        $id = $this->published();
         $first = $this->service(Articles::class)->find($id)?->publishedAt;
 
         $this->adminPost("/admin/articles/$id/unpublish");
         self::assertSame(404, $this->get('/hello-world')->getStatusCode());
 
         $this->clock->advance(86400);
-        $this->adminPost("/admin/articles/$id/publish");
+        $this->publish($id);
 
         self::assertSame(200, $this->get('/hello-world')->getStatusCode());
         self::assertSame($first, $this->service(Articles::class)->find($id)?->publishedAt);
@@ -192,7 +448,7 @@ final class ArticleFlowTest extends DbTestCase
     public function testNewestComesFirstAndPagesWork(): void
     {
         for ($i = 1; $i <= 21; ++$i) {
-            $this->publishedArticle(['title' => "Article $i", 'tags' => 'all']);
+            $this->published(['title' => "Article $i", 'tags' => 'all']);
             $this->clock->advance(60);
         }
 
@@ -219,10 +475,13 @@ final class ArticleFlowTest extends DbTestCase
 
     public function testUnknownTagIs404AndDraftOnlyTagToo(): void
     {
-        $this->createArticle(['tags' => 'hidden']);
+        $this->published(['tags' => 'visible']);
+        $hidden = $this->published(['title' => 'Hidden', 'tags' => 'hidden']);
+        $this->adminPost("/admin/articles/$hidden/unpublish");
 
         self::assertSame(404, $this->get('/tag/nothing')->getStatusCode());
         self::assertSame(404, $this->get('/tag/hidden')->getStatusCode());
+        self::assertSame(200, $this->get('/tag/visible')->getStatusCode());
     }
 
     public function testEmptyArchiveExists(): void
@@ -230,10 +489,10 @@ final class ArticleFlowTest extends DbTestCase
         self::assertSame(200, $this->get('/archive')->getStatusCode());
     }
 
-    public function testSlugsAreDerivedAndMadeUnique(): void
+    public function testSlugsAreDerivedOnFirstPublishAndMadeUnique(): void
     {
         foreach (['hello-world', 'hello-world-2', 'hello-world-3'] as $slug) {
-            $id = $this->createArticle();
+            $id = $this->published();
             self::assertSame($slug, $this->service(Articles::class)->find($id)?->slug);
         }
     }
@@ -242,30 +501,16 @@ final class ArticleFlowTest extends DbTestCase
     {
         $articles = $this->service(Articles::class);
 
-        self::assertSame('admin-article', $articles->find($this->createArticle(['title' => 'Admin']))?->slug);
-        self::assertSame('article', $articles->find($this->createArticle(['title' => '???']))?->slug);
-    }
-
-    public function testExplicitSlugConflictsKeepWhatWasTyped(): void
-    {
-        $this->createArticle(['slug' => 'taken']);
-
-        $response = $this->adminPost('/admin/articles', ['title' => 'My long text', 'slug' => 'taken', 'lang' => 'en', 'body' => 'Typed words']);
-
-        self::assertSame(422, $response->getStatusCode());
-        $body = (string) $response->getBody();
-        self::assertStringContainsString('already in use', $body);
-        self::assertStringContainsString('My long text', $body);
-        self::assertStringContainsString('Typed words', $body);
-        self::assertSame(1, $this->rows('article'));
+        self::assertSame('admin-article', $articles->find($this->published(['title' => 'Admin']))?->slug);
+        self::assertSame('article', $articles->find($this->published(['title' => '???']))?->slug);
     }
 
     public function testRenamingAPublishedArticleRedirects(): void
     {
-        $id = $this->publishedArticle();
+        $id = $this->published();
 
-        self::assertSame(303, $this->updateArticle($id, ['slug' => 'second'])->getStatusCode());
-        self::assertSame(303, $this->updateArticle($id, ['slug' => 'third'])->getStatusCode());
+        self::assertSame(200, $this->republish($id, ['slug' => 'second'])->getStatusCode());
+        self::assertSame(200, $this->republish($id, ['slug' => 'third'])->getStatusCode());
 
         foreach (['/hello-world', '/second'] as $old) {
             $response = $this->get($old);
@@ -275,51 +520,60 @@ final class ArticleFlowTest extends DbTestCase
         self::assertSame(200, $this->get('/third')->getStatusCode());
     }
 
-    public function testRenamingADraftLeavesNoRedirect(): void
+    public function testFirstPublishLeavesNoRedirectFromThePlaceholderSlug(): void
     {
-        $id = $this->createArticle();
-
-        $this->updateArticle($id, ['slug' => 'other']);
+        $this->published();
 
         self::assertSame(0, $this->rows('slug_redirect'));
     }
 
     public function testRenamingBackRemovesTheRedirect(): void
     {
-        $id = $this->publishedArticle();
-        $this->updateArticle($id, ['slug' => 'other']);
+        $id = $this->published();
+        $this->republish($id, ['slug' => 'other']);
 
-        $this->updateArticle($id, ['slug' => 'hello-world']);
+        $this->republish($id, ['slug' => 'hello-world']);
 
         self::assertSame(200, $this->get('/hello-world')->getStatusCode());
         self::assertSame(301, $this->get('/other')->getStatusCode());
         self::assertSame(1, $this->rows('slug_redirect'));
     }
 
-    public function testEmptySlugKeepsTheCurrentOne(): void
+    public function testEmptySlugKeepsAPublishedAddress(): void
     {
-        $id = $this->createArticle();
+        $id = $this->published();
 
-        $this->updateArticle($id, ['title' => 'Entirely new title']);
+        $this->republish($id, ['title' => 'Entirely new title']);
 
         self::assertSame('hello-world', $this->service(Articles::class)->find($id)?->slug);
     }
 
+    public function testSlugConflictIsReportedAndTheTextStays(): void
+    {
+        $this->published(['slug' => 'taken']);
+        $id = $this->saved(['title' => 'My long text', 'slug' => 'taken']);
+
+        $response = $this->publish($id);
+
+        self::assertSame(422, $response->getStatusCode());
+        self::assertStringContainsString('already in use', (string) $response->getBody());
+        self::assertSame('My long text', $this->service(Articles::class)->find($id)?->input()->title);
+    }
+
     public function testAnotherArticleCannotTakeAnOldSlug(): void
     {
-        $this->updateArticle($this->publishedArticle(), ['slug' => 'moved']);
+        $this->republish($this->published(), ['slug' => 'moved']);
 
-        $response = $this->adminPost('/admin/articles', ['title' => 'New', 'slug' => 'hello-world', 'lang' => 'en']);
-        self::assertSame(422, $response->getStatusCode());
+        self::assertSame(422, $this->publish($this->saved(['title' => 'New', 'slug' => 'hello-world']))->getStatusCode());
 
-        $derived = $this->createArticle(['title' => 'Hello World']);
+        $derived = $this->published(['title' => 'Hello World']);
         self::assertSame('hello-world-2', $this->service(Articles::class)->find($derived)?->slug);
     }
 
     public function testRedirectNeverRevealsAHiddenArticle(): void
     {
-        $id = $this->publishedArticle();
-        $this->updateArticle($id, ['slug' => 'secret-new-name']);
+        $id = $this->published();
+        $this->republish($id, ['slug' => 'secret-new-name']);
         $this->adminPost("/admin/articles/$id/unpublish");
 
         $response = $this->get('/hello-world');
@@ -330,39 +584,52 @@ final class ArticleFlowTest extends DbTestCase
 
     public function testTagsAreReplacedAndOrphansRemoved(): void
     {
-        $id = $this->createArticle(['tags' => 'one, two']);
+        $id = $this->published(['tags' => 'one, two']);
         self::assertSame(2, $this->rows('tag'));
 
-        $this->updateArticle($id, ['tags' => 'two, three']);
+        $this->republish($id, ['tags' => 'two, three']);
 
         $stmt = $this->pdo->query('SELECT slug FROM tag ORDER BY slug');
         self::assertNotFalse($stmt);
         self::assertSame(['three', 'two'], $stmt->fetchAll(\PDO::FETCH_COLUMN));
     }
 
-    public function testFormShowsSavedValuesAgain(): void
+    public function testEditorShowsSavedValuesAgain(): void
     {
-        $id = $this->createArticle();
+        $id = $this->saved();
 
         $body = (string) $this->get("/admin/articles/$id", $this->admin)->getBody();
 
         self::assertStringContainsString('value="Hello World"', $body);
-        self::assertStringContainsString("First paragraph\n\nSecond paragraph", $body);
+        self::assertStringContainsString('First paragraph', $body);
         self::assertStringContainsString('value="PHP, Web"', $body);
     }
 
-    public function testNewFormDefaultsToTheLastLanguage(): void
+    public function testEditorOpensPublishedArticleWithItsLiveContent(): void
     {
-        self::assertStringContainsString('<option value="de" selected>', (string) $this->get('/admin/articles/new', $this->admin)->getBody());
+        $id = $this->published();
 
-        $this->createArticle(['lang' => 'en']);
+        $body = (string) $this->get("/admin/articles/$id", $this->admin)->getBody();
 
-        self::assertStringContainsString('<option value="en" selected>', (string) $this->get('/admin/articles/new', $this->admin)->getBody());
+        self::assertStringContainsString('value="Hello World"', $body);
+        self::assertStringContainsString('value="hello-world"', $body);
+        self::assertStringContainsString('First paragraph', $body);
+        self::assertStringContainsString('>Update<', $body);
+    }
+
+    public function testNewRowDefaultsToTheLastLanguage(): void
+    {
+        $first = $this->newRow();
+        self::assertSame('de', $this->service(Articles::class)->find($first)?->input()->lang);
+
+        $this->published(['lang' => 'en']);
+
+        self::assertSame('en', $this->service(Articles::class)->find($this->newRow())?->input()->lang);
     }
 
     public function testPreviewShowsDraftToAdminOnly(): void
     {
-        $id = $this->createArticle();
+        $id = $this->saved();
 
         $preview = $this->get("/admin/articles/$id/preview", $this->admin);
         self::assertSame(200, $preview->getStatusCode());
@@ -373,19 +640,35 @@ final class ArticleFlowTest extends DbTestCase
         self::assertSame(303, $this->get("/admin/articles/$id/preview")->getStatusCode());
     }
 
+    public function testPreviewOfABlankDraftWorks(): void
+    {
+        $id = $this->newRow();
+
+        self::assertSame(200, $this->get("/admin/articles/$id/preview", $this->admin)->getStatusCode());
+    }
+
     public function testAdminRoutesNeedAdminAndCsrf(): void
     {
-        $id = $this->createArticle();
+        $id = $this->saved();
 
-        foreach (['/admin/articles', '/admin/articles/new', "/admin/articles/$id"] as $path) {
+        foreach (['/admin/articles', "/admin/articles/$id", '/admin/csrf'] as $path) {
             self::assertSame(303, $this->get($path)->getStatusCode(), $path);
         }
         self::assertSame(303, $this->post("/admin/articles/$id/publish")->getStatusCode());
+        self::assertSame(303, $this->post("/admin/articles/$id/autosave")->getStatusCode());
 
-        foreach (['/admin/articles', "/admin/articles/$id", "/admin/articles/$id/publish", "/admin/articles/$id/trash"] as $path) {
+        foreach (['/admin/articles', "/admin/articles/$id/autosave", "/admin/articles/$id/publish", "/admin/articles/$id/trash"] as $path) {
             self::assertSame(403, $this->post($path, ['title' => 'x'], $this->admin)->getStatusCode(), $path);
         }
         self::assertSame(404, $this->get('/hello-world')->getStatusCode());
+    }
+
+    public function testCsrfTokenIsServedToTheSessionOnly(): void
+    {
+        $response = $this->get('/admin/csrf', $this->admin);
+
+        self::assertSame((string) json_encode(['csrf' => $this->csrf]), (string) $response->getBody());
+        self::assertSame('no-store', $response->getHeaderLine('Cache-Control'));
     }
 
     public function testReaderCannotUseAdminRoutes(): void
@@ -400,12 +683,39 @@ final class ArticleFlowTest extends DbTestCase
     public function testUnknownIdIs404(): void
     {
         self::assertSame(404, $this->get('/admin/articles/999', $this->admin)->getStatusCode());
-        self::assertSame(404, $this->adminPost('/admin/articles/999/publish')->getStatusCode());
+        self::assertSame(404, $this->adminPost('/admin/articles/999/autosave', ['version' => 0, 'writer' => 'tab', 'draft' => []])->getStatusCode());
+    }
+
+    public function testStaticPagesAreReachableButNotListed(): void
+    {
+        $this->published(['title' => 'Impressum', 'tags' => 'hidden'], 'page');
+
+        $page = (string) $this->get('/impressum')->getBody();
+        self::assertStringContainsString('<h1>Impressum</h1>', $page);
+        self::assertStringNotContainsString('<time', $page);
+        self::assertStringNotContainsString('/tag/', $page);
+
+        foreach (['/', '/archive'] as $path) {
+            self::assertStringNotContainsString('Impressum', (string) $this->get($path)->getBody(), $path);
+        }
+        self::assertSame(404, $this->get('/tag/hidden')->getStatusCode());
+
+        self::assertStringContainsString('Impressum', (string) $this->get('/admin/articles?kind=page', $this->admin)->getBody());
+        self::assertStringNotContainsString('Impressum', (string) $this->get('/admin/articles', $this->admin)->getBody());
+    }
+
+    public function testPagesAndArticlesShareOneNamespace(): void
+    {
+        $this->published(['title' => 'About'], 'page');
+
+        $id = $this->published(['title' => 'About']);
+
+        self::assertSame('about-2', $this->service(Articles::class)->find($id)?->slug);
     }
 
     public function testTrashRestoreAndPermanentDelete(): void
     {
-        $id = $this->publishedArticle();
+        $id = $this->published();
 
         $this->adminPost("/admin/articles/$id/trash");
         self::assertSame(404, $this->get('/hello-world')->getStatusCode());
@@ -417,7 +727,8 @@ final class ArticleFlowTest extends DbTestCase
 
         // Permanent delete is only possible from the trash, and needs the confirmation.
         $this->adminPost("/admin/articles/$id/delete", ['confirm' => 'yes']);
-        self::assertSame(1, $this->rows('article'));
+        $notInTrash = $this->rows('article');
+        self::assertSame(1, $notInTrash);
 
         $this->adminPost("/admin/articles/$id/trash");
         $this->adminPost("/admin/articles/$id/delete");
@@ -431,22 +742,22 @@ final class ArticleFlowTest extends DbTestCase
 
     public function testTrashedArticleCannotBePublished(): void
     {
-        $id = $this->createArticle();
+        $id = $this->saved();
         $this->adminPost("/admin/articles/$id/trash");
 
-        $this->adminPost("/admin/articles/$id/publish");
-
+        self::assertSame(409, $this->publish($id)->getStatusCode());
         self::assertSame('draft', $this->service(Articles::class)->find($id)?->status);
     }
 
     public function testTrashEmptiesItselfAfterThirtyDays(): void
     {
-        $id = $this->createArticle();
+        $id = $this->newRow();
         $this->adminPost("/admin/articles/$id/trash");
 
         $this->clock->advance(Articles::TRASH_DAYS * 86400 - 60);
         $this->get('/admin/articles?trash=1', $this->admin);
-        self::assertSame(1, $this->rows('article'));
+        $beforeTheLimit = $this->rows('article');
+        self::assertSame(1, $beforeTheLimit);
 
         $this->clock->advance(61);
         $this->get('/admin/articles?trash=1', $this->admin);

@@ -7,11 +7,14 @@ namespace Edict\Content;
 use Edict\Auth\Accounts;
 
 /**
- * What the article form submits, cleaned and checked. The form is re-shown with
- * these values when something is wrong, so nothing typed gets lost.
+ * An article's editable fields: the draft that autosave stores and publishing
+ * checks. A draft may be incomplete, so errors() only matters when publishing.
  */
 final readonly class ArticleInput
 {
+    /** Autosave's hard limit on one draft, far above any real article. */
+    public const MAX_DRAFT_BYTES = 4_000_000;
+
     private const MAX_TITLE = 200;
     private const MAX_TEASER = 1000;
     private const MAX_BODY_BYTES = 2_000_000;
@@ -28,18 +31,37 @@ final readonly class ArticleInput
     ) {}
 
     /**
-     * @param array<mixed>|object|null $form
+     * @param array<mixed> $data as the editor sends it, or as a stored draft holds it
      */
-    public static function fromForm(array|object|null $form): self
+    public static function fromArray(array $data): self
     {
         return new self(
-            trim(self::field($form, 'title')),
-            trim(self::field($form, 'slug')),
-            self::field($form, 'lang'),
-            trim(self::field($form, 'teaser')),
-            self::field($form, 'body'),
-            self::field($form, 'tags'),
+            trim(self::field($data, 'title')),
+            trim(self::field($data, 'slug')),
+            self::field($data, 'lang'),
+            trim(self::field($data, 'teaser')),
+            Body::encode(Body::clean($data['body'] ?? null)),
+            self::field($data, 'tags'),
         );
+    }
+
+    public static function fromJson(string $json): self
+    {
+        $data = json_decode($json, true);
+
+        return self::fromArray(is_array($data) ? $data : []);
+    }
+
+    public function toJson(): string
+    {
+        return json_encode([
+            'title' => $this->title,
+            'slug' => $this->slug,
+            'lang' => $this->lang,
+            'teaser' => $this->teaser,
+            'body' => json_decode($this->body),
+            'tags' => $this->tags,
+        ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
     }
 
     /**
@@ -98,14 +120,12 @@ final readonly class ArticleInput
     }
 
     /**
-     * Invalid UTF-8 can't be stored, so it counts as empty and the form says so.
-     *
-     * @param array<mixed>|object|null $form
+     * @param array<mixed> $data
      */
-    private static function field(array|object|null $form, string $name): string
+    private static function field(array $data, string $name): string
     {
-        $value = is_array($form) ? ($form[$name] ?? null) : null;
+        $value = $data[$name] ?? null;
 
-        return is_string($value) && mb_check_encoding($value, 'UTF-8') ? str_replace("\0", '', $value) : '';
+        return is_string($value) ? str_replace("\0", '', $value) : '';
     }
 }

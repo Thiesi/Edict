@@ -64,6 +64,11 @@ if grep -qi 'fatal\|warning' "$work/server.log"; then
     fail "problems in the server log"
 fi
 
+# The editor bundle must ship with the release.
+curl -fs "$url/assets/build/editor.js" | grep -q 'ProseMirror' || fail "editor script"
+[ "$(curl -s -o /dev/null -w '%{http_code}' "$url/assets/build/editor.css")" = 200 ] || fail "editor stylesheet"
+[ ! -e "$work/node_modules" ] || fail "node_modules is in the release"
+
 # The passkey script must ship with the release, and the page must load it.
 curl -fs "$url/assets/admin/passkey.js" | grep -q 'navigator.credentials' || fail "passkey script"
 curl -fs "$url/admin/login" | grep -q '/assets/admin/passkey.js' || fail "passkey script is not on the login page"

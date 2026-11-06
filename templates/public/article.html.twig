@@ -4,18 +4,18 @@
 
 {% block main %}
     {% if preview %}
-        <p role="status"><strong>Preview.</strong> Status: {{ article.status }}. <a href="/admin/articles/{{ article.id }}">Back to the form</a></p>
+        <p role="status"><strong>Preview.</strong> Status: {{ article.status }}. <a href="/admin/articles/{{ article.id }}">Back to the editor</a></p>
     {% endif %}
     <main>
         <article lang="{{ article.lang }}">
             <h1>{{ article.title }}</h1>
-            {% if article.publishedAt %}
+            {% if article.kind == 'article' and article.publishedAt %}
                 <p><time datetime="{{ article.publishedAt|article_iso }}">{{ article.publishedAt|article_date(article.lang) }}</time></p>
             {% endif %}
             {% if article.teaser %}<p class="teaser">{{ article.teaser }}</p>{% endif %}
             {{ article.bodyJson|body_html }}
         </article>
-        {% if article.tags %}
+        {% if article.kind == 'article' and article.tags %}
             <p>Tags:
                 {% for tag in article.tags %}<a href="/tag/{{ tag.slug }}">{{ tag.name }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
             </p>

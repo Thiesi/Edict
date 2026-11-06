@@ -9,13 +9,16 @@ use Edict\Database\Row;
 
 /**
  * Article storage. "Public" means published, out of the trash and with a publish
- * date that has passed; every public read goes through PUBLIC_WHERE.
+ * date that has passed; every public read goes through PUBLIC_WHERE. Listings add
+ * LISTED, so static pages are reachable but never appear in them.
  */
 final readonly class Articles
 {
     public const TRASH_DAYS = 30;
+    private const PLACEHOLDER_TITLE = 'Untitled';
 
-    private const COLUMNS = "a.id, a.slug, a.lang, a.title, a.teaser, a.body_json::text AS body_json, a.status,
+    private const COLUMNS = "a.id, a.kind, a.slug, a.lang, a.title, a.teaser, a.body_json::text AS body_json, a.status,
+        a.draft::text AS draft, a.draft_version,
         EXTRACT(EPOCH FROM a.published_at)::bigint AS published_at,
         EXTRACT(EPOCH FROM a.updated_at)::bigint AS updated_at,
         EXTRACT(EPOCH FROM a.deleted_at)::bigint AS deleted_at,
@@ -24,45 +27,64 @@ final readonly class Articles
 
     private const PUBLIC_WHERE = "a.status = 'published' AND a.deleted_at IS NULL AND a.published_at <= to_timestamp(?)";
 
+    private const LISTED = "a.kind = 'article' AND ";
+
     public function __construct(private \PDO $pdo, private Clock $clock) {}
 
     /**
-     * @throws SlugTaken
+     * A blank row for the editor. Its slug is a placeholder until the first publish,
+     * and the blank draft keeps the placeholders out of the form.
      */
-    public function create(ArticleInput $input): int
+    public function createEmpty(string $kind): int
     {
-        return $this->transaction(function () use ($input): int {
+        return $this->transaction(function () use ($kind): int {
             $now = $this->clock->now();
-            $stmt = $this->pdo->prepare(
-                'INSERT INTO article (slug, lang, title, teaser, body_json, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, to_timestamp(?), to_timestamp(?)) RETURNING id',
-            );
-            $stmt->execute([
-                $this->slugFor($input, null),
-                $input->lang,
-                $input->title,
-                $input->teaser,
-                Body::fromPlainText($input->body),
-                $now,
-                $now,
-            ]);
-            $id = Row::int(['id' => $stmt->fetchColumn()], 'id');
-            $this->setTags($id, $input);
+            $lang = $this->lastLanguage();
+            $placeholder = new ArticleInput(self::PLACEHOLDER_TITLE, '', $lang, '', Body::EMPTY, '');
+            $blank = new ArticleInput('', '', $lang, '', Body::EMPTY, '');
 
-            return $id;
+            $stmt = $this->pdo->prepare(
+                'INSERT INTO article (kind, slug, lang, title, body_json, draft, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, to_timestamp(?), to_timestamp(?)) RETURNING id',
+            );
+            $stmt->execute([$kind, $this->slugFor($placeholder, null), $lang, self::PLACEHOLDER_TITLE, Body::EMPTY, $blank->toJson(), $now, $now]);
+
+            return Row::int(['id' => $stmt->fetchColumn()], 'id');
         });
     }
 
     /**
-     * An empty slug keeps the current one. If a published article changes its slug,
-     * the old address keeps working through a redirect.
+     * Autosave. Never touches the live columns.
+     *
+     * @return int|null the new version, or null if another editor saved in between or the article is in the trash
+     */
+    public function saveDraft(int $id, int $version, string $writer, string $draftJson): ?int
+    {
+        $stmt = $this->pdo->prepare(
+            'UPDATE article SET draft = ?, draft_version = draft_version + 1, draft_writer = ?, updated_at = to_timestamp(?)
+             WHERE id = ? AND (draft_version = ? OR draft_writer = ?) AND deleted_at IS NULL RETURNING draft_version',
+        );
+        $stmt->execute([$draftJson, $writer, $this->clock->now(), $id, $version, $writer]);
+        $saved = $stmt->fetchColumn();
+
+        return $saved === false ? null : Row::int(['v' => $saved], 'v');
+    }
+
+    /**
+     * Makes this version live and clears the draft. An empty slug means: derive one
+     * if the article was never public, and keep its address if it was. If a published
+     * article changes its slug, the old address keeps working through a redirect.
+     *
+     * The draft is only cleared if it is still the version that was read, so text
+     * autosaved a moment ago can't vanish.
      *
      * @throws SlugTaken
+     * @throws StaleDraft
      */
-    public function update(Article $article, ArticleInput $input): void
+    public function publish(Article $article, ArticleInput $input): void
     {
         $this->transaction(function () use ($article, $input): void {
-            $slug = $input->slug === '' ? $article->slug : $this->slugFor($input, $article->id);
+            $slug = $input->slug === '' && $article->publishedAt !== null ? $article->slug : $this->slugFor($input, $article->id);
 
             if ($slug !== $article->slug) {
                 $this->pdo->prepare('DELETE FROM slug_redirect WHERE old_slug = ?')->execute([$slug]);
@@ -72,21 +94,20 @@ final readonly class Articles
                 }
             }
 
-            $this->pdo->prepare(
-                'UPDATE article SET slug = ?, lang = ?, title = ?, teaser = ?, body_json = ?, updated_at = to_timestamp(?) WHERE id = ?',
-            )->execute([$slug, $input->lang, $input->title, $input->teaser, Body::fromPlainText($input->body), $this->clock->now(), $article->id]);
+            $now = $this->clock->now();
+            $update = $this->pdo->prepare(
+                "UPDATE article SET slug = ?, lang = ?, title = ?, teaser = ?, body_json = ?, status = 'published',
+                        published_at = coalesce(published_at, to_timestamp(?)), updated_at = to_timestamp(?),
+                        draft = NULL, draft_version = draft_version + 1, draft_writer = NULL
+                 WHERE id = ? AND draft_version = ? AND deleted_at IS NULL",
+            );
+            $update->execute([$slug, $input->lang, $input->title, $input->teaser, $input->body, $now, $now, $article->id, $article->draftVersion]);
+            if ($update->rowCount() !== 1) {
+                throw new StaleDraft();
+            }
 
             $this->setTags($article->id, $input);
         });
-    }
-
-    public function publish(int $id): void
-    {
-        $now = $this->clock->now();
-        $this->pdo->prepare(
-            "UPDATE article SET status = 'published', published_at = coalesce(published_at, to_timestamp(?)), updated_at = to_timestamp(?)
-             WHERE id = ? AND deleted_at IS NULL",
-        )->execute([$now, $now, $id]);
     }
 
     public function unpublish(int $id): void
@@ -159,7 +180,7 @@ final readonly class Articles
     public function publicList(int $limit, int $offset): array
     {
         $stmt = $this->pdo->prepare(
-            'SELECT ' . self::COLUMNS . ' FROM article a WHERE ' . self::PUBLIC_WHERE . ' ORDER BY a.published_at DESC, a.id DESC LIMIT ? OFFSET ?',
+            'SELECT ' . self::COLUMNS . ' FROM article a WHERE ' . self::LISTED . self::PUBLIC_WHERE . ' ORDER BY a.published_at DESC, a.id DESC LIMIT ? OFFSET ?',
         );
         $stmt->execute([$this->clock->now(), $limit, $offset]);
 
@@ -168,7 +189,7 @@ final readonly class Articles
 
     public function publicCount(): int
     {
-        $stmt = $this->pdo->prepare('SELECT count(*) FROM article a WHERE ' . self::PUBLIC_WHERE);
+        $stmt = $this->pdo->prepare('SELECT count(*) FROM article a WHERE ' . self::LISTED . self::PUBLIC_WHERE);
         $stmt->execute([$this->clock->now()]);
 
         return Row::int(['n' => $stmt->fetchColumn()], 'n');
@@ -182,7 +203,7 @@ final readonly class Articles
         $stmt = $this->pdo->prepare(
             'SELECT ' . self::COLUMNS . ' FROM article a
              JOIN article_tag x ON x.article_id = a.id JOIN tag y ON y.id = x.tag_id
-             WHERE y.slug = ? AND ' . self::PUBLIC_WHERE . ' ORDER BY a.published_at DESC, a.id DESC LIMIT ? OFFSET ?',
+             WHERE y.slug = ? AND ' . self::LISTED . self::PUBLIC_WHERE . ' ORDER BY a.published_at DESC, a.id DESC LIMIT ? OFFSET ?',
         );
         $stmt->execute([$tagSlug, $this->clock->now(), $limit, $offset]);
 
@@ -193,7 +214,7 @@ final readonly class Articles
     {
         $stmt = $this->pdo->prepare(
             'SELECT count(*) FROM article a JOIN article_tag x ON x.article_id = a.id JOIN tag y ON y.id = x.tag_id
-             WHERE y.slug = ? AND ' . self::PUBLIC_WHERE,
+             WHERE y.slug = ? AND ' . self::LISTED . self::PUBLIC_WHERE,
         );
         $stmt->execute([$tagSlug, $this->clock->now()]);
 
@@ -212,13 +233,14 @@ final readonly class Articles
     /**
      * @return list<Article> for the admin list, most recently changed first
      */
-    public function adminList(bool $trash): array
+    public function adminList(string $kind, bool $trash): array
     {
-        $stmt = $this->pdo->query(
-            'SELECT ' . self::COLUMNS . ' FROM article a WHERE a.deleted_at IS ' . ($trash ? 'NOT NULL' : 'NULL') . ' ORDER BY a.updated_at DESC, a.id DESC',
+        $stmt = $this->pdo->prepare(
+            'SELECT ' . self::COLUMNS . ' FROM article a WHERE a.kind = ? AND a.deleted_at IS ' . ($trash ? 'NOT NULL' : 'NULL') . ' ORDER BY a.updated_at DESC, a.id DESC',
         );
+        $stmt->execute([$kind]);
 
-        return $stmt === false ? [] : self::all($stmt);
+        return self::all($stmt);
     }
 
     public function lastLanguage(): string
@@ -328,8 +350,11 @@ final readonly class Articles
             }
         }
 
+        $draft = $row['draft'] ?? null;
+
         return new Article(
             Row::int($row, 'id'),
+            Row::str($row, 'kind'),
             Row::str($row, 'slug'),
             Row::str($row, 'lang'),
             Row::str($row, 'title'),
@@ -340,6 +365,8 @@ final readonly class Articles
             Row::int($row, 'updated_at'),
             Row::intOrNull($row, 'deleted_at'),
             $tags,
+            is_string($draft) ? $draft : null,
+            Row::int($row, 'draft_version'),
         );
     }
 

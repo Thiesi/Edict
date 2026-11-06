@@ -20,6 +20,9 @@ coverage/
 # local agent settings
 .claude/settings.local.json
 
+# The editor bundle, built in CI (fixed path, see CLAUDE.md)
+/public/assets/build/
+
 # PHP tooling (fixed paths, see CLAUDE.md)
 .phpunit.cache/
 /var/
