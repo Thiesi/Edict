@@ -55,7 +55,11 @@ npm run build         # needed once before the editor page works locally
 npm run test:e2e      # browser tests; see the "browser" job in .github/workflows/ci.yml for the setup
 ```
 
-Adding a block type means changing both `frontend/editor/main.js` and the allow-lists in `src/Content/Body.php`. Anything `Body` doesn't know is dropped on save.
+Adding a block type means changing both the editor (`frontend/editor/`) and the allow-lists in `src/Content/Body.php`. Anything `Body` doesn't know is dropped on save.
+
+## Media locally
+
+Set `DATA_DIR` in `.env` to a folder outside the repo, and install libvips (`vipsthumbnail`, `vipsheader`). Run `php bin/edict worker` so uploads get processed. Without `DATA_DIR`, uploads fail with a message.
 
 ## Admin commands
 

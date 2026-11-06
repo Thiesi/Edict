@@ -204,6 +204,39 @@ final class ContentUnitTest extends TestCase
         self::assertStringContainsString('<ol start="0">', Body::toHtml(Body::encode(['type' => 'doc', 'content' => [$list]])));
     }
 
+    public function testMediaBlocksKeepOnlyWhatIsAllowed(): void
+    {
+        $document = ['type' => 'doc', 'content' => [
+            ['type' => 'image', 'attrs' => ['mediaId' => 5, 'alt' => "a\0b", 'caption' => str_repeat('x', 600), 'src' => 'javascript:x', 'onload' => 'x']],
+            ['type' => 'image', 'attrs' => ['mediaId' => '5']],
+            ['type' => 'image', 'attrs' => ['mediaId' => -1]],
+            ['type' => 'image'],
+            ['type' => 'gallery', 'attrs' => ['items' => [['mediaId' => 6, 'alt' => 'x', 'src' => 'y'], ['mediaId' => 'z'], 'nonsense']]],
+            ['type' => 'gallery', 'attrs' => ['items' => []]],
+        ]];
+
+        self::assertSame(['type' => 'doc', 'content' => [
+            ['type' => 'image', 'attrs' => ['mediaId' => 5, 'alt' => 'ab', 'caption' => str_repeat('x', 500)]],
+            ['type' => 'gallery', 'attrs' => ['items' => [['mediaId' => 6, 'alt' => 'x']]]],
+        ]], Body::clean($document));
+    }
+
+    public function testMediaIdsAreFoundEverywhereOnce(): void
+    {
+        $document = Body::clean(['type' => 'doc', 'content' => [
+            ['type' => 'image', 'attrs' => ['mediaId' => 1]],
+            ['type' => 'blockquote', 'content' => [['type' => 'image', 'attrs' => ['mediaId' => 2]]]],
+            ['type' => 'gallery', 'attrs' => ['items' => [['mediaId' => 3], ['mediaId' => 1]]]],
+        ]]);
+
+        self::assertSame([1, 2, 3], Body::mediaIds($document));
+    }
+
+    public function testMediaBlocksRenderNothingWithoutARenderer(): void
+    {
+        self::assertSame('', Body::toHtml(Body::encode(['type' => 'doc', 'content' => [['type' => 'image', 'attrs' => ['mediaId' => 1]]]])));
+    }
+
     public function testUnknownThingsAreDropped(): void
     {
         $document = ['type' => 'doc', 'content' => [

@@ -206,6 +206,32 @@ final readonly class MediaLibrary
     }
 
     /**
+     * @param list<int> $ids
+     *
+     * @return array<int, array<string, mixed>> by ID
+     */
+    public function readyImages(array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+
+        $stmt = $this->pdo->prepare(
+            'SELECT ' . self::COLUMNS . " FROM media WHERE kind = 'image' AND status = 'ready' AND id = ANY(?::bigint[])",
+        );
+        $stmt->execute(['{' . implode(',', $ids) . '}']);
+
+        $media = [];
+        foreach ($stmt->fetchAll() as $row) {
+            if (is_array($row)) {
+                $media[Row::int($row, 'id')] = $this->describe($row);
+            }
+        }
+
+        return $media;
+    }
+
+    /**
      * @return list<array<string, mixed>> newest first
      */
     public function latest(int $limit, int $offset): array

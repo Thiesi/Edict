@@ -76,6 +76,8 @@ jobs:
       APP_URL: http://localhost:8080
       DATABASE_URL: pgsql://edict:edict@127.0.0.1:5432/edict_e2e
       E2E_ADMIN_PASSWORD: a throwaway password for ci
+      DATA_DIR: ${{ runner.temp }}/edict-data
+      MEDIA_MIN_FREE_BYTES: "0"
     steps:
       - uses: actions/checkout@v4
 
@@ -96,6 +98,9 @@ jobs:
       - run: npm run build
       - run: npx playwright install --with-deps chromium
 
+      - name: Install the media tools
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libvips-tools
+
       - name: Create the database and the admin
         env:
           EDICT_ADMIN_PASSWORD: ${{ env.E2E_ADMIN_PASSWORD }}
@@ -105,7 +110,16 @@ jobs:
           test -n "$key"
           echo "E2E_TOTP_KEY=$key" >>"$GITHUB_ENV"
 
+      - name: Run the media worker, as cron does when deployed
+        run: |
+          mkdir -p "$DATA_DIR"
+          nohup sh -c 'while true; do php bin/edict worker --seconds=20; done' >"$RUNNER_TEMP/worker.log" 2>&1 &
+
       - run: npm run test:e2e
+
+      - name: Show the worker's log
+        if: failure()
+        run: cat "$RUNNER_TEMP/worker.log"
 
       - name: Keep the traces of failed tests
         if: failure()

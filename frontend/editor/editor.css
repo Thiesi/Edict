@@ -171,6 +171,135 @@
     background: #e8f0fe;
 }
 
+.editor-media,
+.editor-gallery {
+    position: relative;
+    margin: 1rem 0;
+    padding: 0.5rem;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font: 0.85rem system-ui, sans-serif;
+}
+
+.editor-media img,
+.editor-gallery img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+}
+
+.editor-media img[hidden],
+.editor-gallery img[hidden] {
+    display: none;
+}
+
+.editor-media label,
+.editor-gallery label {
+    display: block;
+    margin-top: 0.5rem;
+}
+
+.editor-media input,
+.editor-gallery input {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.25rem;
+}
+
+.editor-gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+    gap: 0.5rem;
+}
+
+.editor-gallery figure {
+    position: relative;
+    margin: 0;
+}
+
+.media-remove {
+    position: absolute;
+    top: 0.25rem;
+    right: 0.25rem;
+    z-index: 1;
+    border: 0;
+    border-radius: 50%;
+    width: 1.6rem;
+    height: 1.6rem;
+    background: rgb(0 0 0 / 65%);
+    color: #fff;
+    cursor: pointer;
+}
+
+.media-panel {
+    position: fixed;
+    top: 3rem;
+    right: 0;
+    bottom: 0;
+    z-index: 6;
+    width: min(22rem, 90vw);
+    padding: 0.75rem;
+    box-sizing: border-box;
+    overflow-y: auto;
+    border-left: 1px solid #ccc;
+    background: #fff;
+    font: 0.9rem system-ui, sans-serif;
+}
+
+.media-panel[hidden] {
+    display: none;
+}
+
+.media-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(6rem, 1fr));
+    gap: 0.25rem;
+}
+
+.media-grid button {
+    padding: 0;
+    border: 3px solid transparent;
+    background: none;
+    cursor: pointer;
+}
+
+.media-grid button[aria-pressed='true'] {
+    border-color: #1a56db;
+}
+
+.media-grid img {
+    display: block;
+    width: 100%;
+    height: 6rem;
+    object-fit: cover;
+}
+
+.upload-tray {
+    position: fixed;
+    left: 1rem;
+    bottom: 1rem;
+    z-index: 7;
+    margin: 0;
+    padding: 0.5rem 0.75rem;
+    max-width: min(28rem, 90vw);
+    list-style: none;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    background: #fff;
+    box-shadow: 0 2px 8px rgb(0 0 0 / 15%);
+    font: 0.85rem system-ui, sans-serif;
+}
+
+.upload-tray[hidden] {
+    display: none;
+}
+
+.upload-tray progress {
+    display: block;
+    width: 100%;
+}
+
 .editor-details {
     width: 100%;
     max-width: 42rem;

@@ -2,7 +2,7 @@ import { defineConfig } from '@playwright/test';
 
 // One fixed output path, with traces kept for failed tests only (see CLAUDE.md, Disk
 // hygiene). One worker in file order: the tests share one admin and one database,
-// and 2-passkey signs out.
+// and 3-passkey signs out.
 export default defineConfig({
     testDir: 'tests/e2e',
     outputDir: '.scratch/playwright',

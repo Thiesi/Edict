@@ -13,6 +13,7 @@
                 <button type="button" id="fullscreen">Full screen</button>
                 <a id="preview" href="/admin/articles/{{ article.id }}/preview" target="_blank" rel="noopener">Preview</a>
                 {% if article.isPublished and not article.deletedAt %}<a href="/{{ article.slug }}" target="_blank" rel="noopener">View</a>{% endif %}
+                <button type="button" id="media-toggle" aria-expanded="false" aria-controls="media-panel">Media</button>
                 {% if not article.deletedAt %}
                     <button type="button" id="publish">{{ article.isPublished ? 'Update' : 'Publish' }}</button>
                 {% endif %}
@@ -27,6 +28,17 @@
         </div>
         <p id="editor-errors" class="editor-banner" role="alert" hidden></p>
         {% if article.deletedAt %}<p class="editor-banner">This is in the trash. Restore it from the list to publish it.</p>{% endif %}
+
+        <aside id="media-panel" class="media-panel" aria-label="Media library" hidden>
+            <p>
+                <button type="button" id="media-upload">Upload…</button>
+                <button type="button" id="media-insert" disabled>Insert</button>
+            </p>
+            <div id="media-grid" class="media-grid"></div>
+            <p><button type="button" id="media-more" hidden>Show more</button></p>
+        </aside>
+        <input type="file" id="file-input" accept="image/*" multiple hidden aria-label="Choose images">
+        <ul id="upload-tray" class="upload-tray" aria-label="Uploads" hidden></ul>
 
         <main class="editor-page" lang="{{ input.lang in ['de', 'en'] ? input.lang : 'en' }}">
             <label class="editor-label" for="title">Title</label>
