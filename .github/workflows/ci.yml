@@ -45,6 +45,9 @@ jobs:
           path: ~/.cache/composer
           key: composer-${{ hashFiles('composer.lock') }}
 
+      - name: Install the media tools
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libvips-tools libimage-exiftool-perl
+
       - run: composer validate --strict
       - run: composer install --no-interaction --no-progress --prefer-dist
       - run: composer cs

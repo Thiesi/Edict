@@ -6,6 +6,7 @@ use Edict\Http\AccountController;
 use Edict\Http\AdminAuthController;
 use Edict\Http\ArticleAdminController;
 use Edict\Http\HealthAction;
+use Edict\Http\MediaController;
 use Edict\Http\Middleware\RequireAdmin;
 use Edict\Http\Middleware\RequireLogin;
 use Edict\Http\OAuthController;
@@ -48,6 +49,13 @@ return static function (App $app): void {
         $group->post('/passkeys/options', [PasskeyController::class, 'registerOptions']);
         $group->post('/passkeys/{id}/remove', [PasskeyController::class, 'remove']);
 
+        $group->post('/uploads', [MediaController::class, 'begin']);
+        $group->get('/uploads/{id}', [MediaController::class, 'status']);
+        $group->put('/uploads/{id}', [MediaController::class, 'chunk']);
+        $group->post('/uploads/{id}/complete', [MediaController::class, 'complete']);
+        $group->get('/media', [MediaController::class, 'index']);
+        $group->get('/media/{id:[0-9]+}', [MediaController::class, 'show']);
+
         $group->get('/csrf', [ArticleAdminController::class, 'csrf']);
         $group->get('/articles', [ArticleAdminController::class, 'index']);
         $group->post('/articles', [ArticleAdminController::class, 'create']);
@@ -60,6 +68,9 @@ return static function (App $app): void {
         $group->post('/articles/{id:[0-9]+}/restore', [ArticleAdminController::class, 'restore']);
         $group->post('/articles/{id:[0-9]+}/delete', [ArticleAdminController::class, 'delete']);
     })->add(RequireAdmin::class);
+
+    // Apache serves /media/ directly when deployed. This is for local development.
+    $app->get('/media/{path:.+}', [MediaController::class, 'serve']);
 
     // Last, and only for valid slugs: anything else never reaches the database.
     $app->get('/{slug:[a-z0-9]+(?:-[a-z0-9]+)*}', [PublicController::class, 'article']);

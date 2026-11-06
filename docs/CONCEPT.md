@@ -55,7 +55,7 @@ Browser ──HTTPS──▶ Apache (macro vhost, TLS via acme.sh)
 - **No full framework.** The domain is small, and a full framework would cost more in upgrades than it saves.
 - **Frontend (public site):** server-rendered HTML with minimal progressive-enhancement JS for votes, comments, lightbox and players. Pages work without JS, and reading never requires it.
 - **Frontend (admin):** the editor bundle is built with Vite in CI. `node_modules` exists only on the dev PC and in CI, never on Roanoke.
-- **Job queue:** a PostgreSQL table read with `SELECT … FOR UPDATE SKIP LOCKED`, so no Redis or extra daemon is needed. The worker is a PHP CLI loop under rc.d, as its own user. A single worker, since ffmpeg is the bottleneck and 8 vCPUs are plenty.
+- **Job queue:** a PostgreSQL table read with `SELECT … FOR UPDATE SKIP LOCKED`, so no Redis or extra daemon is needed. The worker is started by cron every minute, looks for jobs for 55 seconds and exits, with a database lock so runs can't overlap. A daemon would need restarting on every deploy; this always runs the current release, recovers from crashes by itself and needs no privileges. A single worker, since ffmpeg is the bottleneck and 8 vCPUs are plenty.
 - **Sessions:** stored in PostgreSQL, never as one file per session.
 - **Filesystem layout on Roanoke:**
   - `/usr/local/share/edict-{production,staging}/{releases,current}` holds the code.
@@ -168,7 +168,7 @@ Multiple authors and roles, a plugin system, a page-tree builder, translated ver
 
 All uploads use **chunked upload**: 8 MB chunks straight into `/home/edict/data/upload-tmp`. They never pass through the 4 GB RAM-backed `/tmp`, large videos survive flaky connections, and Apache's `LimitRequestBody` stays small.
 
-After upload, a file is hashed (SHA-256) and stored once at `media/ab/cd/<sha256>.<ext>`, so the same file uploaded twice is stored once. The DB records the original. Derived variants are jobs in the queue, so the editor shows the block immediately with a "processing…" state.
+After upload, a file is hashed (SHA-256) and stored once at `private/ab/cd/<sha256>`, so the same file uploaded twice is stored once. The original stays private, with its metadata. Readers only get the generated versions under `media/`, which have none. The DB records the original. Derived variants are jobs in the queue, so the editor shows the block immediately with a "processing…" state.
 
 | Type | Accepted | What Edict does | What the reader sees |
 |---|---|---|---|
@@ -186,8 +186,9 @@ Limits (defaults, all configurable):
 - 50 MB per image
 - 500 MB per audio file
 - 4 GB per video
-- 50 GB total media
+- 10 GB total media on staging. Production's value is decided in S11, because `/home` has about 36 GB free and is shared with other sites
 - 100,000 stored files
+- 5 GB of free disk must remain, whatever the caps say
 
 Every limit fails loudly, before anything is written.
 

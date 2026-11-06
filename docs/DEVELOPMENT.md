@@ -62,6 +62,7 @@ Adding a block type means changing both `frontend/editor/main.js` and the allow-
 | Command | Purpose |
 |---|---|
 | `php bin/edict migrate` | Apply pending migrations from `migrations/` |
+| `php bin/edict worker` | Run background jobs for 55 seconds, then exit. Cron starts it every minute when deployed |
 | `php bin/edict cache:warmup` | Compile all templates; the deploy script runs this |
 | `php bin/edict admin:create <username>` | Create the single admin account |
 | `php bin/edict admin:reset` | New password and authenticator secret; removes all passkeys, ends all admin sessions and lifts the username throttle. The recovery path if you are locked out |

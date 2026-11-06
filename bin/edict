@@ -11,6 +11,7 @@ use Edict\Cli\AdminResetCommand;
 use Edict\Cli\AdminRevokeSessionsCommand;
 use Edict\Cli\CacheWarmupCommand;
 use Edict\Cli\MigrateCommand;
+use Edict\Cli\WorkerCommand;
 use Edict\Kernel;
 use Edict\Services;
 use Symfony\Component\Console\Application;
@@ -22,6 +23,7 @@ $services = new Services(Kernel::boot(dirname(__DIR__))->getContainer());
 $console = new Application('Edict');
 $console->addCommands([
     $services->get(MigrateCommand::class),
+    $services->get(WorkerCommand::class),
     $services->get(CacheWarmupCommand::class),
     $services->get(AdminCreateCommand::class),
     $services->get(AdminResetCommand::class),

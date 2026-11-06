@@ -14,6 +14,7 @@ use Edict\Services;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\StreamInterface;
 use Slim\App;
 use Slim\Psr7\Factory\ServerRequestFactory;
 
@@ -48,7 +49,7 @@ abstract class DbTestCase extends TestCase
             (new Migrator($this->pdo, dirname(__DIR__) . '/migrations'))->migrate();
             self::$schemaReady = true;
         }
-        $this->pdo->exec('TRUNCATE app_user, session, login_attempt, webauthn_used_challenge, article, tag RESTART IDENTITY CASCADE');
+        $this->pdo->exec('TRUNCATE app_user, session, login_attempt, webauthn_used_challenge, article, tag, media, upload, job RESTART IDENTITY CASCADE');
 
         $this->clock = new FixedClock(1_800_000_000);
         $this->http = new FakeHttpClient();
@@ -62,9 +63,17 @@ abstract class DbTestCase extends TestCase
                 'GOOGLE_OIDC_CLIENT_SECRET' => 'google-secret',
                 'TWITCH_OIDC_CLIENT_ID' => 'twitch-client',
                 'TWITCH_OIDC_CLIENT_SECRET' => 'twitch-secret',
-            ],
+            ] + $this->extraEnv(),
             [Clock::class => $this->clock, \PDO::class => $this->pdo, HttpClient::class => $this->http],
         );
+    }
+
+    /**
+     * @return array<string, string> settings for this test class
+     */
+    protected function extraEnv(): array
+    {
+        return [];
     }
 
     /**
@@ -102,7 +111,7 @@ abstract class DbTestCase extends TestCase
     }
 
     /**
-     * @param array<string, string> $body
+     * @param array<string, mixed> $body
      * @param array<string, string> $cookies
      * @param array<string, string> $headers
      */
@@ -112,7 +121,24 @@ abstract class DbTestCase extends TestCase
     }
 
     /**
-     * @param array<string, string>|null $body
+     * @param array<string, string> $cookies
+     * @param array<string, string> $headers
+     */
+    protected function raw(string $method, string $path, StreamInterface $body, array $cookies, array $headers): ResponseInterface
+    {
+        $request = (new ServerRequestFactory())
+            ->createServerRequest($method, self::ORIGIN . $path, ['REMOTE_ADDR' => '203.0.113.7'])
+            ->withCookieParams($cookies)
+            ->withBody($body);
+        foreach ($headers as $name => $value) {
+            $request = $request->withHeader($name, $value);
+        }
+
+        return $this->app->handle($request);
+    }
+
+    /**
+     * @param array<string, mixed>|null $body
      * @param array<string, string> $cookies
      * @param array<string, string> $headers
      */
