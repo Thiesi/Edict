@@ -107,7 +107,7 @@ If a machine dies mid-deploy, the lock stays and the forced-command key can't cl
 Ops runs these before the first deploy, because CI runs on Linux:
 
 1. `sh -c 'trap "echo BAD" EXIT; (:) | cat; x=$(:); exit 0' 2>&1` prints `BAD` exactly once. If it's more, `/bin/sh` runs EXIT traps in subshells, and the script's cleanup needs a guard.
-2. `/bin/tar` can extract a ustar archive holding paths over 100 characters, keeping the full names. The CI bundle is one.
+2. `/bin/tar` lists and extracts the CI bundle with `tar -tzf` and `tar -xzf`. It's a gzipped ustar archive.
 3. `sshd` lets the new deploy user log in (`AllowUsers`/`AllowGroups`), and that user gets `php` at the configured path.
 4. As the deploy user, an HTTPS request to `HEALTH_URL` verifies its certificate, with the settings file's `OPENSSL_CONF`.
 5. In the pool, not just the CLI: an HTTPS request to `https://oauth2.googleapis.com/token` verifies its certificate. Login needs this, and `/healthz` doesn't cover it.
