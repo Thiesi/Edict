@@ -76,7 +76,7 @@ jobs:
       APP_URL: http://localhost:8080
       DATABASE_URL: pgsql://edict:edict@127.0.0.1:5432/edict_e2e
       E2E_ADMIN_PASSWORD: a throwaway password for ci
-      DATA_DIR: ${{ runner.temp }}/edict-data
+      DATA_DIR: /tmp/edict-e2e-data
       MEDIA_MIN_FREE_BYTES: "0"
     steps:
       - uses: actions/checkout@v4
