@@ -1,0 +1,318 @@
+#!/bin/sh
+# Deploys Edict releases on the host, CGP style: each release is its own
+# directory, `current` is a symlink, and a failed healthcheck flips straight back.
+#
+# Usage:
+#   edict-deploy <staging|production> deploy <tarball|->
+#   edict-deploy <staging|production> rollback [release]
+#   edict-deploy <staging|production> releases
+#   edict-deploy <staging|production> ssh
+#
+# "ssh" is for a forced-command key: it takes the action from SSH_ORIGINAL_COMMAND
+# ("deploy" with the tarball on stdin, "rollback [release]" or "releases").
+#
+# Settings: /usr/local/etc/edict-deploy.<env>.conf (see docs/DEPLOY.md).
+# Layout under BASE:
+#   releases/<UTC timestamp>-<sha>/   one per deploy
+#   current -> releases/<name>        what the vhost serves
+#   shared/.env                       secrets and settings
+#
+# Rollback restores code only. Migrations stay applied, so they must remain
+# compatible with the previous release.
+set -eu
+# Code is world-readable: Apache serves static files itself. Secrets live only in
+# shared/.env, which this script never creates.
+umask 022
+
+die() {
+    echo "edict-deploy: $*" >&2 || true
+    exit 1
+}
+
+say() {
+    echo "edict-deploy: $*" || true
+}
+
+usage() {
+    sed -n '6,9p' "$0" | cut -c3- >&2
+    exit 2
+}
+
+[ $# -ge 2 ] || usage
+env_name=$1
+command=$2
+shift 2
+
+case $env_name in
+staging | production) ;;
+*) usage ;;
+esac
+
+BASE=/usr/local/share/edict-$env_name
+HEALTH_URL=
+HEALTH_TIMEOUT=60
+KEEP_RELEASES=5
+MAX_BYTES=268435456
+MAX_ENTRIES=50000
+PHP=php
+
+conf=${EDICT_DEPLOY_CONF:-/usr/local/etc/edict-deploy.$env_name.conf}
+[ -f "$conf" ] || die "$conf does not exist"
+# shellcheck disable=SC1090
+. "$conf"
+[ -n "$HEALTH_URL" ] || die "HEALTH_URL is not set in $conf"
+
+releases=$BASE/releases
+link=$BASE/current
+shared=$BASE/shared
+lock=$BASE/.deploy.lock
+[ -d "$releases" ] || die "$releases does not exist"
+
+incoming=
+upload=
+locked=
+discard=
+unverified=
+restore=
+
+# Puts back what was live before the flip. With nothing before it, nothing is live.
+revert() {
+    unverified=
+    if [ -n "$restore" ]; then
+        flip_to "$restore"
+    else
+        rm -f "$link"
+    fi
+}
+
+cleanup() {
+    [ -z "$unverified" ] || revert
+    [ -z "$discard" ] || rm -rf "$discard"
+    [ -z "$incoming" ] || rm -rf "$incoming"
+    [ -z "$upload" ] || rm -f "$upload"
+    [ -z "$locked" ] || rmdir "$lock"
+}
+trap cleanup EXIT
+# A dropped SSH connection must not stop a deploy halfway: it runs on until the
+# release is verified or flipped back. An explicit stop reverts through cleanup.
+trap '' HUP PIPE
+trap 'exit 1' INT TERM
+
+take_lock() {
+    mkdir "$lock" 2>/dev/null || die "another deploy is running (or crashed: rmdir $lock)"
+    locked=1
+}
+
+current_release() {
+    target=$(readlink "$link" 2>/dev/null) || return 0
+    basename "$target"
+}
+
+# Atomic, unlike `ln -sf`. rename(2) via PHP because `mv` has no portable way to
+# replace a symlink to a directory instead of moving into it.
+flip_to() {
+    new_link=$BASE/.current.new
+    rm -f "$new_link"
+    ln -s "releases/$1" "$new_link"
+    "$PHP" -r 'exit(rename($argv[1], $argv[2]) ? 0 : 1);' -- "$new_link" "$link"
+}
+
+# True once the site answers healthy and reports exactly this release. Workers
+# keep the old path until their realpath cache expires, so this gets polled.
+# Prints what it got on stderr when it isn't.
+healthy_release() {
+    "$PHP" -r '
+        $context = stream_context_create(["http" => ["timeout" => 5, "ignore_errors" => true, "follow_location" => 0]]);
+        $body = @file_get_contents($argv[1], false, $context);
+        if ($body === false) {
+            fwrite(STDERR, "healthcheck: " . (error_get_last()["message"] ?? "no response") . "\n");
+            exit(1);
+        }
+        $health = json_decode($body, true);
+        if (is_array($health) && ($health["status"] ?? "") === "ok" && ($health["release"] ?? "") === $argv[2]) {
+            exit(0);
+        }
+        fwrite(STDERR, "healthcheck: " . substr($body, 0, 300) . "\n");
+        exit(1);
+    ' -- "$HEALTH_URL" "$1"
+}
+
+wait_for_health() {
+    waited=0
+    while ! healthy_release "$1" 2>/dev/null; do
+        [ "$waited" -lt "$HEALTH_TIMEOUT" ] || return 1
+        sleep 2
+        waited=$((waited + 2))
+    done
+}
+
+is_release_name() {
+    # grep matches line by line, so anything with a newline must be refused first.
+    case $1 in
+    *[!0-9a-f-]*) return 1 ;;
+    esac
+    printf '%s\n' "$1" | grep -Eq '^[0-9]{14}-[0-9a-f]{12}$'
+}
+
+list_releases() {
+    for path in "$releases"/*; do
+        [ -d "$path" ] || continue
+        name=$(basename "$path")
+        if is_release_name "$name"; then
+            printf '%s\n' "$name"
+        fi
+    done | sort
+}
+
+prune() {
+    active=$(current_release)
+    excess=$(($(list_releases | wc -l) - KEEP_RELEASES))
+    [ "$excess" -gt 0 ] || return 0
+    list_releases | head -n "$excess" | while read -r name; do
+        if [ "$name" != "$active" ]; then
+            rm -rf "${releases:?}/$name"
+            say "pruned $name"
+        fi
+    done
+}
+
+deploy() {
+    [ $# -eq 1 ] || usage
+    tarball=$1
+    [ -f "$shared/.env" ] || die "$shared/.env does not exist"
+
+    take_lock
+
+    # Left behind if the machine died mid-deploy.
+    rm -rf "$releases"/.incoming-* "$BASE"/.upload-*
+
+    if [ "$tarball" = - ]; then
+        # Kept next to the releases: /tmp is a small RAM disk on this host.
+        upload=$BASE/.upload-$$.tar.gz
+        head -c "$((MAX_BYTES + 1))" >"$upload"
+        tarball=$upload
+    fi
+    [ -f "$tarball" ] || die "$tarball not found"
+    [ "$(wc -c <"$tarball")" -le "$MAX_BYTES" ] || die "the tarball is larger than $MAX_BYTES bytes"
+
+    entries=$(tar -tzf "$tarball") || die "cannot read the tarball"
+    if printf '%s\n' "$entries" | grep -Eq '^/|(^|/)\.\.(/|$)'; then
+        die "the tarball contains unsafe paths"
+    fi
+    [ "$(printf '%s\n' "$entries" | wc -l)" -le "$MAX_ENTRIES" ] || die "the tarball has more than $MAX_ENTRIES entries"
+
+    incoming=$releases/.incoming-$$
+    mkdir "$incoming"
+    tar -xzf "$tarball" -C "$incoming"
+    [ -f "$incoming/public/index.php" ] && [ -f "$incoming/bin/edict" ] && [ -f "$incoming/BUILD_SHA" ] ||
+        die "the tarball is not an Edict release"
+
+    sha=$(cut -c1-12 "$incoming/BUILD_SHA")
+    name=$(date -u +%Y%m%d%H%M%S)-$sha
+    is_release_name "$name" || die "bad revision in the tarball"
+    [ ! -e "$releases/$name" ] || die "$name already exists"
+
+    printf '%s\n' "$name" >"$incoming/RELEASE"
+    ln -s ../../shared/.env "$incoming/.env"
+
+    # Also proves the release boots: missing PHP extensions or bad settings fail
+    # here, while nothing has changed yet. The pool can't write to the release,
+    # so all templates must be compiled now.
+    "$PHP" "$incoming/bin/edict" cache:warmup || die "the release does not boot; current is untouched"
+
+    mv "$incoming" "$releases/$name"
+    incoming=
+    discard=$releases/$name
+
+    "$PHP" "$discard/bin/edict" migrate || die "migrations failed; current is untouched, but check the database"
+
+    restore=$(current_release)
+    unverified=1
+    flip_to "$name"
+
+    if wait_for_health "$name"; then
+        unverified=
+        discard=
+        say "$name is live"
+        prune
+        return 0
+    fi
+
+    healthy_release "$name" || true
+    say "healthcheck failed for $name, flipping back"
+    revert
+    die "deploy failed; ${restore:-nothing} is live. Migrations of $name stay applied"
+}
+
+rollback() {
+    [ $# -le 1 ] || usage
+    take_lock
+
+    active=$(current_release)
+    if [ $# -eq 1 ]; then
+        target=$1
+    else
+        # The newest release older than the active one.
+        target=$(list_releases | awk -v active="$active" '$0 < active { found = $0 } END { print found }')
+    fi
+    [ -n "$target" ] || die "no earlier release to roll back to"
+    is_release_name "$target" && [ -d "$releases/$target" ] || die "no release named $target"
+    [ "$target" != "$active" ] || die "$target is already live"
+
+    restore=$active
+    unverified=1
+    flip_to "$target"
+
+    if wait_for_health "$target"; then
+        unverified=
+        say "rolled back to $target. Migrations are not reverted"
+        return 0
+    fi
+
+    healthy_release "$target" || true
+    say "healthcheck failed for $target, flipping back"
+    revert
+    die "rollback failed; ${restore:-nothing} is live"
+}
+
+show_releases() {
+    active=$(current_release)
+    list_releases | while read -r name; do
+        if [ "$name" = "$active" ]; then
+            echo "$name  (live)"
+        else
+            echo "$name"
+        fi
+    done
+}
+
+# The client's command is only ever matched against these words, never evaluated.
+from_ssh() {
+    set -f
+    # shellcheck disable=SC2086
+    set -- ${SSH_ORIGINAL_COMMAND:-}
+    set +f # Only for the split above: the actions below need globbing.
+    case ${1:-} in
+    deploy)
+        [ $# -eq 1 ] || die "deploy takes the tarball on stdin"
+        deploy -
+        ;;
+    rollback)
+        shift
+        rollback "$@"
+        ;;
+    releases)
+        [ $# -eq 1 ] || die "releases takes no arguments"
+        show_releases
+        ;;
+    *) die "allowed: deploy, rollback [release], releases" ;;
+    esac
+}
+
+case $command in
+deploy) deploy "$@" ;;
+rollback) rollback "$@" ;;
+releases) show_releases ;;
+ssh) from_ssh ;;
+*) usage ;;
+esac

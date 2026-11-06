@@ -19,7 +19,7 @@ Guiding principles:
 |---|---|
 | ✅ Stack | PHP 8.3 (php-fpm) + PostgreSQL 16 on Roanoke |
 | ✅ Media tools | ffmpeg, libvips, exiftool, poppler, installed via pkgin with your approval and a dry run first |
-| ✅ Deploy | CGP model: CI builds a release, it lands in `releases/<sha-timestamp>`, the `current` symlink is flipped, a healthcheck runs, and rollback is instant. Carried out via Ops: Roanoke (§8) |
+| ✅ Deploy | CGP model: CI builds a release, it lands in `releases/<timestamp-sha>`, the `current` symlink is flipped, a healthcheck runs, and rollback is instant. Carried out via Ops: Roanoke (§8) |
 | ✅ Domain | `Edict.NetWorkXXIII.de` for now, staging proposed as `Staging.Edict.NetWorkXXIII.de`. DNS and TLS are set up by Ops: Roanoke |
 | ✅ URLs | `/slug` for articles and static pages in one namespace |
 | ✅ Language | English interface. Each article is marked `de` or `en` |

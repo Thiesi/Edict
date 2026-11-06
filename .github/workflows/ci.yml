@@ -46,3 +46,45 @@ jobs:
       - run: composer cs
       - run: composer stan
       - run: composer test
+
+  release:
+    needs: check
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: edict
+          POSTGRES_PASSWORD: edict
+          POSTGRES_DB: edict_smoke
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U edict"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: pdo_pgsql
+          coverage: none
+          tools: composer:v2
+
+      - name: Test the deploy script
+        run: sh tests/deploy/deploy_test.sh
+
+      - name: Build the release
+        run: sh scripts/build-release.sh "$GITHUB_SHA"
+
+      - name: Smoke-test the release
+        run: sh tests/deploy/smoke.sh ".scratch/release/edict-$GITHUB_SHA.tar.gz" pgsql://edict:edict@127.0.0.1:5432/edict_smoke
+
+      - name: Upload the release
+        uses: actions/upload-artifact@v4
+        with:
+          name: edict-${{ github.sha }}
+          path: .scratch/release/
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 30
