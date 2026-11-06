@@ -20,6 +20,12 @@ final readonly class Config
         public string $appUrl,
         public string $appSecret,
         public array $oauthCredentials = [],
+        public ?string $dataDir = null,
+        public int $mediaMaxBytes = 10_000_000_000,
+        public int $mediaMaxFiles = 100_000,
+        public int $mediaMinFreeBytes = 5_000_000_000,
+        public string $vipsthumbnailBin = 'vipsthumbnail',
+        public string $vipsheaderBin = 'vipsheader',
     ) {}
 
     /**
@@ -50,6 +56,12 @@ final readonly class Config
             appUrl: rtrim(self::str($env, 'APP_URL') ?? 'http://localhost:8080', '/'),
             appSecret: $appSecret,
             oauthCredentials: self::oauthCredentials($env),
+            dataDir: self::str($env, 'DATA_DIR'),
+            mediaMaxBytes: self::int($env, 'MEDIA_MAX_BYTES', 10_000_000_000),
+            mediaMaxFiles: self::int($env, 'MEDIA_MAX_FILES', 100_000),
+            mediaMinFreeBytes: self::int($env, 'MEDIA_MIN_FREE_BYTES', 5_000_000_000),
+            vipsthumbnailBin: self::str($env, 'VIPSTHUMBNAIL_BIN') ?? 'vipsthumbnail',
+            vipsheaderBin: self::str($env, 'VIPSHEADER_BIN') ?? 'vipsheader',
         );
     }
 
@@ -114,6 +126,22 @@ final readonly class Config
         }
 
         return $credentials;
+    }
+
+    /**
+     * @param array<string, mixed> $env
+     */
+    private static function int(array $env, string $key, int $default): int
+    {
+        $value = self::str($env, $key);
+        if ($value === null) {
+            return $default;
+        }
+        if (!ctype_digit($value)) {
+            throw new \InvalidArgumentException("$key must be a whole number");
+        }
+
+        return (int) $value;
     }
 
     /**
