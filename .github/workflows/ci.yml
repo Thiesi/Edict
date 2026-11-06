@@ -7,7 +7,11 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Runs on main must finish: they deploy.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
 
 jobs:
   check:
@@ -88,3 +92,44 @@ jobs:
           if-no-files-found: error
           include-hidden-files: true
           retention-days: 30
+
+  # Staging only, and never for pull requests: this repository is public. The
+  # environment also restricts the key to main.
+  deploy-staging:
+    needs: release
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: staging
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: false
+    env:
+      DEPLOY_TARGET: edictstg-deploy@roanoke.networkxxiii.de
+    steps:
+      # Pinned to a commit, because this job holds the deploy key. This is v4.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: edict-${{ github.sha }}
+          path: ${{ runner.temp }}/release
+
+      - name: Prepare SSH
+        env:
+          DEPLOY_KEY: ${{ secrets.EDICT_STAGING_DEPLOY_KEY }}
+        run: |
+          umask 077
+          mkdir "$RUNNER_TEMP/ssh"
+          printf '%s\n' "$DEPLOY_KEY" >"$RUNNER_TEMP/ssh/key"
+          # Pinned, never scanned: this is Roanoke's public host key.
+          echo 'roanoke.networkxxiii.de ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAK5ya0+YqAGmWL/7WDzh4BsxMuxchOSC3zvOoDQ9qHo' >"$RUNNER_TEMP/ssh/known_hosts"
+
+      # The key can only run edict-deploy on the host, which reads the tarball from stdin.
+      - name: Deploy
+        run: |
+          ssh -i "$RUNNER_TEMP/ssh/key" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=20 \
+              -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/ssh/known_hosts" \
+              "$DEPLOY_TARGET" deploy <"$RUNNER_TEMP/release/edict-$GITHUB_SHA.tar.gz"
+
+      - name: Remove the key
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/ssh"
