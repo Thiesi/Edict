@@ -18,6 +18,8 @@ Nothing visible changes before step 5.
 
 **Rollback restores code, not the database.** Migrations stay applied, so a migration must keep working with the previous release. Split a breaking schema change over two deploys.
 
+Until the first deploy creates `current`, Apache's configtest warns that the DocumentRoot doesn't exist. That's expected.
+
 ## Deploying and rolling back
 
 Get the bundle from the dev PC, then send the tarball through the deploy key:
@@ -44,8 +46,8 @@ Facts below were confirmed by Ops on 2026-11-06.
 | Routing | Existing files are served directly; everything else goes to `/index.php` through the pool. `/healthz` must reach PHP |
 | Staging only | `X-Robots-Tag: noindex` |
 | Pool user | `edictstg`, nologin, with its own pool and socket |
-| Deploy user | `edictstg-deploy`, `/bin/sh`, member of group `edictstg`. Owns the code, so a compromised worker can't rewrite it |
-| Deploy key | `command="/usr/local/sbin/edict-deploy staging ssh",no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding` in `/usr/pkg/etc/ssh/authorized_keys/edictstg-deploy`. The public key comes from the owner |
+| Deploy user | `edictstg-deploy`, `/bin/sh`, home = `/usr/local/share/edict-staging`, member of group `edictstg`. Owns the code, so a compromised worker can't rewrite it |
+| Deploy key | `command="/usr/local/sbin/edict-deploy staging ssh",no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding` in `/usr/pkg/etc/ssh/authorized_keys/edictstg-deploy`. The public key comes from the owner. That path applies only through sshd's `Match User` block, so `edictstg-deploy` must be added to it, followed by an sshd reload |
 | Script | `deploy/edict-deploy` installed root-owned as `/usr/local/sbin/edict-deploy`. It changes only through Ops |
 | PHP extensions | `mbstring`, `openssl`, `pdo`, `pdo_pgsql` and `iconv`, for both the CLI and the pool |
 | Settings | `/usr/local/etc/edict-deploy.staging.conf`, root-owned |
@@ -69,7 +71,7 @@ Directories:
 | `/usr/local/share/edict-staging` | `edictstg-deploy:edictstg` | 0755 | The lock, upload and `current` link live here. Apache must be able to traverse it |
 | `.../releases` | `edictstg-deploy:edictstg` | 0755 | The script's umask is 022: code is world-readable, so Apache can serve static files with no group changes |
 | `.../shared` | `root:edictstg` | 0750 | Apache has no access |
-| `.../shared/.env` | `root:edictstg` | 0640 | The only secret. Read by the pool and the deploy user. Not under `/home`, so Borg needs an explicit entry or a deliberate decision to skip it |
+| `.../shared/.env` | `root:edictstg` | 0640 | The only secret. Read by the pool and the deploy user. Borg already covers it: its paths include `/usr`, and `/usr/local/share` is on that filesystem |
 
 Pool settings:
 
@@ -79,7 +81,9 @@ env[OPENSSL_CONF] = /etc/openssl/openssl.cnf
 php_admin_value[realpath_cache_ttl] = 2
 ```
 
-The short realpath TTL is what makes workers pick up a flip, since a php-fpm reload would touch every pool on the host. **OPcache isn't loaded on Roanoke. If it is ever enabled, this needs revisiting**, because cached scripts would outlive the flip.
+Errors go to the vhost's error log, so the pool sets no `error_log` path, and the two new vhost logs need newsyslog entries.
+
+Adding the pool needs one php-fpm reload, which touches every pool on the host once. Deploys need none: the short realpath TTL is what makes workers pick up a flip. **OPcache isn't loaded on Roanoke. If it is ever enabled, this needs revisiting**, because cached scripts would outlive the flip.
 
 `shared/.env`:
 
