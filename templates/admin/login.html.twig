@@ -13,6 +13,10 @@
             <p><label>Authenticator code <input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required></label></p>
             <p><button type="submit">Sign in</button></p>
         </form>
+        <h2>Or use a passkey</h2>
+        <p id="passkey-status" role="status"></p>
+        <p><button type="button" id="passkey-login" data-csrf="{{ csrf_token }}" hidden>Sign in with a passkey</button></p>
+        <script src="/assets/admin/passkey.js" defer></script>
         {% if providers %}
             <h2>Or use an allow-listed account</h2>
             <ul>

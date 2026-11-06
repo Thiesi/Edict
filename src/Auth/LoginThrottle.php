@@ -10,15 +10,15 @@ use Edict\Config;
 /**
  * Throttles failed logins per client IP and per username. Buckets are keyed
  * HMACs, so the table contains no IP addresses or attempted usernames. Failed
- * provider logins count separately: each can cost a blocking request to the
- * provider, and they must not lock anyone out of the password form.
+ * provider and passkey logins count separately, so that they can't lock anyone
+ * out of the password form. A provider failure can also cost a blocking request.
  */
 final readonly class LoginThrottle
 {
     public const WINDOW = 900;
     private const MAX_PER_IP = 5;
     private const MAX_PER_USERNAME = 10;
-    private const MAX_OAUTH_PER_IP = 20;
+    private const MAX_OTHER_PER_IP = 20;
 
     public function __construct(private \PDO $pdo, private Clock $clock, private Config $config) {}
 
@@ -35,7 +35,7 @@ final readonly class LoginThrottle
 
     public function isOAuthBlocked(string $ip): bool
     {
-        return $this->failures($this->ipBucket('oauth-ip', $ip)) >= self::MAX_OAUTH_PER_IP;
+        return $this->failures($this->ipBucket('oauth-ip', $ip)) >= self::MAX_OTHER_PER_IP;
     }
 
     public function recordOAuthFailure(string $ip): void
@@ -76,6 +76,16 @@ final readonly class LoginThrottle
         }
 
         return bin2hex(substr($packed, 0, 8)) . '::/64';
+    }
+
+    public function isPasskeyBlocked(string $ip): bool
+    {
+        return $this->failures($this->ipBucket('passkey-ip', $ip)) >= self::MAX_OTHER_PER_IP;
+    }
+
+    public function recordPasskeyFailure(string $ip): void
+    {
+        $this->record($this->ipBucket('passkey-ip', $ip));
     }
 
     private function ipBucket(string $kind, string $ip): string

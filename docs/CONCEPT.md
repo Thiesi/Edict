@@ -73,7 +73,7 @@ Browser ──HTTPS──▶ Apache (macro vhost, TLS via acme.sh)
 - **Accounts are never merged by email or name.** A reader can link a second provider explicitly while signed in. Identities are keyed on the provider's stable ID, never on a changeable name.
 - **Self-service for readers:** edit display name, sign out everywhere, delete account (comments stay as "[deleted user]" or are removed, votes are removed). Required for GDPR.
 - **Admin role.** The admin account is created via a CLI command on the host, and another allow-lists your own Twitch and Google IDs (`bin/edict admin:allow`). There is no way to become admin from the web.
-- **Admin login:** an allow-listed Twitch/Google account, a passkey, or password + TOTP. The last one is the fallback that keeps you in when a provider is down, and CLI reset on the host is the final recovery. Whoever controls your Google or Twitch account controls the site, so both need 2FA.
+- **Admin login:** an allow-listed Twitch/Google account, a passkey, or password + TOTP. Adding a passkey needs the password and code as well as a session. Passkeys are bound to the site's host name, so they must be re-added after a domain change. The last one is the fallback that keeps you in when a provider is down, and CLI reset on the host is the final recovery. Whoever controls your Google or Twitch account controls the site, so both need 2FA.
 - Login endpoints are rate-limited. Sessions are stored in the DB with a secure, HttpOnly, `SameSite=Lax` cookie (`Strict` would drop the cookie on the redirect back from the provider), and every state-changing action is CSRF-protected.
 - When logged in, the public site shows inline admin controls: edit, delete comment, adjust votes, unpublish.
 

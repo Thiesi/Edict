@@ -63,8 +63,9 @@ final readonly class AdminAccount
     }
 
     /**
-     * Sets a new password and TOTP secret, ends all admin sessions and lifts any
-     * throttle on the username.
+     * Sets a new password and TOTP secret, removes all passkeys, ends all admin
+     * sessions and lifts any throttle on the username. A reset means something was
+     * lost or stolen, so every way in that could be affected goes.
      *
      * @return array{username: string, secret: string} the raw TOTP secret is shown exactly once
      */
@@ -87,6 +88,7 @@ final readonly class AdminAccount
             }
 
             $this->pdo->prepare('DELETE FROM session WHERE user_id = ?')->execute([Row::int($row, 'user_id')]);
+            $this->pdo->prepare('DELETE FROM passkey WHERE user_id = ?')->execute([Row::int($row, 'user_id')]);
             $this->throttle->clearUsername(Row::str($row, 'username'));
             $this->pdo->commit();
         } catch (\Throwable $e) {
@@ -96,6 +98,15 @@ final readonly class AdminAccount
         }
 
         return ['username' => Row::str($row, 'username'), 'secret' => $secret];
+    }
+
+    public function usernameOf(int $userId): ?string
+    {
+        $stmt = $this->pdo->prepare('SELECT username FROM admin_credential WHERE user_id = ?');
+        $stmt->execute([$userId]);
+        $row = $stmt->fetch();
+
+        return is_array($row) ? Row::str($row, 'username') : null;
     }
 
     /**

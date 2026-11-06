@@ -30,7 +30,7 @@ final class AdminResetCommand extends Command
         $password = CredentialPrompt::newPassword($helper, $input, $output);
         $result = $this->services->get(AdminAccount::class)->reset($password);
 
-        $output->writeln("Credentials for '{$result['username']}' reset; all admin sessions ended.");
+        $output->writeln("Credentials for '{$result['username']}' reset; all passkeys removed and all admin sessions ended.");
         CredentialPrompt::showTotp($output, $result['secret'], $result['username']);
 
         return self::SUCCESS;

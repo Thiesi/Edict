@@ -64,6 +64,24 @@ if grep -qi 'fatal\|warning' "$work/server.log"; then
     fail "problems in the server log"
 fi
 
+# The passkey script must ship with the release, and the page must load it.
+curl -fs "$url/assets/admin/passkey.js" | grep -q 'navigator.credentials' || fail "passkey script"
+curl -fs "$url/admin/login" | grep -q '/assets/admin/passkey.js' || fail "passkey script is not on the login page"
+
+# Real JSON parsing and cookies, which the PHPUnit suite bypasses.
+curl -s -D "$work/passkey.headers" -o "$work/passkey.json" -X POST -H 'Content-Type: application/json' -d '{}' "$url/admin/passkey/options"
+grep -q '"challenge"' "$work/passkey.json" || fail "passkey options: $(cat "$work/passkey.json")"
+grep -qi '^set-cookie: __Host-edict_passkey=.*SameSite=Strict.*Secure' "$work/passkey.headers" || fail "passkey cookie: $(cat "$work/passkey.headers")"
+for body in '{}' 'not json' '[1,2]'; do
+    status=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d "$body" "$url/admin/passkey/login")
+    case $status in
+    400 | 401) ;;
+    *) fail "passkey login with '$body' returned $status" ;;
+    esac
+done
+status=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Origin: https://evil.example' -H 'Content-Type: application/json' -d '{}' "$url/admin/passkey/options")
+[ "$status" = 403 ] || fail "cross-origin passkey request returned $status"
+
 # Login start: the provider redirect uses the lowercase host and a __Host- cookie.
 headers=$(curl -s -D - -o /dev/null "$url/auth/google")
 echo "$headers" | grep -qi '^location: https://accounts\.google\.com/.*redirect_uri=https%3A%2F%2Fstaging\.edict\.networkxxiii\.de%2Fauth%2Fgoogle%2Fcallback' ||

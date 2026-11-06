@@ -1,0 +1,37 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Passkeys · Edict{% endblock %}
+
+{% block body %}
+    <main>
+        <h1>Passkeys</h1>
+        <p><a href="/admin">Back to admin</a></p>
+
+        {% if passkeys %}
+            <ul>
+                {% for passkey in passkeys %}
+                    <li>
+                        {{ passkey.name }}, added {{ passkey.created_at }}{% if passkey.last_used_at %}, last used {{ passkey.last_used_at }}{% endif %}
+                        <form method="post" action="/admin/passkeys/{{ passkey.id }}/remove">
+                            <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                            <button type="submit">Remove</button>
+                        </form>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>No passkeys yet.</p>
+        {% endif %}
+
+        <h2>Add a passkey</h2>
+        <p>Adding a way to sign in needs your password and authenticator code. A passkey works only on this site's address.</p>
+        <p id="passkey-status" role="status"></p>
+        <form id="passkey-add" method="post" action="/admin/passkeys" data-csrf="{{ csrf_token }}">
+            <p><label>Name <input name="name" maxlength="64" placeholder="e.g. Laptop" required></label></p>
+            <p><label>Password <input name="password" type="password" autocomplete="current-password" required></label></p>
+            <p><label>Authenticator code <input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required></label></p>
+            <p><button type="submit">Add passkey</button></p>
+        </form>
+        <script src="/assets/admin/passkey.js" defer></script>
+    </main>
+{% endblock %}
