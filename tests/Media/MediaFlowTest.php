@@ -200,6 +200,20 @@ final class MediaFlowTest extends DbTestCase
         self::assertSame(['received' => 10], self::data($this->chunk($id, 0, str_repeat('a', 10))));
     }
 
+    public function testAChunkOverTheChunkSizeIsRefusedWhateverTheUploadSize(): void
+    {
+        $id = $this->started('big.bin', 3 * MediaLibrary::CHUNK_BYTES);
+
+        // Apache doesn't limit bodies on PHP routes, so this limit has to hold by itself.
+        $response = $this->chunk($id, 0, str_repeat('x', MediaLibrary::CHUNK_BYTES + 1));
+
+        self::assertSame(422, $response->getStatusCode());
+        self::assertSame(['received' => 0], self::data($this->get("/admin/uploads/$id", $this->admin)));
+        self::assertSame(0, (int) filesize($this->service(MediaStore::class)->uploadPath($id)));
+
+        self::assertSame(['received' => MediaLibrary::CHUNK_BYTES], self::data($this->chunk($id, 0, str_repeat('x', MediaLibrary::CHUNK_BYTES))));
+    }
+
     public function testAnUnfinishedUploadCannotComplete(): void
     {
         $id = $this->started('a.txt', 10);
