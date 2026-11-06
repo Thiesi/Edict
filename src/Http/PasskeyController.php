@@ -111,12 +111,18 @@ final readonly class PasskeyController
             return self::json($response->withStatus(403), ['error' => 'This account has no password login.']);
         }
 
+        // Checked first: this costs no attempt or code, and no authenticator is left
+        // holding a key the site then refuses.
+        $body = $request->getParsedBody();
+        if (Passkeys::cleanName(AdminAuthController::credential($body, 'name')) === null) {
+            return self::json($response->withStatus(400), ['error' => 'Please give the passkey a name of 1 to 64 characters.']);
+        }
+
         $ip = self::ip($request);
         if ($this->throttle->isBlocked($ip, $username)) {
             return self::tooManyAttempts($response);
         }
 
-        $body = $request->getParsedBody();
         $this->throttle->recordFailure($ip, $username);
         $verified = $this->admin->verify(
             $username,
@@ -124,14 +130,14 @@ final readonly class PasskeyController
             AdminAuthController::credential($body, 'code'),
         );
         if ($verified !== $session->userId) {
-            return self::json($response->withStatus(401), ['error' => 'That password or code is not valid.']);
+            return self::json($response->withStatus(401), ['error' => 'That password or code is not valid. Each code works only once, so you may need to wait for the next one.']);
         }
         $this->throttle->clear($ip, $username);
 
         $created = $this->passkeys->creationOptions($session->userId, $session->displayName);
 
         return self::json(
-            $this->challengeCookie->set($response, ChallengeCookie::REGISTER, $created['challenge'], $session->userId),
+            $this->challengeCookie->set($response, ChallengeCookie::REGISTER, $created['challenge'], $session->tokenHash),
             $created['options'],
         );
     }
@@ -140,7 +146,7 @@ final readonly class PasskeyController
     {
         $session = self::requireSession($request);
         $body = $request->getParsedBody();
-        $challenge = $this->challengeCookie->read($request, ChallengeCookie::REGISTER, $session->userId);
+        $challenge = $this->challengeCookie->read($request, ChallengeCookie::REGISTER, $session->tokenHash);
         $response = $this->challengeCookie->clear($response);
 
         try {

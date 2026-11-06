@@ -8,7 +8,6 @@ use Edict\Clock;
 use Edict\Config;
 use Edict\Database\Row;
 use lbuchs\WebAuthn\WebAuthn;
-use lbuchs\WebAuthn\WebAuthnException;
 
 /**
  * WebAuthn registration and login for the admin account. User verification is
@@ -41,6 +40,10 @@ final readonly class Passkeys
             array_map(self::decode(...), array_column($this->all($userId), 'credential_id')),
         );
 
+        // We don't care which device made a passkey, and asking would show people a
+        // privacy prompt. The library would ask, since it accepts more than "none".
+        $options->publicKey->attestation = 'none';
+
         return ['options' => $options, 'challenge' => $webAuthn->getChallenge()->getBinaryString()];
     }
 
@@ -61,15 +64,16 @@ final readonly class Passkeys
     public function register(int $userId, string $name, string $clientData, string $attestation, string $challenge): void
     {
         $this->assertOurOrigin($clientData);
-        $clean = Accounts::cleanName($name);
-        if ($clean === null || mb_strlen($clean) > self::MAX_NAME_LENGTH) {
+        $clean = self::cleanName($name);
+        if ($clean === null) {
             throw new PasskeyException('Unusable passkey name');
         }
 
         $webAuthn = $this->webAuthn();
         try {
             $data = $webAuthn->processCreate($clientData, $attestation, $challenge, true, true, false, false);
-        } catch (WebAuthnException $e) {
+        } catch (\Throwable $e) {
+            // Not just WebAuthnException: crafted input also raises TypeErrors in the library.
             throw new PasskeyException($e->getMessage(), 0, $e);
         }
 
@@ -119,11 +123,12 @@ final readonly class Passkeys
                 $signature,
                 Row::str($row, 'public_key'),
                 $challenge,
-                Row::int($row, 'sign_count'),
+                self::isSynced($authenticatorData) ? null : Row::int($row, 'sign_count'),
                 true,
                 true,
             );
-        } catch (WebAuthnException $e) {
+        } catch (\Throwable $e) {
+            // Not just WebAuthnException: crafted input also raises TypeErrors in the library.
             throw new PasskeyException($e->getMessage(), 0, $e);
         }
 
@@ -169,6 +174,16 @@ final readonly class Passkeys
         $this->pdo->prepare('DELETE FROM passkey WHERE id = ? AND user_id = ?')->execute([$id, $userId]);
     }
 
+    /**
+     * @return string|null the clean name, or null if it isn't usable
+     */
+    public static function cleanName(string $name): ?string
+    {
+        $clean = Accounts::cleanName($name);
+
+        return $clean === null || mb_strlen($clean) > self::MAX_NAME_LENGTH ? null : $clean;
+    }
+
     public static function encode(string $binary): string
     {
         return rtrim(strtr(base64_encode($binary), '+/', '-_'), '=');
@@ -183,6 +198,15 @@ final readonly class Passkeys
         return (string) base64_decode(strtr($encoded, '-_', '+/'), true);
     }
 
+    /**
+     * The backup-eligible flag. Copies of a synced passkey don't share a counter, so
+     * going backwards proves nothing. The flag is covered by the signature.
+     */
+    private static function isSynced(string $authenticatorData): bool
+    {
+        return isset($authenticatorData[32]) && (ord($authenticatorData[32]) & 0x08) !== 0;
+    }
+
     private function webAuthn(): WebAuthn
     {
         $host = parse_url($this->config->appUrl, PHP_URL_HOST);
@@ -190,14 +214,15 @@ final readonly class Passkeys
             throw new \RuntimeException('APP_URL has no host');
         }
 
-        // Only "none": we don't care which device made a passkey, and asking would
-        // show people a privacy prompt.
-        return new WebAuthn('Edict', strtolower($host), ['none'], true);
+        // "packed" because browsers may pass self-attestation through even when asked
+        // for none. No certificate is trusted or kept either way.
+        return new WebAuthn('Edict', strtolower($host), ['none', 'packed'], true);
     }
 
     /**
      * The library accepts any origin ending in the host name, so "evil-edict.example"
-     * would pass for "edict.example". We know the one origin that is allowed.
+     * would pass for "edict.example". We know the one origin that is allowed, and a
+     * ceremony inside another site's frame is never ours.
      */
     private function assertOurOrigin(string $clientData): void
     {
@@ -205,6 +230,9 @@ final readonly class Passkeys
         $origin = is_array($data) ? ($data['origin'] ?? null) : null;
         if (!is_string($origin) || strcasecmp($origin, $this->config->appUrl) !== 0) {
             throw new PasskeyException('Wrong origin');
+        }
+        if (is_array($data) && ($data['crossOrigin'] ?? false) !== false) {
+            throw new PasskeyException('Cross-origin ceremony');
         }
     }
 

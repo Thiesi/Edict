@@ -17,11 +17,12 @@
             method: 'POST',
             headers,
             credentials: 'same-origin',
+            redirect: 'manual', // An expired session redirects to the login page, which isn't JSON.
             body: JSON.stringify(body),
         });
         const data = await response.json().catch(() => ({}));
         if (!response.ok) {
-            throw new Error(data.error || 'Something went wrong. Please try again.');
+            throw new Error(data.error || 'Something went wrong. Please reload the page and try again.');
         }
 
         return data;
@@ -50,6 +51,7 @@
     const register = async (form) => {
         const csrf = form.dataset.csrf;
         const { publicKey } = await post('/admin/passkeys/options', {
+            name: form.elements.name.value,
             password: form.elements.password.value,
             code: form.elements.code.value,
         }, csrf);
@@ -87,7 +89,10 @@
         }
         form.addEventListener('submit', (event) => {
             event.preventDefault();
-            register(form).catch((error) => report(status, error));
+            // A code works once, so it can't be reused for another try.
+            register(form).catch((error) => report(status, error)).finally(() => {
+                form.elements.code.value = '';
+            });
         });
     }
 })();

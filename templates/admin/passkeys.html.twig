@@ -26,7 +26,7 @@
         <h2>Add a passkey</h2>
         <p>Adding a way to sign in needs your password and authenticator code. A passkey works only on this site's address.</p>
         <p id="passkey-status" role="status"></p>
-        <form id="passkey-add" data-csrf="{{ csrf_token }}">
+        <form id="passkey-add" method="post" action="/admin/passkeys" data-csrf="{{ csrf_token }}">
             <p><label>Name <input name="name" maxlength="64" placeholder="e.g. Laptop" required></label></p>
             <p><label>Password <input name="password" type="password" autocomplete="current-password" required></label></p>
             <p><label>Authenticator code <input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required></label></p>

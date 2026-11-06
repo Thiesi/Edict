@@ -14,6 +14,7 @@ final class SoftAuthenticator
 {
     private const FLAG_PRESENT = 0x01;
     private const FLAG_VERIFIED = 0x04;
+    private const FLAG_BACKUP_ELIGIBLE = 0x08;
     private const FLAG_ATTESTED = 0x40;
 
     public string $credentialId;
@@ -21,6 +22,9 @@ final class SoftAuthenticator
     public string $origin = 'http://localhost:8080';
     public string $rpId = 'localhost';
     public bool $verified = true;
+    public bool $synced = false;
+    public bool $crossOrigin = false;
+    public bool $selfAttestation = false;
     private \OpenSSLAsymmetricKey $key;
 
     public function __construct()
@@ -49,17 +53,24 @@ final class SoftAuthenticator
             . "\x22\x58\x20" . str_pad($details['ec']['y'], 32, "\0", STR_PAD_LEFT);
 
         $authData = hash('sha256', $this->rpId, true)
-            . chr(self::FLAG_PRESENT | ($this->verified ? self::FLAG_VERIFIED : 0) | self::FLAG_ATTESTED)
+            . chr($this->flags() | self::FLAG_ATTESTED)
             . pack('N', $this->counter)
             . str_repeat("\0", 16)
             . pack('n', strlen($this->credentialId)) . $this->credentialId
             . $cose;
 
-        // CBOR map: fmt "none", attStmt {}, authData <bytes>.
-        $attestation = "\xA3\x63fmt\x64none\x67attStmt\xA0\x68authData\x59" . pack('n', strlen($authData)) . $authData;
+        $clientData = $this->clientData('webauthn.create', $challenge);
+
+        // CBOR map: fmt, attStmt, authData <bytes>.
+        $statement = "\x64none\x67attStmt\xA0";
+        if ($this->selfAttestation) {
+            $signature = $this->sign($authData . hash('sha256', $clientData, true));
+            $statement = "\x66packed\x67attStmt\xA2\x63alg\x26\x63sig\x58" . chr(strlen($signature)) . $signature;
+        }
+        $attestation = "\xA3\x63fmt" . $statement . "\x68authData\x59" . pack('n', strlen($authData)) . $authData;
 
         return [
-            'clientDataJSON' => Passkeys::encode($this->clientData('webauthn.create', $challenge)),
+            'clientDataJSON' => Passkeys::encode($clientData),
             'attestationObject' => Passkeys::encode($attestation),
         ];
     }
@@ -71,24 +82,39 @@ final class SoftAuthenticator
     {
         $clientData = $this->clientData('webauthn.get', $challenge);
         $authData = hash('sha256', $this->rpId, true)
-            . chr(self::FLAG_PRESENT | ($this->verified ? self::FLAG_VERIFIED : 0))
+            . chr($this->flags())
             . pack('N', $this->counter);
-
-        $signature = '';
-        if (!openssl_sign($authData . hash('sha256', $clientData, true), $signature, $this->key, OPENSSL_ALGO_SHA256)) {
-            throw new \RuntimeException('Could not sign');
-        }
 
         return [
             'id' => Passkeys::encode($this->credentialId),
             'clientDataJSON' => Passkeys::encode($clientData),
             'authenticatorData' => Passkeys::encode($authData),
-            'signature' => Passkeys::encode($signature),
+            'signature' => Passkeys::encode($this->sign($authData . hash('sha256', $clientData, true))),
         ];
+    }
+
+    private function flags(): int
+    {
+        return self::FLAG_PRESENT
+            | ($this->verified ? self::FLAG_VERIFIED : 0)
+            | ($this->synced ? self::FLAG_BACKUP_ELIGIBLE : 0);
+    }
+
+    private function sign(string $data): string
+    {
+        $signature = '';
+        if (!openssl_sign($data, $signature, $this->key, OPENSSL_ALGO_SHA256)) {
+            throw new \RuntimeException('Could not sign');
+        }
+
+        return $signature;
     }
 
     private function clientData(string $type, string $challenge): string
     {
-        return json_encode(['type' => $type, 'challenge' => $challenge, 'origin' => $this->origin], JSON_THROW_ON_ERROR);
+        return json_encode(
+            ['type' => $type, 'challenge' => $challenge, 'origin' => $this->origin, 'crossOrigin' => $this->crossOrigin],
+            JSON_THROW_ON_ERROR,
+        );
     }
 }

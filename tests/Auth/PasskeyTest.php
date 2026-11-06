@@ -95,11 +95,11 @@ final class PasskeyTest extends DbTestCase
     /**
      * @param array<string, string> $cookies
      */
-    private function askToRegister(array $cookies, ?string $password = null, ?string $code = null): ResponseInterface
+    private function askToRegister(array $cookies, ?string $password = null, ?string $code = null, string $name = 'Laptop'): ResponseInterface
     {
         return $this->post(
             '/admin/passkeys/options',
-            ['password' => $password ?? self::PASSWORD, 'code' => $code ?? $this->code()],
+            ['name' => $name, 'password' => $password ?? self::PASSWORD, 'code' => $code ?? $this->code()],
             $cookies,
             $this->csrf($cookies),
         );
@@ -283,6 +283,81 @@ final class PasskeyTest extends DbTestCase
     public function testRegistrationRefusesBadNames(string $name): void
     {
         self::assertSame(400, $this->register($this->adminSession(), $name)->getStatusCode());
+    }
+
+    #[DataProvider('badNames')]
+    public function testBadNameIsRefusedBeforeAskingTheAuthenticator(string $name): void
+    {
+        $response = $this->askToRegister($this->adminSession(), name: $name);
+
+        self::assertSame(400, $response->getStatusCode());
+        self::assertStringNotContainsString('publicKey', (string) $response->getBody());
+        self::assertSame(0, $this->countRows('login_attempt'));
+    }
+
+    public function testSelfAttestationIsAccepted(): void
+    {
+        $this->device->selfAttestation = true;
+
+        $this->registered();
+
+        self::assertSame(200, $this->logIn()->getStatusCode());
+    }
+
+    public function testRegistrationChallengeDiesWithItsSession(): void
+    {
+        $first = $this->adminSession();
+        $second = $this->adminSession();
+        $options = $this->askToRegister($first);
+        $fields = ['name' => 'Laptop'] + $this->device->create(self::challengeIn($options));
+        $challenge = [self::CHALLENGE => self::cookie($options, self::CHALLENGE)];
+
+        $response = $this->post('/admin/passkeys', $fields, $second + $challenge, $this->csrf($second));
+
+        self::assertSame(400, $response->getStatusCode());
+        self::assertSame(0, $this->countRows('passkey'));
+    }
+
+    public function testLibraryErrorsOfAnyTypeAreFailedLogins(): void
+    {
+        $this->registered();
+        $asked = $this->askToLogIn();
+        $fields = $this->device->get($asked['challenge']);
+
+        // A challenge that isn't a string raises a TypeError inside the library.
+        $fields['clientDataJSON'] = Passkeys::encode((string) json_encode([
+            'type' => 'webauthn.get',
+            'challenge' => [],
+            'origin' => self::ORIGIN,
+        ]));
+
+        self::assertSame(401, $this->post('/admin/passkey/login', $fields, $asked['cookies'])->getStatusCode());
+        self::assertSame(1, $this->countRows('login_attempt'));
+    }
+
+    public function testMalformedLoginBodiesAreFailedLogins(): void
+    {
+        $this->registered();
+
+        foreach ([
+            [],
+            ['id' => 'not base64!', 'clientDataJSON' => '%%%', 'authenticatorData' => '', 'signature' => ''],
+            ['id' => Passkeys::encode($this->device->credentialId), 'clientDataJSON' => Passkeys::encode('not json')],
+        ] as $body) {
+            $asked = $this->askToLogIn();
+            self::assertSame(401, $this->post('/admin/passkey/login', $body, $asked['cookies'])->getStatusCode());
+        }
+    }
+
+    public function testSyncedPasskeyWithAStaleCounterKeepsWorking(): void
+    {
+        $this->device->synced = true;
+        $this->device->counter = 5;
+        $this->registered();
+
+        $this->device->counter = 0;
+
+        self::assertSame(200, $this->logIn()->getStatusCode());
     }
 
     public function testLoginChallengeIsSingleUse(): void
