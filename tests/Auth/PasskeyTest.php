@@ -434,6 +434,9 @@ final class PasskeyTest extends DbTestCase
             static function (SoftAuthenticator $d): void {
                 $d->verified = false;
             },
+            static function (SoftAuthenticator $d): void {
+                $d->crossOrigin = true;
+            },
         ] as $tamper) {
             $device = clone $this->device;
             $tamper($device);
@@ -515,6 +518,7 @@ final class PasskeyTest extends DbTestCase
         $body = (string) $page->getBody();
         self::assertStringContainsString('&lt;b&gt;Laptop', $body);
         self::assertStringContainsString('/assets/admin/passkey.js', $body);
+        self::assertStringContainsString('<form id="passkey-add" method="post"', $body);
 
         self::assertSame(403, $this->post('/admin/passkeys/1/remove', [], $cookies)->getStatusCode());
         self::assertSame(1, $this->countRows('passkey'));

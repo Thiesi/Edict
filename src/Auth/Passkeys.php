@@ -227,11 +227,10 @@ final readonly class Passkeys
     private function assertOurOrigin(string $clientData): void
     {
         $data = json_decode($clientData, true);
-        $origin = is_array($data) ? ($data['origin'] ?? null) : null;
-        if (!is_string($origin) || strcasecmp($origin, $this->config->appUrl) !== 0) {
+        if (!is_array($data) || !is_string($data['origin'] ?? null) || strcasecmp($data['origin'], $this->config->appUrl) !== 0) {
             throw new PasskeyException('Wrong origin');
         }
-        if (is_array($data) && ($data['crossOrigin'] ?? false) !== false) {
+        if (($data['crossOrigin'] ?? false) !== false) {
             throw new PasskeyException('Cross-origin ceremony');
         }
     }
