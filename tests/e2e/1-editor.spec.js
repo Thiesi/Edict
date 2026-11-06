@@ -11,8 +11,8 @@ const saved = (page) => expect(page.locator('#save-status')).toContainText('Save
 
 const publish = async (page) => {
     await page.locator('#publish').click();
-    await expect(page.getByRole('link', { name: 'View' })).toBeVisible();
-    // The link shows while the reloaded page is still loading its script.
+    // exact: otherwise this also matches "Preview", which is always there.
+    await expect(page.getByRole('link', { name: 'View', exact: true })).toBeVisible();
     await page.waitForLoadState('load');
 };
 
@@ -193,6 +193,13 @@ test('an offered backup stays until answered, whatever else happens', async ({ p
     await page.locator('#restore-no').click();
     await expect(page.locator('#restore-banner')).toBeHidden();
     await expect(page.locator('.ProseMirror')).toContainText('Different words');
+});
+
+test('the restore offer stays out of sight with nothing to restore', async ({ page }) => {
+    await newItem(page);
+
+    await expect(page.locator('#restore-banner')).toBeHidden();
+    await expect(page.getByText('Show that text')).toBeHidden();
 });
 
 test('a lost answer does not stop autosave', async ({ page }) => {
