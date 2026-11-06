@@ -19,6 +19,7 @@ final readonly class MediaLibrary
     private const MAX_IMAGE_BYTES = 50_000_000;
     private const MAX_UPLOAD_BYTES = 4_000_000_000;
     private const MAX_NAME_LENGTH = 200;
+    private const MAX_OPEN_UPLOADS = 20;
 
     private const COLUMNS = 'id, sha256, kind, extension, bytes, original_name, width, height, status, error';
 
@@ -39,6 +40,11 @@ final readonly class MediaLibrary
     {
         if ($bytes <= 0 || $bytes > self::MAX_UPLOAD_BYTES) {
             throw new MediaError('That file is too large (limit: ' . self::human(self::MAX_UPLOAD_BYTES) . ').');
+        }
+
+        $open = $this->pdo->query('SELECT count(*) FROM upload WHERE media_id IS NULL');
+        if (Row::int(['n' => $open === false ? 0 : $open->fetchColumn()], 'n') >= self::MAX_OPEN_UPLOADS) {
+            throw new MediaError('Too many unfinished uploads. Wait a moment and try again.');
         }
         $this->assertRoomFor($bytes);
 
@@ -88,6 +94,14 @@ final readonly class MediaLibrary
         }
 
         $room = min(self::CHUNK_BYTES, Row::int($upload, 'total_bytes') - $received);
+
+        // Checked again per chunk: the disk is shared, and others may have filled it.
+        if ($this->store->freeBytes() - $room < $this->config->mediaMinFreeBytes) {
+            fclose($out);
+
+            throw new MediaError('Not enough free disk space to continue this upload.');
+        }
+
         try {
             $written = stream_copy_to_stream($chunk, $out, $room + 1);
         } finally {
@@ -111,7 +125,9 @@ final readonly class MediaLibrary
     }
 
     /**
-     * Files the finished upload. The same content uploaded twice is stored once.
+     * Files the finished upload. The same content uploaded twice is stored once, and
+     * re-uploading an image that failed tries it again. Asking again gets the same
+     * answer, so a lost response can't strand a stored file.
      *
      * @return array<string, mixed> the media row
      *
@@ -119,7 +135,47 @@ final readonly class MediaLibrary
      */
     public function completeUpload(string $id): array
     {
-        $upload = $this->upload($id);
+        $installed = null;
+        $this->pdo->beginTransaction();
+        try {
+            $stmt = $this->pdo->prepare('SELECT original_name, total_bytes, received_bytes, media_id FROM upload WHERE id = ? FOR UPDATE');
+            $stmt->execute([$id]);
+            $upload = $stmt->fetch();
+            if (!is_array($upload)) {
+                throw new MediaError('That upload no longer exists.');
+            }
+
+            $mediaId = Row::intOrNull($upload, 'media_id');
+            if ($mediaId === null) {
+                [$mediaId, $installed] = $this->fileUpload($id, $upload);
+                $this->pdo->prepare('UPDATE upload SET media_id = ? WHERE id = ?')->execute([$mediaId, $id]);
+            }
+            $this->pdo->commit();
+        } catch (\Throwable $e) {
+            $this->pdo->rollBack();
+            if ($installed !== null) {
+                // The database doesn't know this file, so the upload gets it back.
+                @rename($installed, $this->store->uploadPath($id));
+            }
+
+            throw $e;
+        }
+
+        $media = $this->find($mediaId);
+        if ($media === null) {
+            throw new MediaError('The file vanished while being stored.');
+        }
+
+        return $media;
+    }
+
+    /**
+     * @param array<mixed> $upload
+     *
+     * @return array{int, string|null} the media ID, and where a new original went
+     */
+    private function fileUpload(string $id, array $upload): array
+    {
         $bytes = Row::int($upload, 'total_bytes');
         if (Row::int($upload, 'received_bytes') !== $bytes) {
             throw new MediaError('The upload is not finished.');
@@ -131,56 +187,85 @@ final readonly class MediaLibrary
             throw new MediaError('Could not read the upload.');
         }
 
-        $existing = $this->findBySha($sha256);
+        $existing = $this->idOfSha($sha256);
         if ($existing !== null) {
-            $this->dropUpload($id);
+            MediaStore::remove($path);
+            $this->retryIfFailed($existing);
 
-            return $existing;
+            return [$existing, null];
         }
 
         $type = FileType::of($path);
         if ($type['kind'] === 'image' && $bytes > self::MAX_IMAGE_BYTES) {
-            $this->dropUpload($id);
-
             throw new MediaError('Images can be up to ' . self::human(self::MAX_IMAGE_BYTES) . '.');
         }
-        $this->assertRoomFor(0);
+        $this->assertRoomFor($bytes, $id);
 
-        $this->store->install($path, $this->store->originalPath($sha256));
-
-        $this->pdo->beginTransaction();
-        try {
-            $stmt = $this->pdo->prepare(
-                'INSERT INTO media (sha256, kind, extension, bytes, original_name, status, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?, to_timestamp(?)) RETURNING id',
-            );
-            $stmt->execute([
-                $sha256,
-                $type['kind'],
-                $type['extension'],
-                $bytes,
-                Row::str($upload, 'original_name'),
-                $type['kind'] === 'image' ? 'processing' : 'ready',
-                $this->clock->now(),
-            ]);
-            $mediaId = Row::int(['id' => $stmt->fetchColumn()], 'id');
-            if ($type['kind'] === 'image') {
-                $this->jobs->enqueue(ImageProcessor::JOB, ['media_id' => $mediaId]);
+        // ON CONFLICT: the same file finishing at the same moment in another upload.
+        $stmt = $this->pdo->prepare(
+            'INSERT INTO media (sha256, kind, extension, bytes, original_name, status, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, to_timestamp(?)) ON CONFLICT (sha256) DO NOTHING RETURNING id',
+        );
+        $stmt->execute([
+            $sha256,
+            $type['kind'],
+            $type['extension'],
+            $bytes,
+            Row::str($upload, 'original_name'),
+            $type['kind'] === 'image' ? 'processing' : 'ready',
+            $this->clock->now(),
+        ]);
+        $inserted = $stmt->fetchColumn();
+        if ($inserted === false) {
+            $winner = $this->idOfSha($sha256);
+            if ($winner === null) {
+                throw new MediaError('Could not store the file. Please try again.');
             }
-            $this->pdo->prepare('DELETE FROM upload WHERE id = ?')->execute([$id]);
-            $this->pdo->commit();
-        } catch (\Throwable $e) {
-            $this->pdo->rollBack();
+            MediaStore::remove($path);
 
-            throw $e;
+            return [$winner, null];
         }
 
-        $media = $this->find($mediaId);
-        if ($media === null) {
-            throw new MediaError('The file vanished while being stored.');
+        $mediaId = Row::int(['id' => $inserted], 'id');
+        $original = $this->store->originalPath($sha256);
+        $this->store->install($path, $original);
+        if ($type['kind'] === 'image') {
+            $this->jobs->enqueue(ImageProcessor::JOB, ['media_id' => $mediaId]);
         }
 
-        return $media;
+        return [$mediaId, $original];
+    }
+
+    private function idOfSha(string $sha256): ?int
+    {
+        $stmt = $this->pdo->prepare('SELECT id FROM media WHERE sha256 = ?');
+        $stmt->execute([$sha256]);
+        $id = $stmt->fetchColumn();
+
+        return $id === false ? null : Row::int(['id' => $id], 'id');
+    }
+
+    private function retryIfFailed(int $mediaId): void
+    {
+        $stmt = $this->pdo->prepare("UPDATE media SET status = 'processing', error = NULL WHERE id = ? AND status = 'failed' RETURNING id");
+        $stmt->execute([$mediaId]);
+        if ($stmt->fetchColumn() !== false) {
+            $this->jobs->enqueue(ImageProcessor::JOB, ['media_id' => $mediaId]);
+        }
+    }
+
+    /**
+     * Gives up on an upload, which frees the room it had reserved.
+     *
+     * @throws MediaError
+     */
+    public function abortUpload(string $id): void
+    {
+        $stmt = $this->pdo->prepare('DELETE FROM upload WHERE id = ? AND media_id IS NULL RETURNING id');
+        $stmt->execute([$id]);
+        if ($stmt->fetchColumn() !== false) {
+            MediaStore::remove($this->store->uploadPath($id));
+        }
     }
 
     /**
@@ -277,27 +362,33 @@ final readonly class MediaLibrary
 
     /**
      * Fails loudly before anything is written: over the cap, too many files, or too
-     * little free disk for what else lives on it.
+     * little free disk for what else lives on it. Unfinished uploads count for their
+     * full size, so several at once can't each pass and then overfill the disk.
+     *
+     * @param string|null $exceptUpload an upload whose own reservation this replaces
      *
      * @throws MediaError
      */
-    public function assertRoomFor(int $bytes): void
+    public function assertRoomFor(int $bytes, ?string $exceptUpload = null): void
     {
-        $free = $this->store->freeBytes();
-        if ($free - $bytes < $this->config->mediaMinFreeBytes) {
-            throw new MediaError('Not enough free disk space for this file.');
-        }
-
-        $stmt = $this->pdo->query(
+        $stmt = $this->pdo->prepare(
             'SELECT (SELECT coalesce(sum(bytes), 0) FROM media) + (SELECT coalesce(sum(bytes), 0) FROM media_variant) AS used,
-                    (SELECT count(*) FROM media) + (SELECT count(*) FROM media_variant) AS files',
+                    (SELECT count(*) FROM media) + (SELECT count(*) FROM media_variant) AS files,
+                    (SELECT coalesce(sum(total_bytes), 0) FROM upload WHERE media_id IS NULL AND id IS DISTINCT FROM ?) AS reserved,
+                    (SELECT coalesce(sum(total_bytes - received_bytes), 0) FROM upload WHERE media_id IS NULL AND id IS DISTINCT FROM ?) AS incoming',
         );
-        $row = $stmt === false ? false : $stmt->fetch();
+        $stmt->execute([$exceptUpload, $exceptUpload]);
+        $row = $stmt->fetch();
         if (!is_array($row)) {
             throw new MediaError('Could not check the storage limits.');
         }
 
-        if (Row::int($row, 'used') + $bytes > $this->config->mediaMaxBytes) {
+        // Only bytes still to arrive take disk from here on.
+        $coming = Row::int($row, 'incoming') + ($exceptUpload === null ? $bytes : 0);
+        if ($this->store->freeBytes() - $coming < $this->config->mediaMinFreeBytes) {
+            throw new MediaError('Not enough free disk space for this file.');
+        }
+        if (Row::int($row, 'used') + Row::int($row, 'reserved') + $bytes > $this->config->mediaMaxBytes) {
             throw new MediaError('The media storage limit (' . self::human($this->config->mediaMaxBytes) . ') would be exceeded.');
         }
         if (Row::int($row, 'files') >= $this->config->mediaMaxFiles) {
@@ -318,7 +409,7 @@ final readonly class MediaLibrary
      */
     private function upload(string $id): array
     {
-        $stmt = $this->pdo->prepare('SELECT original_name, total_bytes, received_bytes FROM upload WHERE id = ?');
+        $stmt = $this->pdo->prepare('SELECT total_bytes, received_bytes FROM upload WHERE id = ? AND media_id IS NULL');
         $stmt->execute([$id]);
         $row = $stmt->fetch();
         if (!is_array($row)) {
@@ -326,12 +417,6 @@ final readonly class MediaLibrary
         }
 
         return $row;
-    }
-
-    private function dropUpload(string $id): void
-    {
-        MediaStore::remove($this->store->uploadPath($id));
-        $this->pdo->prepare('DELETE FROM upload WHERE id = ?')->execute([$id]);
     }
 
     /**

@@ -53,6 +53,7 @@ return static function (App $app): void {
         $group->get('/uploads/{id}', [MediaController::class, 'status']);
         $group->put('/uploads/{id}', [MediaController::class, 'chunk']);
         $group->post('/uploads/{id}/complete', [MediaController::class, 'complete']);
+        $group->delete('/uploads/{id}', [MediaController::class, 'abort']);
         $group->get('/media', [MediaController::class, 'index']);
         $group->get('/media/{id:[0-9]+}', [MediaController::class, 'show']);
 

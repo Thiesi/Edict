@@ -102,6 +102,63 @@ test('the media library reuses an uploaded image', async ({ page }) => {
     await expect(page.locator('.editor-media img')).toBeVisible();
 });
 
+test('an upload lands where it was started and replaces nothing', async ({ page }) => {
+    await newArticle(page);
+    await page.locator('.ProseMirror').click();
+    await page.keyboard.type('Keep this selected');
+    await page.keyboard.press('Control+A');
+
+    await page.locator('#media-toggle').click();
+    await page.locator('#media-panel button[data-media-id]').first().click();
+    await page.locator('#media-panel').getByRole('button', { name: 'Insert' }).click();
+
+    await expect(page.locator('.editor-media')).toHaveCount(1);
+    await expect(page.locator('.ProseMirror')).toContainText('Keep this selected');
+});
+
+test('undo brings back a description and a removed block', async ({ page }) => {
+    await newArticle(page);
+    await page.locator('#media-toggle').click();
+    await page.locator('#media-panel button[data-media-id]').first().click();
+    await page.locator('#media-panel').getByRole('button', { name: 'Insert' }).click();
+    const description = page.locator('.editor-media').getByLabel(/Description/);
+    await description.fill('First words');
+    await expect(page.locator('#save-status')).toContainText(/Unsaved|Saving|Saved/);
+
+    await page.locator('.ProseMirror').click({ position: { x: 5, y: 5 } }).catch(() => {});
+    await page.keyboard.press('Control+Z');
+
+    await expect(description).toHaveValue('');
+});
+
+test('pasted text with a picture of itself stays text', async ({ page }) => {
+    await newArticle(page);
+    await page.locator('.ProseMirror').click();
+
+    await page.evaluate(() => {
+        const data = new DataTransfer();
+        data.setData('text/html', '<p>From a word processor</p>');
+        data.setData('text/plain', 'From a word processor');
+        data.items.add(new File(['x'], 'picture.png', { type: 'image/png' }));
+        document.querySelector('.ProseMirror').dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+    });
+
+    await expect(page.locator('.ProseMirror')).toContainText('From a word processor');
+    await expect(page.locator('#upload-tray')).toBeHidden();
+});
+
+test('a pasted reference to a missing image says so and stops asking', async ({ page }) => {
+    await newArticle(page);
+    await page.locator('.ProseMirror').click();
+    await page.evaluate(() => {
+        const data = new DataTransfer();
+        data.setData('text/html', '<figure data-media-id="999999"></figure><div data-media-gallery="not json"></div>');
+        document.querySelector('.ProseMirror').dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+    });
+
+    await expect(page.locator('.editor-media')).toContainText('no longer exists');
+});
+
 test('a file that is not an image says so and adds nothing', async ({ page }, info) => {
     await newArticle(page);
     const path = info.outputPath('notes.txt');

@@ -13,14 +13,16 @@ final class Command
 
     /**
      * @param list<string> $command
+     * @param string $tempDir where the tool may spill temp files: /tmp is a small RAM
+     *                        disk on the host, and this directory gets cleaned up
      *
      * @return string standard output
      *
      * @throws MediaError
      */
-    public static function run(array $command, int $timeoutSeconds): string
+    public static function run(array $command, int $timeoutSeconds, string $tempDir): string
     {
-        $process = @proc_open($command, [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+        $process = @proc_open($command, [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, null, ['TMPDIR' => $tempDir] + getenv());
         if (!is_resource($process)) {
             throw new MediaError('Could not start ' . basename($command[0]) . '.');
         }
@@ -34,8 +36,8 @@ final class Command
         try {
             do {
                 $status = proc_get_status($process);
-                $output .= (string) stream_get_contents($pipes[1], self::MAX_OUTPUT_BYTES);
-                $errors .= (string) stream_get_contents($pipes[2], self::MAX_OUTPUT_BYTES);
+                $output = self::keep($output, $pipes[1]);
+                $errors = self::keep($errors, $pipes[2]);
                 if ($status['running']) {
                     if (microtime(true) > $deadline) {
                         proc_terminate($process, 9);
@@ -46,8 +48,8 @@ final class Command
                 }
             } while ($status['running']);
 
-            $output .= (string) stream_get_contents($pipes[1], self::MAX_OUTPUT_BYTES);
-            $errors .= (string) stream_get_contents($pipes[2], self::MAX_OUTPUT_BYTES);
+            $output = self::keep($output, $pipes[1]);
+            $errors = self::keep($errors, $pipes[2]);
         } finally {
             fclose($pipes[1]);
             fclose($pipes[2]);
@@ -59,5 +61,17 @@ final class Command
         }
 
         return $output;
+    }
+
+    /**
+     * Keeps draining a noisy tool's pipe, but holds on to only so much of it.
+     *
+     * @param resource $pipe
+     */
+    private static function keep(string $kept, $pipe): string
+    {
+        $read = (string) stream_get_contents($pipe, self::MAX_OUTPUT_BYTES);
+
+        return strlen($kept) < self::MAX_OUTPUT_BYTES ? $kept . $read : $kept;
     }
 }

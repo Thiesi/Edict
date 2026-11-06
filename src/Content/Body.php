@@ -52,6 +52,27 @@ final class Body
     }
 
     /**
+     * True if clean() would cut a gallery short. Refused rather than silently shortened.
+     */
+    public static function hasOversizedGallery(mixed $node): bool
+    {
+        if (!is_array($node)) {
+            return false;
+        }
+        $items = is_array($node['attrs'] ?? null) ? ($node['attrs']['items'] ?? null) : null;
+        if (is_array($items) && count($items) > self::MAX_GALLERY_ITEMS) {
+            return true;
+        }
+        foreach (is_array($node['content'] ?? null) ? $node['content'] : [] as $child) {
+            if (self::hasOversizedGallery($child)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * True if clean() would cut this document off. Only a crafted request gets near
      * the limit, but it must be refused rather than lose text unnoticed.
      */

@@ -66,7 +66,22 @@ final readonly class MediaController
      */
     public function complete(ServerRequestInterface $request, ResponseInterface $response, array $args): ResponseInterface
     {
+        // Hashing a large file can outlast the usual limit. S6's videos are the real test.
+        set_time_limit(300);
+
         return self::guarded($response, fn(): array => $this->library->completeUpload($args['id'] ?? ''));
+    }
+
+    /**
+     * @param array<string, string> $args
+     */
+    public function abort(ServerRequestInterface $request, ResponseInterface $response, array $args): ResponseInterface
+    {
+        return self::guarded($response, function () use ($args): array {
+            $this->library->abortUpload($args['id'] ?? '');
+
+            return ['aborted' => true];
+        });
     }
 
     public function index(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface

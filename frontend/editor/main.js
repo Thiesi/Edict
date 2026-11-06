@@ -60,15 +60,13 @@ const editor = new Editor({
         }),
     ],
     editorProps: {
-        handlePaste: (_view, event) => receiveFiles(event.clipboardData?.files),
-        handleDrop: (view, event) => {
-            const dropped = view.posAtCoords({ left: event.clientX, top: event.clientY });
-            if (dropped && event.dataTransfer?.files.length > 0) {
-                editor.commands.setTextSelection(dropped.pos);
-            }
-
-            return receiveFiles(event.dataTransfer?.files);
-        },
+        // Word and Excel put a picture of the text on the clipboard as well. Text wins.
+        handlePaste: (_view, event) => !event.clipboardData?.types.includes('text/html')
+            && receiveFiles(event.clipboardData?.files, editor.state.selection.to),
+        handleDrop: (view, event) => receiveFiles(
+            event.dataTransfer?.files,
+            view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos ?? editor.state.selection.to,
+        ),
     },
     onUpdate: () => bodyUpdated(),
     onSelectionUpdate: () => {
@@ -323,22 +321,33 @@ offerNextBackup();
 
 /* Images */
 
-const uploader = new Uploader(() => state.csrf, field('upload-tray'));
+const uploader = new Uploader(() => state.csrf, refreshToken, field('upload-tray'));
 
-const insertImages = (ids) => {
-    if (ids.length === 1) {
-        editor.chain().focus().insertContent({ type: 'image', attrs: { mediaId: ids[0] } }).run();
-    } else if (ids.length > 1) {
-        editor.chain().focus().insertContent({
-            type: 'gallery',
-            attrs: { items: ids.map((mediaId) => ({ mediaId, alt: '' })) },
-        }).run();
-    }
+// Where uploads will land, moved along as the text changes during a long upload.
+const landingSpots = new Set();
+editor.on('transaction', ({ transaction }) => {
+    landingSpots.forEach((spot) => {
+        spot.position = transaction.mapping.map(spot.position);
+    });
+});
+
+const insertImages = (ids, position) => {
+    const content = ids.length === 1
+        ? { type: 'image', attrs: { mediaId: ids[0] } }
+        : { type: 'gallery', attrs: { items: ids.map((mediaId) => ({ mediaId, alt: '' })) } };
+    editor.chain().focus().insertContentAt(position, content).run();
 };
 
-// One image becomes an image block, and several at once become a gallery.
-const uploadAll = async (files) => {
-    const uploaded = await Promise.all(files.map((file) => uploader.upload(file)));
+// One image becomes an image block, and several at once become a gallery. One at a
+// time, so a whole folder doesn't saturate the line or reserve the disk all at once.
+const uploadAll = async (files, spot) => {
+    landingSpots.add(spot);
+    const uploaded = [];
+    for (const file of files) {
+        uploaded.push(await uploader.upload(file));
+    }
+    landingSpots.delete(spot);
+
     const images = uploaded.filter((media) => media?.kind === 'image');
     if (images.length < uploaded.filter(Boolean).length) {
         const note = document.createElement('li');
@@ -347,21 +356,23 @@ const uploadAll = async (files) => {
         field('upload-tray').append(note);
         field('upload-tray').hidden = false;
     }
-    insertImages(images.map((media) => media.id));
+    if (images.length > 0) {
+        insertImages(images.map((media) => media.id), spot.position);
+    }
 };
 
-function receiveFiles(list) {
+function receiveFiles(list, position) {
     const files = [...(list ?? [])];
     if (files.length === 0) {
         return false;
     }
-    uploadAll(files);
+    uploadAll(files, { position });
 
     return true;
 }
 
 field('file-input').addEventListener('change', (event) => {
-    receiveFiles(event.target.files);
+    receiveFiles(event.target.files, editor.state.selection.to);
     event.target.value = '';
 });
 
@@ -433,7 +444,9 @@ toggle.addEventListener('click', () => {
 moreButton.addEventListener('click', loadLibrary);
 field('media-upload').addEventListener('click', () => field('file-input').click());
 insertButton.addEventListener('click', () => {
-    insertImages(chosen);
+    if (chosen.length > 0) {
+        insertImages(chosen, editor.state.selection.to);
+    }
     grid.querySelectorAll('[aria-pressed="true"]').forEach((button) => button.setAttribute('aria-pressed', 'false'));
     chosen = [];
     insertButton.disabled = true;

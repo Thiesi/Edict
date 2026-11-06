@@ -10,13 +10,14 @@ const wait = (ms) => new Promise((resolve) => {
 export class UploadError extends Error {}
 
 export class Uploader {
-    constructor(csrf, tray) {
+    constructor(csrf, refreshCsrf, tray) {
         this.csrf = csrf; // A function, because a new session brings a new token.
+        this.refreshCsrf = refreshCsrf;
         this.tray = tray;
         this.active = 0;
     }
 
-    async request(method, url, body, contentType = 'application/json') {
+    async request(method, url, body, contentType = 'application/json', mayRefresh = true) {
         const response = await fetch(url, {
             method,
             headers: { 'Content-Type': contentType, 'X-CSRF-Token': this.csrf() },
@@ -27,6 +28,9 @@ export class Uploader {
         const data = await response.json().catch(() => ({}));
         if (response.ok) {
             return data;
+        }
+        if (response.status === 403 && mayRefresh && await this.refreshCsrf().catch(() => false)) {
+            return this.request(method, url, body, contentType, false);
         }
         if (response.status >= 400 && response.status < 500) {
             throw new UploadError(data.error ?? 'The server refused this file.');
@@ -64,10 +68,11 @@ export class Uploader {
         this.tray.append(row);
         this.tray.hidden = false;
         this.active += 1;
+        let url = null;
 
         try {
             const started = await this.patiently(() => this.request('POST', '/admin/uploads', JSON.stringify({ name: file.name, size: file.size })));
-            const url = `/admin/uploads/${started.id}`;
+            url = `/admin/uploads/${started.id}`;
 
             let offset = 0;
             while (offset < file.size) {
@@ -82,6 +87,10 @@ export class Uploader {
 
             return media;
         } catch (error) {
+            if (url !== null) {
+                // Frees the room it reserved. If this fails too, the sweep gets it.
+                this.request('DELETE', url).catch(() => {});
+            }
             bar.remove();
             label.textContent = `${file.name}: ${error instanceof UploadError ? error.message : 'the upload failed. Please try again.'}`;
             label.setAttribute('role', 'alert');

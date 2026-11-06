@@ -12,6 +12,14 @@ export const preview = (media) => {
         ?? variants.find((variant) => variant.preset === 'full'))?.url ?? null;
 };
 
+// Tiptap doesn't give function node views updateAttributes, so this sets them itself.
+const attributeSetter = (editor, getPos, getNode) => (attrs) => {
+    const position = getPos();
+    if (typeof position === 'number') {
+        editor.view.dispatch(editor.state.tr.setNodeMarkup(position, undefined, { ...getNode().attrs, ...attrs }));
+    }
+};
+
 // Shows a stored image, and keeps asking until its processing has finished.
 const showMedia = (id, image, status, isGone) => {
     const look = async () => {
@@ -21,6 +29,11 @@ const showMedia = (id, image, status, isGone) => {
         let media = null;
         try {
             const response = await fetch(`/admin/media/${id}`, { credentials: 'same-origin', redirect: 'manual' });
+            if (response.status === 404) {
+                status.textContent = 'This image no longer exists.';
+
+                return;
+            }
             media = response.ok ? await response.json() : null;
         } catch {
             media = null;
@@ -94,11 +107,13 @@ export const MediaImage = Node.create({
     parseHTML() {
         return [{
             tag: 'figure[data-media-id]',
-            getAttrs: (element) => ({
-                mediaId: Number(element.dataset.mediaId),
-                alt: element.dataset.alt ?? '',
-                caption: element.dataset.caption ?? '',
-            }),
+            getAttrs: (element) => {
+                const mediaId = Number(element.dataset.mediaId);
+
+                return Number.isInteger(mediaId) && mediaId > 0
+                    ? { mediaId, alt: element.dataset.alt ?? '', caption: element.dataset.caption ?? '' }
+                    : false;
+            },
         }];
     },
 
@@ -111,14 +126,18 @@ export const MediaImage = Node.create({
     },
 
     addNodeView() {
-        return ({ node, getPos, editor, updateAttributes }) => {
+        return ({ node, getPos, editor }) => {
             let gone = false;
+            let current = node;
+            const updateAttributes = attributeSetter(editor, getPos, () => current);
             const dom = document.createElement('figure');
             dom.className = 'editor-media';
             const image = imageElement();
             const status = document.createElement('p');
             status.setAttribute('role', 'status');
 
+            const altField = textField('Description for people who can\'t see it', node.attrs.alt, (alt) => updateAttributes({ alt }));
+            const captionField = textField('Caption (optional)', node.attrs.caption, (caption) => updateAttributes({ caption }));
             dom.append(
                 removeButton('Remove this image', () => {
                     const from = getPos();
@@ -126,15 +145,31 @@ export const MediaImage = Node.create({
                 }),
                 image,
                 status,
-                textField('Description for people who can\'t see it', node.attrs.alt, (alt) => updateAttributes({ alt })),
-                textField('Caption (optional)', node.attrs.caption, (caption) => updateAttributes({ caption })),
+                altField,
+                captionField,
             );
-            showMedia(node.attrs.mediaId, image, status, () => gone);
+            let shownId = node.attrs.mediaId;
+            showMedia(shownId, image, status, () => gone || shownId !== current.attrs.mediaId);
 
             return {
                 dom,
                 ...ownEvents,
-                update: (updated) => updated.type.name === 'image',
+                // Undo and restoring a backup change the node from outside.
+                update: (updated) => {
+                    if (updated.type.name !== 'image') {
+                        return false;
+                    }
+                    current = updated;
+                    altField.querySelector('input').value = updated.attrs.alt;
+                    captionField.querySelector('input').value = updated.attrs.caption;
+                    if (updated.attrs.mediaId !== shownId) {
+                        shownId = updated.attrs.mediaId;
+                        image.hidden = true;
+                        showMedia(shownId, image, status, () => gone || shownId !== current.attrs.mediaId);
+                    }
+
+                    return true;
+                },
                 destroy: () => {
                     gone = true;
                 },
@@ -156,7 +191,15 @@ export const MediaGallery = Node.create({
     parseHTML() {
         return [{
             tag: 'div[data-media-gallery]',
-            getAttrs: (element) => ({ items: JSON.parse(element.dataset.mediaGallery ?? '[]') }),
+            getAttrs: (element) => {
+                try {
+                    const items = JSON.parse(element.dataset.mediaGallery ?? '[]');
+
+                    return Array.isArray(items) ? { items } : false;
+                } catch {
+                    return false;
+                }
+            },
         }];
     },
 
@@ -165,9 +208,11 @@ export const MediaGallery = Node.create({
     },
 
     addNodeView() {
-        return ({ node, getPos, editor, updateAttributes }) => {
+        return ({ node, getPos, editor }) => {
             let gone = false;
+            let current = node;
             let items = node.attrs.items;
+            const updateAttributes = attributeSetter(editor, getPos, () => current);
             const dom = document.createElement('div');
             dom.className = 'editor-gallery';
             dom.setAttribute('role', 'group');
@@ -175,7 +220,9 @@ export const MediaGallery = Node.create({
 
             const save = () => updateAttributes({ items: items.map((item) => ({ ...item })) });
 
+            let drawn = 0;
             const draw = () => {
+                drawn += 1;
                 dom.replaceChildren(removeButton('Remove this gallery', () => {
                     const from = getPos();
                     editor.chain().focus().deleteRange({ from, to: from + 1 }).run();
@@ -199,7 +246,8 @@ export const MediaGallery = Node.create({
                         }),
                     );
                     dom.append(cell);
-                    showMedia(item.mediaId, image, status, () => gone);
+                    const round = drawn;
+                    showMedia(item.mediaId, image, status, () => gone || round !== drawn);
                 });
             };
             draw();
@@ -207,7 +255,20 @@ export const MediaGallery = Node.create({
             return {
                 dom,
                 ...ownEvents,
-                update: (updated) => updated.type.name === 'gallery',
+                // Undo and restoring a backup change the node from outside. Typing a
+                // description comes back here too, and must not rebuild the fields.
+                update: (updated) => {
+                    if (updated.type.name !== 'gallery') {
+                        return false;
+                    }
+                    current = updated;
+                    if (JSON.stringify(updated.attrs.items) !== JSON.stringify(items)) {
+                        items = updated.attrs.items;
+                        draw();
+                    }
+
+                    return true;
+                },
                 destroy: () => {
                     gone = true;
                 },
