@@ -63,21 +63,23 @@ final readonly class ImageProcessor
 
             $this->library->assertRoomFor(0);
 
-            $made = [];
-            foreach (self::WIDTHS as $target) {
+            // First, because rotating can swap width and height, and the sizes below
+            // depend on the upright width.
+            $fullFormat = self::FULL_FORMATS[$extension] ?? 'jpg';
+            $full = $this->makeVariant($source, $dir, $sha256, 'full', $fullFormat, '', self::NO_LIMIT);
+            $uprightWidth = $full['width'];
+
+            $made = [$full];
+            foreach (self::WIDTHS as $i => $target) {
                 // Never enlarged. Sizes above the original are skipped, except that
                 // something must exist for a very small image.
-                if ($target > $width && $made !== []) {
+                if ($target > $uprightWidth && $i > 0) {
                     break;
                 }
                 foreach (self::FORMATS as $format => $options) {
-                    $made[] = $this->makeVariant($source, $dir, $sha256, 'w' . $target . '-' . $format, $format, $options, min($target, $width));
+                    $made[] = $this->makeVariant($source, $dir, $sha256, 'w' . $target . '-' . $format, $format, $options, min($target, $uprightWidth));
                 }
             }
-
-            $fullFormat = self::FULL_FORMATS[$extension] ?? 'jpg';
-            $full = $this->makeVariant($source, $dir, $sha256, 'full', $fullFormat, '', self::NO_LIMIT);
-            $made[] = $full;
 
             $this->pdo->beginTransaction();
             try {
@@ -88,7 +90,6 @@ final readonly class ImageProcessor
                 foreach ($made as $variant) {
                     $insert->execute([$mediaId, $variant['preset'], $variant['format'], $variant['width'], $variant['height'], $variant['bytes']]);
                 }
-                // The full version's size, because rotating can swap width and height.
                 $this->pdo->prepare("UPDATE media SET status = 'ready', error = NULL, width = ?, height = ? WHERE id = ?")
                     ->execute([$full['width'], $full['height'], $mediaId]);
                 $this->pdo->commit();

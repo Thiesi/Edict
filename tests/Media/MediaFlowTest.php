@@ -212,7 +212,8 @@ final class MediaFlowTest extends DbTestCase
     public function testUnknownUploadIsRefused(): void
     {
         self::assertSame(422, $this->get('/admin/uploads/nothing', $this->admin)->getStatusCode());
-        self::assertSame(422, $this->chunk('../../etc', 0, 'x')->getStatusCode());
+        self::assertSame(422, $this->chunk('etc', 0, 'x')->getStatusCode());
+        self::assertSame(404, $this->chunk('../../etc', 0, 'x')->getStatusCode(), 'a path never reaches the code');
     }
 
     public function testSameContentIsStoredOnce(): void
