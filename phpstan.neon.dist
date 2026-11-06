@@ -5,4 +5,5 @@ parameters:
         - tests
         - config
         - public
+        - bin/edict
     tmpDir: .scratch/phpstan

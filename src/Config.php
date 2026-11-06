@@ -14,6 +14,8 @@ final readonly class Config
         public string $env,
         public bool $debug,
         public ?string $databaseUrl,
+        public string $appUrl,
+        public string $appSecret,
     ) {}
 
     /**
@@ -26,12 +28,33 @@ final readonly class Config
             throw new \InvalidArgumentException("APP_ENV must be production, staging, dev or test, got '$appEnv'");
         }
 
+        $debug = in_array($appEnv, ['dev', 'test'], true);
+
+        $appSecret = self::str($env, 'APP_SECRET');
+        if ($appSecret === null && $debug) {
+            $appSecret = 'insecure-development-secret-not-for-deployment';
+        }
+        if ($appSecret === null || strlen($appSecret) < 32) {
+            throw new \InvalidArgumentException('APP_SECRET must be set and at least 32 characters long');
+        }
+
         return new self(
             projectDir: $projectDir,
             env: $appEnv,
-            debug: in_array($appEnv, ['dev', 'test'], true),
+            debug: $debug,
             databaseUrl: self::str($env, 'DATABASE_URL'),
+            appUrl: rtrim(self::str($env, 'APP_URL') ?? 'http://localhost:8080', '/'),
+            appSecret: $appSecret,
         );
+    }
+
+    /**
+     * Deployed environments use the __Host- cookie prefix, which browsers only
+     * accept with Secure, Path=/ and no Domain. Local development is plain HTTP.
+     */
+    public function secureCookies(): bool
+    {
+        return !$this->debug;
     }
 
     public function cacheDir(): ?string
