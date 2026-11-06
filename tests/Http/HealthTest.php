@@ -15,7 +15,7 @@ final class HealthTest extends AppTestCase
         self::assertSame(200, $response->getStatusCode());
         self::assertSame('no-store', $response->getHeaderLine('Cache-Control'));
         self::assertSame(
-            ['status' => 'ok', 'checks' => ['app' => 'ok', 'database' => 'not configured']],
+            ['status' => 'ok', 'release' => 'unreleased', 'checks' => ['app' => 'ok', 'database' => 'not configured']],
             json_decode((string) $response->getBody(), true),
         );
     }

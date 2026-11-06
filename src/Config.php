@@ -62,6 +62,16 @@ final readonly class Config
         return !$this->debug;
     }
 
+    /**
+     * The deployed release's name, written by deploy/edict-deploy.
+     */
+    public function release(): string
+    {
+        $release = @file_get_contents($this->projectDir . '/RELEASE');
+
+        return $release === false ? 'unreleased' : trim($release);
+    }
+
     public function cacheDir(): ?string
     {
         // Compiled-template cache only outside dev/test. It lives inside the

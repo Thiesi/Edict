@@ -10,7 +10,8 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 
 /**
- * GET /healthz: used by the deploy script (S1) before and after flipping `current`.
+ * GET /healthz: polled by the deploy script after flipping `current`. It also names
+ * the release, which shows when the workers have really switched.
  * Returns 200 when the app is up and, if configured, the database answers; 503 otherwise.
  * Never reveals connection details.
  */
@@ -35,7 +36,11 @@ final readonly class HealthAction
             $checks['database'] = 'not configured';
         }
 
-        $response->getBody()->write((string) json_encode(['status' => $healthy ? 'ok' : 'degraded', 'checks' => $checks]));
+        $response->getBody()->write((string) json_encode([
+            'status' => $healthy ? 'ok' : 'degraded',
+            'release' => $this->config->release(),
+            'checks' => $checks,
+        ]));
 
         return $response
             ->withStatus($healthy ? 200 : 503)

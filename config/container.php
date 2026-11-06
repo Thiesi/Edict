@@ -36,10 +36,12 @@ return [
     Migrator::class => static fn(PDO $pdo, Config $config): Migrator => new Migrator($pdo, $config->projectDir . '/migrations'),
 
     // PHP-DI injects factory parameters by type.
+    // The explicit root path keeps Twig's cache keys independent of the working
+    // directory, which differs between the deploy (cache:warmup) and php-fpm.
     Environment::class => static function (Config $config): Environment {
         $cache = $config->cacheDir();
 
-        return new Environment(new FilesystemLoader($config->projectDir . '/templates'), [
+        return new Environment(new FilesystemLoader($config->projectDir . '/templates', $config->projectDir), [
             'cache' => $cache === null ? false : $cache . '/twig',
             'debug' => $config->debug,
             'strict_variables' => $config->debug,
