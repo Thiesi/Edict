@@ -9,6 +9,9 @@ namespace Edict;
  */
 final readonly class Config
 {
+    /**
+     * @param array<string, array{id: string, secret: string}> $oauthCredentials by provider name
+     */
     public function __construct(
         public string $projectDir,
         public string $env,
@@ -16,6 +19,7 @@ final readonly class Config
         public ?string $databaseUrl,
         public string $appUrl,
         public string $appSecret,
+        public array $oauthCredentials = [],
     ) {}
 
     /**
@@ -45,6 +49,7 @@ final readonly class Config
             databaseUrl: self::str($env, 'DATABASE_URL'),
             appUrl: rtrim(self::str($env, 'APP_URL') ?? 'http://localhost:8080', '/'),
             appSecret: $appSecret,
+            oauthCredentials: self::oauthCredentials($env),
         );
     }
 
@@ -63,6 +68,27 @@ final readonly class Config
         // release directory, so it is bounded by the template count and
         // disappears with the release (see CLAUDE.md, storage rules).
         return $this->debug ? null : $this->projectDir . '/var/cache';
+    }
+
+    /**
+     * A provider counts as configured only with both its client ID and secret.
+     *
+     * @param array<string, mixed> $env
+     *
+     * @return array<string, array{id: string, secret: string}>
+     */
+    private static function oauthCredentials(array $env): array
+    {
+        $credentials = [];
+        foreach (['google' => 'GOOGLE', 'twitch' => 'TWITCH'] as $name => $prefix) {
+            $id = self::str($env, $prefix . '_OIDC_CLIENT_ID');
+            $secret = self::str($env, $prefix . '_OIDC_CLIENT_SECRET');
+            if ($id !== null && $secret !== null) {
+                $credentials[$name] = ['id' => $id, 'secret' => $secret];
+            }
+        }
+
+        return $credentials;
     }
 
     /**

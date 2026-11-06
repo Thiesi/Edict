@@ -20,7 +20,7 @@ final class Totp
         return random_bytes(20);
     }
 
-    public static function code(string $secret, int $step): string
+    public static function code(#[\SensitiveParameter] string $secret, int $step): string
     {
         $hash = hash_hmac('sha1', pack('J', $step), $secret, true);
         $offset = ord($hash[19]) & 0x0F;
@@ -36,7 +36,7 @@ final class Totp
      * Finds the time step a code belongs to, allowing one step of clock drift
      * either way. The caller must reject steps that were already used.
      */
-    public static function matchStep(string $secret, string $code, int $now): ?int
+    public static function matchStep(#[\SensitiveParameter] string $secret, #[\SensitiveParameter] string $code, int $now): ?int
     {
         if (preg_match('/^\d{' . self::DIGITS . '}$/', $code) !== 1) {
             return null;
@@ -69,7 +69,7 @@ final class Totp
         return $out;
     }
 
-    public static function provisioningUri(string $secret, string $account): string
+    public static function provisioningUri(#[\SensitiveParameter] string $secret, string $account): string
     {
         return sprintf(
             'otpauth://totp/%s:%s?secret=%s&issuer=%s&algorithm=SHA1&digits=%d&period=%d',

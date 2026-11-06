@@ -68,11 +68,11 @@ Browser ──HTTPS──▶ Apache (macro vhost, TLS via acme.sh)
 ### 4.1 Required (MVP / launch)
 
 **Authentication & admin**
-- **Readers log in with Twitch or Google** (OAuth 2.0 / OpenID Connect, authorisation-code flow with `state`). There are no local reader passwords. The first login creates the account.
+- **Readers log in with Twitch or Google** (OAuth 2.0 / OpenID Connect, authorisation-code flow with `state`, `nonce` and PKCE; the attempt's state lives in an encrypted, short-lived cookie, so anonymous requests write nothing to the DB). There are no local reader passwords. The first login creates the account.
 - **Minimal data:** provider, the provider's stable user ID, and a display name, with the smallest scopes that provide them. No email, no friend or channel data. No avatars at launch, because hotlinking them would leak readers' IP addresses to Google and Twitch; initials instead.
 - **Accounts are never merged by email or name.** A reader can link a second provider explicitly while signed in. Identities are keyed on the provider's stable ID, never on a changeable name.
 - **Self-service for readers:** edit display name, sign out everywhere, delete account (comments stay as "[deleted user]" or are removed, votes are removed). Required for GDPR.
-- **Admin role.** The admin account is created via a CLI command on the host, which also allow-lists your own Twitch and Google IDs. There is no way to become admin from the web.
+- **Admin role.** The admin account is created via a CLI command on the host, and another allow-lists your own Twitch and Google IDs (`bin/edict admin:allow`). There is no way to become admin from the web.
 - **Admin login:** an allow-listed Twitch/Google account, a passkey, or password + TOTP. The last one is the fallback that keeps you in when a provider is down, and CLI reset on the host is the final recovery. Whoever controls your Google or Twitch account controls the site, so both need 2FA.
 - Login endpoints are rate-limited. Sessions are stored in the DB with a secure, HttpOnly, `SameSite=Lax` cookie (`Strict` would drop the cookie on the redirect back from the provider), and every state-changing action is CSRF-protected.
 - When logged in, the public site shows inline admin controls: edit, delete comment, adjust votes, unpublish.
@@ -123,7 +123,7 @@ Browser ──HTTPS──▶ Apache (macro vhost, TLS via acme.sh)
 
 **Public site**
 - Home page (latest articles), article page, archive with pagination, tag pages, static pages, and a styled 404/500.
-- ✅ Clean URLs: `/my-article-slug`. Articles and static pages share one namespace. System paths (`/tag/…`, `/archive`, `/feed.atom`, `/media/…`, `/assets/…`, the admin path, `/sitemap.xml`, …) are reserved and can't be used as slugs. Renamed slugs redirect permanently (301).
+- ✅ Clean URLs: `/my-article-slug`. Articles and static pages share one namespace. System paths (`/login`, `/auth/…`, `/account`, `/tag/…`, `/archive`, `/feed.atom`, `/media/…`, `/assets/…`, the admin path, `/sitemap.xml`, …) are reserved and can't be used as slugs. Renamed slugs redirect permanently (301).
 - ✅ **Atom feed with full text** (`/feed.atom`, plus a per-tag feed). Each entry carries its article's language. Images are included; audio and video appear as links or enclosures.
 - Legal page templates for Impressum and Datenschutz (in German, since the operator is German).
 - SEO basics: `<title>`/meta description, OpenGraph and Twitter cards (cover image), canonical URLs, `sitemap.xml`, `robots.txt`.
@@ -190,7 +190,7 @@ Every limit fails loudly, before anything is written.
 
 ## 6. Data model (first cut)
 
-`app_user` (display_name, is_admin, banned_until, deleted_at) · `user_identity` (user_id, provider, provider_user_id, unique on provider + ID) · `admin_credential` (password hash, TOTP secret, last TOTP step) · `passkey` · `session` (token hash, user_id, csrf_token, expires_at) · `oauth_state` · `article` (status, slug, lang, title, teaser, body_json, body_html_cache, cover_media_id, published_at, comments_mode, vote_adjustment) · `article_revision` · `slug_redirect` · `tag` / `article_tag` · `media` (sha256, mime, bytes, original_name, meta_json) · `media_variant` (media_id, preset, path, bytes) · `article_media` · `job` (type, payload, state, attempts, run_after) · `vote` (article_id, user_id, created_at, unique on both) · `comment` (article_id, user_id, parent_id, path, depth, body, state, created_at) · `ban` · `setting`.
+`app_user` (display_name, is_admin, banned_until, deleted_at) · `user_identity` (user_id, provider, provider_user_id, unique on provider + ID) · `admin_credential` (password hash, TOTP secret, last TOTP step) · `passkey` · `session` (token hash, user_id, csrf_token, expires_at) · `article` (status, slug, lang, title, teaser, body_json, body_html_cache, cover_media_id, published_at, comments_mode, vote_adjustment) · `article_revision` · `slug_redirect` · `tag` / `article_tag` · `media` (sha256, mime, bytes, original_name, meta_json) · `media_variant` (media_id, preset, path, bytes) · `article_media` · `job` (type, payload, state, attempts, run_after) · `vote` (article_id, user_id, created_at, unique on both) · `comment` (article_id, user_id, parent_id, path, depth, body, state, created_at) · `ban` · `setting`.
 
 ✅ Comments are fully nested. `path` is a materialised path (e.g. `0007.0012.0003`), so a whole thread loads with a single ordered query, and removing a subtree is a single `DELETE … WHERE path LIKE`.
 

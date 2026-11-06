@@ -51,8 +51,13 @@ Database facts (from Ops, 2026-11-05):
 |---|---|
 | `php bin/edict migrate` | Apply pending migrations from `migrations/` |
 | `php bin/edict admin:create <username>` | Create the single admin account |
-| `php bin/edict admin:reset` | New password and authenticator secret; ends all admin sessions. The recovery path if you are locked out |
+| `php bin/edict admin:reset` | New password and authenticator secret; ends all admin sessions and lifts the username throttle. The recovery path if you are locked out |
 | `php bin/edict admin:revoke-sessions` | End all admin sessions, e.g. after losing a device |
+| `php bin/edict admin:allow <google\|twitch> <id>` | Let that account sign in as admin |
+| `php bin/edict admin:disallow <google\|twitch> <id>` | Remove it again; ends all admin sessions |
+| `php bin/edict admin:identities` | List the allow-listed accounts |
+
+To allow-list your own account: sign in with it on the site, copy its ID from `/account`, then run `admin:allow`. The ID moves from that new reader account to the admin account, and the reader account is deleted if it has no other login. Sign in again afterwards to get an admin session.
 
 `EDICT_ADMIN_PASSWORD` supplies the password for non-interactive runs. Changing `APP_SECRET` makes stored authenticator secrets unreadable, so run `admin:reset` afterwards.
 

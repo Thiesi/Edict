@@ -13,5 +13,13 @@
             <p><label>Authenticator code <input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required></label></p>
             <p><button type="submit">Sign in</button></p>
         </form>
+        {% if providers %}
+            <h2>Or use an allow-listed account</h2>
+            <ul>
+                {% for provider in providers %}
+                    <li><a href="/auth/{{ provider.name }}?next=%2Fadmin">Continue with {{ provider.label }}</a></li>
+                {% endfor %}
+            </ul>
+        {% endif %}
     </main>
 {% endblock %}
