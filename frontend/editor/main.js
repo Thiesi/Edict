@@ -1,4 +1,4 @@
-// The full-screen article editor. Text is the one thing that must never get lost, so:
+// The article editor. Text is the one thing that must never get lost, so:
 // - every change goes to localStorage at once, and to the server within seconds
 // - a failed save keeps retrying and says so on screen
 // - an expired session keeps the text and picks up the new token after signing in
@@ -339,16 +339,6 @@ field('table-tools').addEventListener('click', (event) => {
     const button = event.target.closest('[data-table]');
     if (button) {
         editor.chain().focus()[button.dataset.table]().run();
-    }
-});
-
-field('fullscreen').addEventListener('click', () => {
-    if (document.fullscreenElement) {
-        document.exitFullscreen();
-    } else {
-        document.documentElement.requestFullscreen().catch(() => {
-            setStatus('This browser refused full screen.');
-        });
     }
 });
 
