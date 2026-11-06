@@ -122,13 +122,23 @@ test('undo brings back a description and a removed block', async ({ page }) => {
     await page.locator('#media-panel button[data-media-id]').first().click();
     await page.locator('#media-panel').getByRole('button', { name: 'Insert' }).click();
     const description = page.locator('.editor-media').getByLabel(/Description/);
+    await expect(description).toBeVisible();
+    // Changes close together count as one undo step.
+    await page.waitForTimeout(700);
     await description.fill('First words');
     await expect(page.locator('#save-status')).toContainText(/Unsaved|Saving|Saved/);
+    await page.locator('.ProseMirror').focus();
 
-    await page.locator('.ProseMirror').click({ position: { x: 5, y: 5 } }).catch(() => {});
     await page.keyboard.press('Control+Z');
-
     await expect(description).toHaveValue('');
+
+    await page.keyboard.press('Control+Z');
+    await expect(page.locator('.editor-media')).toHaveCount(0);
+
+    await page.keyboard.press('Control+Shift+Z');
+    await expect(description).toHaveValue('');
+    await page.keyboard.press('Control+Shift+Z');
+    await expect(description).toHaveValue('First words');
 });
 
 test('pasted text with a picture of itself stays text', async ({ page }) => {

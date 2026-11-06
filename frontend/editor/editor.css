@@ -251,6 +251,13 @@
     display: none;
 }
 
+/* The panel makes room, so it never covers the text or a block's buttons. */
+@media (min-width: 50rem) {
+    .editor-app:has(.media-panel:not([hidden])) {
+        padding-right: 22rem;
+    }
+}
+
 .media-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(6rem, 1fr));
