@@ -1,6 +1,9 @@
 {% extends 'base.html.twig' %}
 
 {% block body %}
+    <nav>
+        {% if signed_in %}<a href="/account">Your account</a>{% else %}<a href="/login">Sign in</a>{% endif %}
+    </nav>
     <main>
         <h1>Hello, Edict</h1>
         <p>A CMS for one sovereign. Nothing to read yet.</p>

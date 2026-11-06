@@ -1,0 +1,18 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Sign in · Edict{% endblock %}
+
+{% block body %}
+    <main>
+        <h1>Sign in</h1>
+        {% if notice %}<p role="alert">{{ notice }}</p>{% endif %}
+        <p>Sign in to comment and to like articles. Edict receives only your provider's account ID and display name, never your email address.</p>
+        <ul>
+            {% for provider in providers %}
+                <li><a href="/auth/{{ provider.name }}?next={{ next|url_encode }}">Continue with {{ provider.label }}</a></li>
+            {% else %}
+                <li>Sign-in is not available right now.</li>
+            {% endfor %}
+        </ul>
+    </main>
+{% endblock %}

@@ -1,0 +1,60 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Your account · Edict{% endblock %}
+
+{% block body %}
+    <main>
+        <h1>Your account</h1>
+        {% if notice %}<p role="status">{{ notice }}</p>{% endif %}
+
+        <h2>Name</h2>
+        <form method="post" action="/account/name">
+            <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+            <p>
+                <label>Shown publicly next to your comments
+                    <input name="display_name" value="{{ display_name }}" maxlength="{{ max_name_length }}" required>
+                </label>
+            </p>
+            <p><button type="submit">Save name</button></p>
+        </form>
+
+        <h2>Logins</h2>
+        {% if identities %}
+            <ul>
+                {% for identity in identities %}
+                    <li>{{ identity.provider|capitalize }} (ID <code>{{ identity.subject }}</code>)</li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>No provider logins yet.</p>
+        {% endif %}
+        {% for provider in linkable %}
+            <form method="post" action="/account/link/{{ provider.name }}">
+                <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                <button type="submit">Add {{ provider.label }} login</button>
+            </form>
+        {% endfor %}
+        {% if is_admin %}
+            <p>Logins for the admin account are managed on the command line.</p>
+        {% endif %}
+
+        <h2>Sessions</h2>
+        <form method="post" action="/account/logout">
+            <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+            <button type="submit">Sign out</button>
+        </form>
+        <form method="post" action="/account/logout-everywhere">
+            <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+            <button type="submit">Sign out everywhere</button>
+        </form>
+
+        {% if not is_admin %}
+            <h2>Delete account</h2>
+            <form method="post" action="/account/delete">
+                <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                <p><label><input type="checkbox" name="confirm" value="yes" required> Yes, permanently delete my account. This cannot be undone.</label></p>
+                <p><button type="submit">Delete account</button></p>
+            </form>
+        {% endif %}
+    </main>
+{% endblock %}

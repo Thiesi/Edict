@@ -14,6 +14,7 @@ use Edict\Database\Row;
 final readonly class SessionStore
 {
     public const ADMIN_TTL = 12 * 3600;
+    public const READER_TTL = 30 * 86400;
     private const TOUCH_INTERVAL = 300;
 
     public function __construct(private \PDO $pdo, private Clock $clock) {}

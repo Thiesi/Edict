@@ -6,6 +6,7 @@ namespace Edict\Http;
 
 use Edict\Auth\AdminAccount;
 use Edict\Auth\LoginThrottle;
+use Edict\Auth\OAuth\ProviderRegistry;
 use Edict\Auth\Session;
 use Edict\Auth\SessionStore;
 use Edict\Http\Middleware\CsrfMiddleware;
@@ -22,6 +23,7 @@ final readonly class AdminAuthController
         private SessionStore $sessions,
         private LoginThrottle $throttle,
         private SessionCookie $cookie,
+        private ProviderRegistry $providers,
     ) {}
 
     public function showLogin(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
@@ -105,6 +107,7 @@ final readonly class AdminAuthController
     {
         $response->getBody()->write($this->twig->render('admin/login.html.twig', [
             'error' => $error,
+            'providers' => $this->providers->all(),
             'csrf_field' => CsrfMiddleware::FIELD,
             'csrf_token' => self::session($request)?->csrfToken,
         ]));

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Edict\Tests;
 
 use DI\Container;
+use Edict\Auth\OAuth\HttpClient;
 use Edict\Clock;
 use Edict\Database\ConnectionFactory;
 use Edict\Database\Migrator;
@@ -28,6 +29,7 @@ abstract class DbTestCase extends TestCase
     private static bool $schemaReady = false;
 
     protected FixedClock $clock;
+    protected FakeHttpClient $http;
     protected \PDO $pdo;
 
     /** @var App<Container> */
@@ -49,10 +51,19 @@ abstract class DbTestCase extends TestCase
         $this->pdo->exec('TRUNCATE app_user, session, login_attempt RESTART IDENTITY CASCADE');
 
         $this->clock = new FixedClock(1_800_000_000);
+        $this->http = new FakeHttpClient();
         $this->app = Kernel::boot(
             dirname(__DIR__),
-            ['APP_ENV' => 'test', 'DATABASE_URL' => $url, 'APP_URL' => self::ORIGIN],
-            [Clock::class => $this->clock, \PDO::class => $this->pdo],
+            [
+                'APP_ENV' => 'test',
+                'DATABASE_URL' => $url,
+                'APP_URL' => self::ORIGIN,
+                'GOOGLE_OIDC_CLIENT_ID' => 'google-client',
+                'GOOGLE_OIDC_CLIENT_SECRET' => 'google-secret',
+                'TWITCH_OIDC_CLIENT_ID' => 'twitch-client',
+                'TWITCH_OIDC_CLIENT_SECRET' => 'twitch-secret',
+            ],
+            [Clock::class => $this->clock, \PDO::class => $this->pdo, HttpClient::class => $this->http],
         );
     }
 

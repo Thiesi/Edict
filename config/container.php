@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use Edict\Auth\OAuth\HttpClient;
+use Edict\Auth\OAuth\StreamHttpClient;
 use Edict\Auth\SecretBox;
 use Edict\Clock;
 use Edict\Config;
@@ -15,6 +17,8 @@ use Twig\Loader\FilesystemLoader;
 
 return [
     Clock::class => DI\autowire(SystemClock::class),
+
+    HttpClient::class => DI\autowire(StreamHttpClient::class),
 
     ResponseFactoryInterface::class => DI\autowire(ResponseFactory::class),
 

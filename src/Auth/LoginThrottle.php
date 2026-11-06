@@ -9,13 +9,16 @@ use Edict\Config;
 
 /**
  * Throttles failed logins per client IP and per username. Buckets are keyed
- * HMACs, so the table contains no IP addresses or attempted usernames.
+ * HMACs, so the table contains no IP addresses or attempted usernames. Failed
+ * provider logins count separately: each can cost a blocking request to the
+ * provider, and they must not lock anyone out of the password form.
  */
 final readonly class LoginThrottle
 {
     public const WINDOW = 900;
     private const MAX_PER_IP = 5;
     private const MAX_PER_USERNAME = 10;
+    private const MAX_OAUTH_PER_IP = 20;
 
     public function __construct(private \PDO $pdo, private Clock $clock, private Config $config) {}
 
@@ -27,14 +30,17 @@ final readonly class LoginThrottle
 
     public function recordFailure(string $ip, string $username): void
     {
-        $now = $this->clock->now();
+        $this->record($this->bucket('ip', $ip), $this->bucket('user', $username));
+    }
 
-        // Rows older than the window are useless; removing them here bounds the table.
-        $this->pdo->prepare('DELETE FROM login_attempt WHERE attempted_at <= to_timestamp(?)')->execute([$now - self::WINDOW]);
+    public function isOAuthBlocked(string $ip): bool
+    {
+        return $this->failures($this->bucket('oauth-ip', $ip)) >= self::MAX_OAUTH_PER_IP;
+    }
 
-        $insert = $this->pdo->prepare('INSERT INTO login_attempt (bucket, attempted_at) VALUES (?, to_timestamp(?))');
-        $insert->execute([$this->bucket('ip', $ip), $now]);
-        $insert->execute([$this->bucket('user', $username), $now]);
+    public function recordOAuthFailure(string $ip): void
+    {
+        $this->record($this->bucket('oauth-ip', $ip));
     }
 
     public function clear(string $ip, string $username): void
@@ -42,6 +48,19 @@ final readonly class LoginThrottle
         $delete = $this->pdo->prepare('DELETE FROM login_attempt WHERE bucket = ?');
         $delete->execute([$this->bucket('ip', $ip)]);
         $delete->execute([$this->bucket('user', $username)]);
+    }
+
+    private function record(string ...$buckets): void
+    {
+        $now = $this->clock->now();
+
+        // Rows older than the window are useless; removing them here bounds the table.
+        $this->pdo->prepare('DELETE FROM login_attempt WHERE attempted_at <= to_timestamp(?)')->execute([$now - self::WINDOW]);
+
+        $insert = $this->pdo->prepare('INSERT INTO login_attempt (bucket, attempted_at) VALUES (?, to_timestamp(?))');
+        foreach ($buckets as $bucket) {
+            $insert->execute([$bucket, $now]);
+        }
     }
 
     private function failures(string $bucket): int
