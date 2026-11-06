@@ -56,15 +56,15 @@ final readonly class Articles
     /**
      * Autosave. Never touches the live columns.
      *
-     * @return int|null the new version, or null if the version was stale or the article is in the trash
+     * @return int|null the new version, or null if another editor saved in between or the article is in the trash
      */
-    public function saveDraft(int $id, int $version, string $draftJson): ?int
+    public function saveDraft(int $id, int $version, string $writer, string $draftJson): ?int
     {
         $stmt = $this->pdo->prepare(
-            'UPDATE article SET draft = ?, draft_version = draft_version + 1, updated_at = to_timestamp(?)
-             WHERE id = ? AND draft_version = ? AND deleted_at IS NULL RETURNING draft_version',
+            'UPDATE article SET draft = ?, draft_version = draft_version + 1, draft_writer = ?, updated_at = to_timestamp(?)
+             WHERE id = ? AND (draft_version = ? OR draft_writer = ?) AND deleted_at IS NULL RETURNING draft_version',
         );
-        $stmt->execute([$draftJson, $this->clock->now(), $id, $version]);
+        $stmt->execute([$draftJson, $writer, $this->clock->now(), $id, $version, $writer]);
         $saved = $stmt->fetchColumn();
 
         return $saved === false ? null : Row::int(['v' => $saved], 'v');
@@ -75,7 +75,11 @@ final readonly class Articles
      * if the article was never public, and keep its address if it was. If a published
      * article changes its slug, the old address keeps working through a redirect.
      *
+     * The draft is only cleared if it is still the version that was read, so text
+     * autosaved a moment ago can't vanish.
+     *
      * @throws SlugTaken
+     * @throws StaleDraft
      */
     public function publish(Article $article, ArticleInput $input): void
     {
@@ -91,12 +95,16 @@ final readonly class Articles
             }
 
             $now = $this->clock->now();
-            $this->pdo->prepare(
+            $update = $this->pdo->prepare(
                 "UPDATE article SET slug = ?, lang = ?, title = ?, teaser = ?, body_json = ?, status = 'published',
                         published_at = coalesce(published_at, to_timestamp(?)), updated_at = to_timestamp(?),
-                        draft = NULL, draft_version = draft_version + 1
-                 WHERE id = ? AND deleted_at IS NULL",
-            )->execute([$slug, $input->lang, $input->title, $input->teaser, $input->body, $now, $now, $article->id]);
+                        draft = NULL, draft_version = draft_version + 1, draft_writer = NULL
+                 WHERE id = ? AND draft_version = ? AND deleted_at IS NULL",
+            );
+            $update->execute([$slug, $input->lang, $input->title, $input->teaser, $input->body, $now, $now, $article->id, $article->draftVersion]);
+            if ($update->rowCount() !== 1) {
+                throw new StaleDraft();
+            }
 
             $this->setTags($article->id, $input);
         });

@@ -11,6 +11,7 @@ use Edict\Content\ArticleInput;
 use Edict\Content\Articles;
 use Edict\Content\Body;
 use Edict\Content\SlugTaken;
+use Edict\Content\StaleDraft;
 use Edict\Http\Middleware\CsrfMiddleware;
 use Edict\Http\Middleware\SessionMiddleware;
 use Psr\Http\Message\ResponseInterface;
@@ -51,7 +52,14 @@ final readonly class ArticleAdminController
         $body = $request->getParsedBody();
         $kind = is_array($body) && ($body['kind'] ?? null) === 'page' ? 'page' : 'article';
 
-        return $response->withStatus(303)->withHeader('Location', '/admin/articles/' . $this->articles->createEmpty($kind));
+        try {
+            $id = $this->articles->createEmpty($kind);
+        } catch (SlugTaken) {
+            // A double click: both requests picked the same placeholder address.
+            $id = $this->articles->createEmpty($kind);
+        }
+
+        return $response->withStatus(303)->withHeader('Location', '/admin/articles/' . $id);
     }
 
     /**
@@ -85,20 +93,28 @@ final readonly class ArticleAdminController
         $payload = $request->getParsedBody();
         $draft = is_array($payload) ? ($payload['draft'] ?? null) : null;
         $version = is_array($payload) ? ($payload['version'] ?? null) : null;
+        $writer = is_array($payload) ? ($payload['writer'] ?? null) : null;
 
         // A malformed request must never replace a real draft with an empty one.
-        if (!is_array($draft) || !is_int($version)) {
-            return self::json($response->withStatus(400), ['error' => 'Malformed save.']);
+        if (!is_array($draft) || !is_int($version) || !is_string($writer) || preg_match('/^[a-zA-Z0-9-]{1,64}$/D', $writer) !== 1) {
+            return self::json($response->withStatus(400), ['error' => 'The save was malformed.']);
+        }
+        if ($article->deletedAt !== null) {
+            return self::json($response->withStatus(409), ['error' => 'This is in the trash.']);
         }
 
+        // Refused rather than cut down: saving must never drop text without saying so.
+        if (Body::isTooDeep($draft['body'] ?? null)) {
+            return self::json($response->withStatus(422), ['error' => 'The lists or quotes are nested too deeply.']);
+        }
         $json = ArticleInput::fromArray($draft)->toJson();
         if (strlen($json) > ArticleInput::MAX_DRAFT_BYTES) {
-            return self::json($response->withStatus(413), ['error' => 'The text is too long to save.']);
+            return self::json($response->withStatus(413), ['error' => 'The text is too long.']);
         }
 
-        $saved = $this->articles->saveDraft($article->id, $version, $json);
+        $saved = $this->articles->saveDraft($article->id, $version, $writer, $json);
         if ($saved === null) {
-            return self::json($response->withStatus(409), ['error' => 'This was changed elsewhere.']);
+            return self::json($response->withStatus(409), ['error' => 'This changed in another tab.']);
         }
 
         return self::json($response, ['version' => $saved]);
@@ -115,7 +131,7 @@ final readonly class ArticleAdminController
         $article = $this->article($request, $args);
         $payload = $request->getParsedBody();
         if (!is_array($payload) || ($payload['version'] ?? null) !== $article->draftVersion || $article->deletedAt !== null) {
-            return self::json($response->withStatus(409), ['error' => 'This was changed elsewhere.']);
+            return self::json($response->withStatus(409), ['error' => 'This changed in another tab.']);
         }
 
         $input = $article->input();
@@ -127,6 +143,8 @@ final readonly class ArticleAdminController
                 return self::json($response, ['redirect' => '/admin/articles/' . $article->id]);
             } catch (SlugTaken) {
                 $errors['slug'] = 'That address is already in use.';
+            } catch (StaleDraft) {
+                return self::json($response->withStatus(409), ['error' => 'This changed in another tab.']);
             }
         }
 

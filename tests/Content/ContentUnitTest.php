@@ -140,6 +140,8 @@ final class ContentUnitTest extends TestCase
         yield 'protocol-relative' => ['//evil.example'];
         yield 'backslash' => ['/\evil.example'];
         yield 'bare word' => ['example.org'];
+        yield 'relative' => ['some/path'];
+        yield 'file' => ['file:///etc/passwd'];
         yield 'too long' => ['https://example.org/' . str_repeat('a', 3000)];
     }
 
@@ -155,13 +157,51 @@ final class ContentUnitTest extends TestCase
 
     public function testGoodLinksStay(): void
     {
-        foreach (['https://example.org', 'HTTP://example.org', 'mailto:a@example.org', '/some-article'] as $href) {
+        foreach (['https://example.org', 'HTTP://example.org', 'mailto:a@example.org', '/some-article', 'tel:+4930123', '#top'] as $href) {
             $document = ['type' => 'doc', 'content' => [['type' => 'paragraph', 'content' => [
                 ['type' => 'text', 'text' => 'word', 'marks' => [['type' => 'link', 'attrs' => ['href' => $href]]]],
             ]]]];
 
             self::assertStringContainsString('<a href="' . $href . '"', Body::toHtml(Body::encode($document)), $href);
         }
+    }
+
+    public function testHandyLinksAreCompleted(): void
+    {
+        $link = static fn(string $href): string => Body::toHtml(Body::encode(['type' => 'doc', 'content' => [['type' => 'paragraph', 'content' => [
+            ['type' => 'text', 'text' => 'x', 'marks' => [['type' => 'link', 'attrs' => ['href' => $href]]]],
+        ]]]]));
+
+        self::assertStringContainsString('href="https://www.example.org"', $link('www.example.org'));
+        self::assertStringContainsString('href="https://example.org/a%20b"', $link(' https://example.org/a b '));
+    }
+
+    public function testNodesMustSitWhereTheEditorAllowsThem(): void
+    {
+        $text = ['type' => 'text', 'text' => 'x'];
+        $paragraph = ['type' => 'paragraph', 'content' => [$text]];
+
+        self::assertSame(['type' => 'doc', 'content' => []], Body::clean(['type' => 'doc', 'content' => [
+            $text,
+            ['type' => 'hardBreak'],
+            ['type' => 'listItem', 'content' => [$paragraph]],
+            ['type' => 'tableRow'],
+        ]]));
+        self::assertSame(
+            ['type' => 'doc', 'content' => [['type' => 'paragraph', 'content' => [$text]]]],
+            Body::clean(['type' => 'doc', 'content' => [['type' => 'paragraph', 'content' => [$text, $paragraph]]]]),
+        );
+        self::assertSame(
+            ['type' => 'doc', 'content' => [['type' => 'bulletList']]],
+            Body::clean(['type' => 'doc', 'content' => [['type' => 'bulletList', 'content' => [$paragraph]]]]),
+        );
+    }
+
+    public function testListCanStartAtZero(): void
+    {
+        $list = ['type' => 'orderedList', 'attrs' => ['start' => 0], 'content' => [['type' => 'listItem', 'content' => [['type' => 'paragraph']]]]];
+
+        self::assertStringContainsString('<ol start="0">', Body::toHtml(Body::encode(['type' => 'doc', 'content' => [$list]])));
     }
 
     public function testUnknownThingsAreDropped(): void
@@ -190,26 +230,28 @@ final class ContentUnitTest extends TestCase
 
     public function testAttributesAreChecked(): void
     {
-        $node = static fn(string $type, array $attrs): string => Body::toHtml(Body::encode([
-            'type' => 'doc',
-            'content' => [['type' => $type, 'attrs' => $attrs, 'content' => [['type' => 'text', 'text' => 'x']]]],
-        ]));
+        $text = ['type' => 'text', 'text' => 'x'];
+        $node = static fn(array $node): string => Body::toHtml(Body::encode(['type' => 'doc', 'content' => [$node]]));
 
-        self::assertSame("<p>x</p>\n", $node('heading', ['level' => 1]), 'the title is the only h1');
-        self::assertSame("<p>x</p>\n", $node('heading', ['level' => '2><script>']));
-        self::assertSame("<pre><code>x</code></pre>\n", $node('codeBlock', ['language' => '"><script>']));
-        self::assertSame('<td>x</td>', $node('tableCell', ['colspan' => '2" onclick="x']));
-        self::assertSame("<ol>\nx</ol>\n", $node('orderedList', ['start' => '1" onclick="x']));
+        self::assertSame("<p>x</p>\n", $node(['type' => 'heading', 'attrs' => ['level' => 1], 'content' => [$text]]), 'the title is the only h1');
+        self::assertSame("<p>x</p>\n", $node(['type' => 'heading', 'attrs' => ['level' => '2><script>'], 'content' => [$text]]));
+        self::assertSame("<pre><code>x</code></pre>\n", $node(['type' => 'codeBlock', 'attrs' => ['language' => '"><script>'], 'content' => [$text]]));
+        self::assertStringContainsString('<td>', $node(['type' => 'table', 'content' => [['type' => 'tableRow', 'content' => [
+            ['type' => 'tableCell', 'attrs' => ['colspan' => '2" onclick="x']],
+        ]]]]));
+        self::assertSame("<ol>\n</ol>\n", $node(['type' => 'orderedList', 'attrs' => ['start' => '1" onclick="x']]));
     }
 
-    public function testDeepNestingIsCutOff(): void
+    public function testDepthLimitIsDetected(): void
     {
-        $node = ['type' => 'text', 'text' => 'deep'];
-        for ($i = 0; $i < 100; ++$i) {
-            $node = ['type' => 'blockquote', 'content' => [$node]];
+        $deep = ['type' => 'paragraph'];
+        for ($i = 0; $i < 120; ++$i) {
+            $deep = ['type' => 'blockquote', 'content' => [$deep]];
         }
 
-        self::assertStringNotContainsString('deep', Body::toHtml(Body::encode(['type' => 'doc', 'content' => [$node]])));
+        self::assertTrue(Body::isTooDeep(['type' => 'doc', 'content' => [$deep]]));
+        self::assertFalse(Body::isTooDeep(json_decode(Doc::text('x'), true)));
+        self::assertFalse(Body::isTooDeep('not a node'));
     }
 
     public function testNulBytesAreRemoved(): void

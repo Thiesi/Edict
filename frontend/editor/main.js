@@ -18,7 +18,10 @@ const RETRY_DELAY_MS = 5000;
 
 const app = document.getElementById('editor-app');
 const state = JSON.parse(app.dataset.state);
-const backupKey = `edict-draft-${state.id}`;
+// Each open editor keeps its own backup, so one tab's save can't remove another's text.
+const writer = crypto.randomUUID();
+const backupPrefix = `edict-draft-${state.id}-`;
+const backupKey = backupPrefix + writer;
 const field = (id) => document.getElementById(id);
 
 const fields = {
@@ -75,7 +78,7 @@ const setStatus = (text) => {
 
 const backup = () => {
     try {
-        localStorage.setItem(backupKey, JSON.stringify({ version: state.version, draft: draft() }));
+        localStorage.setItem(backupKey, JSON.stringify({ version: state.version, savedAt: Date.now(), draft: draft() }));
     } catch {
         // Private windows may refuse. The server save is the real one.
     }
@@ -130,6 +133,9 @@ const refreshToken = async () => {
         return false;
     }
     state.csrf = (await response.json()).csrf;
+    document.querySelectorAll('input[name="_csrf"]').forEach((input) => {
+        input.value = state.csrf;
+    });
 
     return true;
 };
@@ -139,7 +145,7 @@ async function attemptSave() {
     let response;
     try {
         setStatus('Saving…');
-        response = await post('autosave', { version: state.version, draft: draft() });
+        response = await post('autosave', { version: state.version, writer, draft: draft() });
     } catch {
         dirty = true;
         setStatus('Not saved: no connection. Retrying…');
@@ -149,7 +155,15 @@ async function attemptSave() {
     }
 
     if (response.ok) {
-        state.version = (await response.json()).version;
+        const saved = await response.json().catch(() => null);
+        if (saved === null) {
+            dirty = true;
+            setStatus('Not saved: the server had a problem. Retrying…');
+            schedule(RETRY_DELAY_MS);
+
+            return;
+        }
+        state.version = saved.version;
         if (dirty) {
             backup(); // Typed during the save: keep the newer text under the new version.
             schedule(SAVE_DELAY_MS);
@@ -162,9 +176,17 @@ async function attemptSave() {
     }
 
     dirty = true;
+    backup();
+    const failure = await response.clone().json().catch(() => ({}));
     if (response.status === 409) {
         stopped = true;
-        setStatus('Not saved: this changed in another tab. Your text is kept here. Copy it, then reload.');
+        setStatus(`Not saved: ${failure.error ?? 'this changed elsewhere.'} Your text is kept here. Copy it, then reload.`);
+
+        return;
+    }
+    if (response.status === 400 || response.status === 413 || response.status === 422) {
+        // Retrying can't help. The next edit tries again, and the text stays here.
+        setStatus(`Not saved: ${failure.error ?? 'the server refused this text.'}`);
 
         return;
     }
@@ -210,36 +232,74 @@ window.addEventListener('beforeunload', (event) => {
 
 /* Text that never reached the server */
 
-const offerRestore = () => {
-    let saved = null;
+const readBackups = () => {
+    const backups = [];
     try {
-        saved = JSON.parse(localStorage.getItem(backupKey));
+        for (let i = 0; i < localStorage.length; i += 1) {
+            const key = localStorage.key(i);
+            if (key.startsWith(backupPrefix) && key !== backupKey) {
+                backups.push({ key, ...JSON.parse(localStorage.getItem(key)) });
+            }
+        }
     } catch {
-        return;
-    }
-    if (saved === null) {
-        return;
+        return [];
     }
 
-    const banner = field('restore-banner');
-    banner.hidden = false;
-    field('restore-yes').addEventListener('click', () => {
-        banner.hidden = true;
-        Object.entries(fields).forEach(([name, input]) => {
-            if (input && typeof saved.draft[name] === 'string') {
-                input.value = saved.draft[name];
-            }
-        });
-        editor.commands.setContent(saved.draft.body);
-        changed();
-    });
-    field('restore-no').addEventListener('click', () => {
-        banner.hidden = true;
-        clearBackup();
-    });
+    return backups.sort((a, b) => (b.savedAt ?? 0) - (a.savedAt ?? 0));
 };
 
-offerRestore();
+const plainText = (node) => {
+    if (node.type === 'text') {
+        return node.text;
+    }
+    const inner = (node.content ?? []).map(plainText);
+
+    return inner.join(node.type === 'doc' || node.type === 'bulletList' || node.type === 'orderedList' ? '\n\n' : '');
+};
+
+const removeBackup = (key) => {
+    try {
+        localStorage.removeItem(key);
+    } catch {
+        // See backup().
+    }
+};
+
+// An offer stays until it is answered: typing on or saving doesn't touch these backups.
+let offered = null;
+
+const offerNextBackup = () => {
+    [offered = null] = readBackups();
+    field('restore-banner').hidden = offered === null;
+    if (offered === null) {
+        return;
+    }
+
+    const stale = offered.version !== state.version;
+    field('restore-message').textContent = stale
+        ? 'Unsaved text from another tab or an earlier session exists, but this article has changed since. Check it before restoring: it replaces what is here.'
+        : 'Unsaved text from another tab or an earlier session exists.';
+    field('restore-text').textContent = [offered.draft.title, plainText(offered.draft.body)].filter(Boolean).join('\n\n');
+};
+
+field('restore-yes').addEventListener('click', () => {
+    Object.entries(fields).forEach(([name, input]) => {
+        if (input && typeof offered.draft[name] === 'string') {
+            input.value = offered.draft[name];
+        }
+    });
+    editor.commands.setContent(offered.draft.body);
+    removeBackup(offered.key);
+    changed();
+    offerNextBackup();
+});
+
+field('restore-no').addEventListener('click', () => {
+    removeBackup(offered.key);
+    offerNextBackup();
+});
+
+offerNextBackup();
 
 /* Toolbar */
 
@@ -252,8 +312,15 @@ const commands = {
     h3: () => editor.chain().focus().toggleHeading({ level: 3 }).run(),
     quote: () => editor.chain().focus().toggleBlockquote().run(),
     link: () => {
-        const url = window.prompt('Link address (empty removes the link)', editor.getAttributes('link').href ?? '');
-        if (url === null) {
+        const entered = window.prompt('Link address (empty removes the link)', editor.getAttributes('link').href ?? '');
+        if (entered === null) {
+            return;
+        }
+        const url = entered.trim();
+        // The same rules as Edict\\Content\\Body, which would drop anything else on saving.
+        if (url !== '' && !/^(https?:\/\/|mailto:|tel:|#|www\.|\/(?!\/))/i.test(url)) {
+            setStatus('That link needs to start with https://, www., mailto:, tel:, # or /.');
+
             return;
         }
         const chain = editor.chain().focus().extendMarkRange('link');
@@ -290,7 +357,12 @@ field('fullscreen').addEventListener('click', () => {
 field('preview').addEventListener('click', async (event) => {
     event.preventDefault();
     const tab = window.open('about:blank');
-    await flush();
+    if (!(await flush())) {
+        tab?.close();
+        setStatus('The preview has to wait until the text is saved.');
+
+        return;
+    }
     if (tab) {
         tab.location = event.target.href;
     }

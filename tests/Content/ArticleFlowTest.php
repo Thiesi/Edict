@@ -8,6 +8,7 @@ use Edict\Auth\AdminAccount;
 use Edict\Auth\SessionStore;
 use Edict\Content\Articles;
 use Edict\Content\Slugs;
+use Edict\Content\StaleDraft;
 use Edict\Tests\DbTestCase;
 use Psr\Http\Message\ResponseInterface;
 
@@ -76,7 +77,7 @@ final class ArticleFlowTest extends DbTestCase
     {
         $version = $this->service(Articles::class)->find($id)?->draftVersion;
 
-        return $this->adminPost("/admin/articles/$id/autosave", ['version' => $version, 'draft' => $fields + self::defaults()]);
+        return $this->adminPost("/admin/articles/$id/autosave", ['version' => $version, 'writer' => 'test-tab', 'draft' => $fields + self::defaults()]);
     }
 
     private function publish(int $id): ResponseInterface
@@ -256,10 +257,74 @@ final class ArticleFlowTest extends DbTestCase
         $version = $this->service(Articles::class)->find($id)?->draftVersion;
         $this->save($id, ['title' => 'Newer']);
 
-        $stale = $this->adminPost("/admin/articles/$id/autosave", ['version' => $version, 'draft' => ['title' => 'Older'] + self::defaults()]);
+        $stale = $this->adminPost("/admin/articles/$id/autosave", ['version' => $version, 'writer' => 'other-tab', 'draft' => ['title' => 'Older'] + self::defaults()]);
 
         self::assertSame(409, $stale->getStatusCode());
         self::assertSame('Newer', $this->service(Articles::class)->find($id)?->input()->title);
+    }
+
+    public function testTheSameEditorCanRepeatASaveWhoseAnswerGotLost(): void
+    {
+        $id = $this->newRow();
+        $version = $this->service(Articles::class)->find($id)?->draftVersion;
+        $this->save($id, ['title' => 'Committed, answer lost']);
+
+        $repeat = $this->adminPost("/admin/articles/$id/autosave", ['version' => $version, 'writer' => 'test-tab', 'draft' => ['title' => 'Repeated'] + self::defaults()]);
+
+        self::assertSame(200, $repeat->getStatusCode());
+        self::assertSame('Repeated', $this->service(Articles::class)->find($id)?->input()->title);
+    }
+
+    public function testASaveAfterAnotherEditorIsRefusedEvenForAnEarlierWriter(): void
+    {
+        $id = $this->newRow();
+        $version = $this->service(Articles::class)->find($id)?->draftVersion;
+        $this->save($id, ['title' => 'Mine']);
+        $other = $this->service(Articles::class)->saveDraft($id, (int) $version + 1, 'other-tab', '{"title":"Theirs"}');
+        self::assertNotNull($other);
+
+        $mine = $this->adminPost("/admin/articles/$id/autosave", ['version' => $version, 'writer' => 'test-tab', 'draft' => ['title' => 'Mine again'] + self::defaults()]);
+
+        self::assertSame(409, $mine->getStatusCode());
+        self::assertSame('Theirs', $this->service(Articles::class)->find($id)?->input()->title);
+    }
+
+    public function testASaveDuringPublishingIsNotWiped(): void
+    {
+        $id = $this->saved(['title' => 'Going live']);
+        $articles = $this->service(Articles::class);
+        $read = $articles->find($id);
+        self::assertNotNull($read);
+
+        // Autosave commits after the publish request read the article.
+        $articles->saveDraft($id, $read->draftVersion, 'test-tab', '{"title":"Typed meanwhile"}');
+
+        try {
+            $articles->publish($read, $read->input());
+            self::fail('Published over newer text');
+        } catch (StaleDraft) {
+            $this->addToAssertionCount(1);
+        }
+
+        $after = $articles->find($id);
+        self::assertNotNull($after);
+        self::assertSame('Typed meanwhile', $after->input()->title);
+        self::assertSame('draft', $after->status);
+        self::assertSame(404, $this->get('/going-live')->getStatusCode());
+    }
+
+    public function testTooDeeplyNestedTextIsRefusedNotCut(): void
+    {
+        $id = $this->saved(['title' => 'Kept']);
+        $node = ['type' => 'paragraph', 'content' => [['type' => 'text', 'text' => 'deep']]];
+        for ($i = 0; $i < 120; ++$i) {
+            $node = ['type' => 'blockquote', 'content' => [$node]];
+        }
+
+        $response = $this->save($id, ['title' => 'Replaced', 'body' => ['type' => 'doc', 'content' => [$node]]]);
+
+        self::assertSame(422, $response->getStatusCode());
+        self::assertSame('Kept', $this->service(Articles::class)->find($id)?->input()->title);
     }
 
     public function testAutosaveReportsItsNewVersion(): void
@@ -281,10 +346,12 @@ final class ArticleFlowTest extends DbTestCase
 
         foreach ([
             [],
-            ['version' => $version],
-            ['draft' => self::defaults()],
-            ['version' => $version, 'draft' => 'nonsense'],
-            ['version' => (string) $version, 'draft' => self::defaults()],
+            ['version' => $version, 'writer' => 'tab'],
+            ['writer' => 'tab', 'draft' => self::defaults()],
+            ['version' => $version, 'draft' => self::defaults()],
+            ['version' => $version, 'writer' => 'tab', 'draft' => 'nonsense'],
+            ['version' => (string) $version, 'writer' => 'tab', 'draft' => self::defaults()],
+            ['version' => $version, 'writer' => 'not valid!', 'draft' => self::defaults()],
         ] as $payload) {
             self::assertSame(400, $this->adminPost("/admin/articles/$id/autosave", $payload)->getStatusCode());
         }
@@ -616,7 +683,7 @@ final class ArticleFlowTest extends DbTestCase
     public function testUnknownIdIs404(): void
     {
         self::assertSame(404, $this->get('/admin/articles/999', $this->admin)->getStatusCode());
-        self::assertSame(404, $this->adminPost('/admin/articles/999/autosave', ['version' => 0, 'draft' => []])->getStatusCode());
+        self::assertSame(404, $this->adminPost('/admin/articles/999/autosave', ['version' => 0, 'writer' => 'tab', 'draft' => []])->getStatusCode());
     }
 
     public function testStaticPagesAreReachableButNotListed(): void

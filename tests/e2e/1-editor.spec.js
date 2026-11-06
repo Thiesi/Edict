@@ -168,6 +168,59 @@ test('offers text that never reached the server', async ({ page }) => {
     await expect(page.locator('.ProseMirror')).toContainText('Rescue me');
 });
 
+test('an offered backup stays until answered, whatever else happens', async ({ page }) => {
+    await newItem(page);
+    await page.route('**/autosave', (route) => route.abort());
+    page.on('dialog', (dialog) => dialog.accept());
+    await page.locator('.ProseMirror').click();
+    await page.keyboard.type('Precious words');
+    await expect(page.locator('#save-status')).toContainText('Not saved', { timeout: 15_000 });
+    await page.unroute('**/autosave');
+    await page.reload();
+
+    // Ignore the offer, write something else, and let it save.
+    await expect(page.locator('#restore-banner')).toBeVisible();
+    await page.locator('.ProseMirror').click();
+    await page.keyboard.type('Different words');
+    await saved(page);
+    await page.reload();
+
+    await expect(page.locator('#restore-banner')).toBeVisible();
+    await expect(page.locator('#restore-message')).toContainText('has changed since');
+    await page.locator('#restore-banner summary').click();
+    await expect(page.locator('#restore-text')).toContainText('Precious words');
+
+    await page.locator('#restore-no').click();
+    await expect(page.locator('#restore-banner')).toBeHidden();
+    await expect(page.locator('.ProseMirror')).toContainText('Different words');
+});
+
+test('a lost answer does not stop autosave', async ({ page }) => {
+    await newItem(page);
+    await page.locator('.ProseMirror').click();
+    await page.keyboard.type('First');
+
+    // The server commits, but the browser never hears about it.
+    let lost = false;
+    await page.route('**/autosave', async (route) => {
+        if (lost) {
+            await route.continue();
+
+            return;
+        }
+        lost = true;
+        await route.fetch();
+        await route.abort();
+    });
+    await expect(page.locator('#save-status')).toContainText('Retrying', { timeout: 15_000 });
+    await saved(page);
+
+    await page.keyboard.type(' second');
+    await saved(page);
+    await page.reload();
+    await expect(page.locator('.ProseMirror')).toContainText('First second');
+});
+
 test('a second tab cannot silently overwrite newer text', async ({ page, context }) => {
     await newItem(page);
     const second = await context.newPage();

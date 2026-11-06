@@ -17,8 +17,26 @@ final class Body
 {
     public const EMPTY = '{"type":"doc","content":[]}';
 
-    private const MAX_DEPTH = 32;
+    private const MAX_DEPTH = 100;
     private const WRAPPERS = ['paragraph', 'bulletList', 'listItem', 'blockquote', 'table', 'tableRow'];
+    private const INLINE = ['text', 'hardBreak'];
+    private const BLOCKS = ['paragraph', 'heading', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'horizontalRule', 'table'];
+
+    /** What may sit where. The editor can't load a document that breaks these rules. */
+    private const ALLOWED_CHILDREN = [
+        'doc' => self::BLOCKS,
+        'paragraph' => self::INLINE,
+        'heading' => self::INLINE,
+        'codeBlock' => ['text'],
+        'bulletList' => ['listItem'],
+        'orderedList' => ['listItem'],
+        'listItem' => self::BLOCKS,
+        'blockquote' => self::BLOCKS,
+        'table' => ['tableRow'],
+        'tableRow' => ['tableCell', 'tableHeader'],
+        'tableCell' => self::BLOCKS,
+        'tableHeader' => self::BLOCKS,
+    ];
     private const SIMPLE_MARKS = ['bold' => 'strong', 'italic' => 'em', 'strike' => 's', 'code' => 'code'];
 
     /**
@@ -28,7 +46,28 @@ final class Body
     {
         $isDocument = is_array($document) && ($document['type'] ?? null) === 'doc';
 
-        return ['type' => 'doc', 'content' => $isDocument ? self::cleanChildren($document, 0) : []];
+        return ['type' => 'doc', 'content' => $isDocument ? self::cleanChildren($document, 'doc', 0) : []];
+    }
+
+    /**
+     * True if clean() would cut this document off. Only a crafted request gets near
+     * the limit, but it must be refused rather than lose text unnoticed.
+     */
+    public static function isTooDeep(mixed $node, int $depth = 0): bool
+    {
+        if (!is_array($node)) {
+            return false;
+        }
+        if ($depth >= self::MAX_DEPTH) {
+            return true;
+        }
+        foreach (is_array($node['content'] ?? null) ? $node['content'] : [] as $child) {
+            if (self::isTooDeep($child, $depth + 1)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -57,16 +96,17 @@ final class Body
      *
      * @return list<array<string, mixed>>
      */
-    private static function cleanChildren(array $parent, int $depth): array
+    private static function cleanChildren(array $parent, string $parentType, int $depth): array
     {
         $children = $parent['content'] ?? null;
         if (!is_array($children) || $depth >= self::MAX_DEPTH) {
             return [];
         }
 
+        $allowed = self::ALLOWED_CHILDREN[$parentType] ?? [];
         $clean = [];
         foreach ($children as $child) {
-            $node = is_array($child) ? self::cleanNode($child, $depth + 1) : null;
+            $node = is_array($child) && in_array($child['type'] ?? null, $allowed, true) ? self::cleanNode($child, $depth + 1) : null;
             if ($node !== null) {
                 $clean[] = $node;
             }
@@ -109,7 +149,7 @@ final class Body
             return null;
         }
 
-        $children = self::cleanChildren($node, $depth);
+        $children = self::cleanChildren($node, is_string($clean['type']) ? $clean['type'] : '', $depth);
 
         return $children === [] ? $clean : $clean + ['content' => $children];
     }
@@ -154,7 +194,7 @@ final class Body
     {
         $start = $attrs['start'] ?? null;
 
-        return is_int($start) && $start > 1 && $start <= 1_000_000
+        return is_int($start) && $start !== 1 && $start >= 0 && $start <= 1_000_000
             ? ['type' => 'orderedList', 'attrs' => ['start' => $start]]
             : ['type' => 'orderedList'];
     }
@@ -192,16 +232,21 @@ final class Body
     }
 
     /**
-     * Web and mail addresses and same-site paths. Everything else, such as
-     * "javascript:", loses its link and stays plain text.
+     * Web, mail and phone addresses, same-site paths and anchors. "www.example.org"
+     * means the web address people expect. Everything else, such as "javascript:",
+     * loses its link and stays plain text.
      */
     private static function safeHref(string $href): ?string
     {
+        $href = str_replace(' ', '%20', trim($href));
+        if (preg_match('/^www\./i', $href) === 1) {
+            $href = 'https://' . $href;
+        }
         if (preg_match('/[\x00-\x20\x7f\\\\]/', $href) === 1 || strlen($href) > 2048) {
             return null;
         }
 
-        return preg_match('#^(https?://|mailto:|/(?!/))#i', $href) === 1 ? $href : null;
+        return preg_match('~^(https?://|mailto:|tel:|#|/(?!/))~i', $href) === 1 ? $href : null;
     }
 
     /**

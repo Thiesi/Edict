@@ -20,9 +20,10 @@
         </header>
 
         <p id="restore-banner" class="editor-banner" role="alert" hidden>
-            Text from an earlier session was never saved.
+            <span id="restore-message"></span>
             <button type="button" id="restore-yes">Restore it</button>
             <button type="button" id="restore-no">Discard it</button>
+            <details><summary>Show that text</summary><pre id="restore-text"></pre></details>
         </p>
         <p id="editor-errors" class="editor-banner" role="alert" hidden></p>
         {% if article.deletedAt %}<p class="editor-banner">This is in the trash. Restore it from the list to publish it.</p>{% endif %}
