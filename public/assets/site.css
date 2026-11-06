@@ -1,0 +1,25 @@
+/* Placeholder theme until the design track (S9): readable, nothing more. */
+body {
+    margin: 0 auto;
+    max-width: 42rem;
+    padding: 1rem;
+    font-family: Georgia, serif;
+    line-height: 1.6;
+}
+
+nav a {
+    margin-right: 1rem;
+}
+
+article {
+    hyphens: auto;
+}
+
+.articles {
+    list-style: none;
+    padding: 0;
+}
+
+.teaser {
+    font-style: italic;
+}

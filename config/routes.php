@@ -4,17 +4,20 @@ declare(strict_types=1);
 
 use Edict\Http\AccountController;
 use Edict\Http\AdminAuthController;
+use Edict\Http\ArticleAdminController;
 use Edict\Http\HealthAction;
-use Edict\Http\HomeAction;
 use Edict\Http\Middleware\RequireAdmin;
 use Edict\Http\Middleware\RequireLogin;
 use Edict\Http\OAuthController;
 use Edict\Http\PasskeyController;
+use Edict\Http\PublicController;
 use Slim\App;
 use Slim\Routing\RouteCollectorProxy;
 
 return static function (App $app): void {
-    $app->get('/', HomeAction::class);
+    $app->get('/', [PublicController::class, 'home']);
+    $app->get('/archive', [PublicController::class, 'archive']);
+    $app->get('/tag/{slug:[a-z0-9-]+}', [PublicController::class, 'tag']);
     $app->get('/healthz', HealthAction::class);
 
     $app->get('/login', [OAuthController::class, 'showLogin']);
@@ -44,5 +47,20 @@ return static function (App $app): void {
         $group->post('/passkeys', [PasskeyController::class, 'register']);
         $group->post('/passkeys/options', [PasskeyController::class, 'registerOptions']);
         $group->post('/passkeys/{id}/remove', [PasskeyController::class, 'remove']);
+
+        $group->get('/articles', [ArticleAdminController::class, 'index']);
+        $group->post('/articles', [ArticleAdminController::class, 'create']);
+        $group->get('/articles/new', [ArticleAdminController::class, 'new']);
+        $group->get('/articles/{id:[0-9]+}', [ArticleAdminController::class, 'edit']);
+        $group->post('/articles/{id:[0-9]+}', [ArticleAdminController::class, 'update']);
+        $group->get('/articles/{id:[0-9]+}/preview', [ArticleAdminController::class, 'preview']);
+        $group->post('/articles/{id:[0-9]+}/publish', [ArticleAdminController::class, 'publish']);
+        $group->post('/articles/{id:[0-9]+}/unpublish', [ArticleAdminController::class, 'unpublish']);
+        $group->post('/articles/{id:[0-9]+}/trash', [ArticleAdminController::class, 'trash']);
+        $group->post('/articles/{id:[0-9]+}/restore', [ArticleAdminController::class, 'restore']);
+        $group->post('/articles/{id:[0-9]+}/delete', [ArticleAdminController::class, 'delete']);
     })->add(RequireAdmin::class);
+
+    // Last, and only for valid slugs: anything else never reaches the database.
+    $app->get('/{slug:[a-z0-9]+(?:-[a-z0-9]+)*}', [PublicController::class, 'article']);
 };

@@ -1,0 +1,8 @@
+<li lang="{{ article.lang }}">
+    <h2><a href="/{{ article.slug }}">{{ article.title }}</a></h2>
+    <p>
+        <time datetime="{{ article.publishedAt|article_iso }}">{{ article.publishedAt|article_date(article.lang) }}</time>
+        · <abbr lang="en" title="{{ article.lang == 'de' ? 'German' : 'English' }}">{{ article.lang|upper }}</abbr>
+    </p>
+    {% if article.teaser %}<p>{{ article.teaser }}</p>{% endif %}
+</li>

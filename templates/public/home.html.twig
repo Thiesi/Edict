@@ -1,0 +1,15 @@
+{% extends 'public/layout.html.twig' %}
+
+{% block main %}
+    <main>
+        <h1>Hello, Edict</h1>
+        {% if articles %}
+            <ul class="articles">
+                {% for article in articles %}{% include 'public/_summary.html.twig' %}{% endfor %}
+            </ul>
+            {% if has_more %}<p><a href="/archive">All articles</a></p>{% endif %}
+        {% else %}
+            <p>A CMS for one sovereign. Nothing to read yet.</p>
+        {% endif %}
+    </main>
+{% endblock %}
