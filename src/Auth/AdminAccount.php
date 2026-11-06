@@ -17,12 +17,17 @@ final readonly class AdminAccount
     private const MIN_PASSWORD = 12;
     private const MAX_PASSWORD_BYTES = 72; // bcrypt ignores anything beyond this
 
-    public function __construct(private \PDO $pdo, private SecretBox $box, private Clock $clock) {}
+    public function __construct(
+        private \PDO $pdo,
+        private SecretBox $box,
+        private Clock $clock,
+        private LoginThrottle $throttle,
+    ) {}
 
     /**
      * @return string the raw TOTP secret, to be shown to the admin exactly once
      */
-    public function create(string $username, string $password): string
+    public function create(string $username, #[\SensitiveParameter] string $password): string
     {
         $username = self::normaliseUsername($username);
         if ($username === '' || strlen($username) > 64) {
@@ -58,11 +63,12 @@ final readonly class AdminAccount
     }
 
     /**
-     * Sets a new password and TOTP secret and ends all admin sessions.
+     * Sets a new password and TOTP secret, ends all admin sessions and lifts any
+     * throttle on the username.
      *
      * @return array{username: string, secret: string} the raw TOTP secret is shown exactly once
      */
-    public function reset(string $password): array
+    public function reset(#[\SensitiveParameter] string $password): array
     {
         self::assertPasswordPolicy($password);
 
@@ -81,6 +87,7 @@ final readonly class AdminAccount
             }
 
             $this->pdo->prepare('DELETE FROM session WHERE user_id = ?')->execute([Row::int($row, 'user_id')]);
+            $this->throttle->clearUsername(Row::str($row, 'username'));
             $this->pdo->commit();
         } catch (\Throwable $e) {
             $this->pdo->rollBack();
@@ -95,7 +102,7 @@ final readonly class AdminAccount
      * @return int|null the admin's user ID, or null when anything is wrong
      *                  (callers must not reveal which factor failed)
      */
-    public function verify(string $username, string $password, string $code): ?int
+    public function verify(string $username, #[\SensitiveParameter] string $password, #[\SensitiveParameter] string $code): ?int
     {
         $stmt = $this->pdo->prepare(
             'SELECT c.user_id, c.password_hash, c.totp_secret
@@ -134,7 +141,7 @@ final readonly class AdminAccount
         return mb_strtolower(trim($username));
     }
 
-    private static function assertPasswordPolicy(string $password): void
+    private static function assertPasswordPolicy(#[\SensitiveParameter] string $password): void
     {
         if (mb_strlen($password) < self::MIN_PASSWORD) {
             throw new \InvalidArgumentException(sprintf('Password must have at least %d characters.', self::MIN_PASSWORD));
@@ -144,7 +151,7 @@ final readonly class AdminAccount
         }
     }
 
-    private static function hash(string $password): string
+    private static function hash(#[\SensitiveParameter] string $password): string
     {
         return password_hash($password, PASSWORD_BCRYPT, ['cost' => self::BCRYPT_COST]);
     }

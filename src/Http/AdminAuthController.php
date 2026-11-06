@@ -39,9 +39,9 @@ final readonly class AdminAuthController
     public function login(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
     {
         $body = $request->getParsedBody();
-        $username = is_array($body) && is_string($body['username'] ?? null) ? $body['username'] : '';
-        $password = is_array($body) && is_string($body['password'] ?? null) ? $body['password'] : '';
-        $code = is_array($body) && is_string($body['code'] ?? null) ? $body['code'] : '';
+        $username = self::credential($body, 'username');
+        $password = self::credential($body, 'password');
+        $code = self::credential($body, 'code');
 
         $remote = $request->getServerParams()['REMOTE_ADDR'] ?? null;
         $ip = is_string($remote) ? $remote : 'unknown';
@@ -52,10 +52,11 @@ final readonly class AdminAuthController
                 ->withHeader('Retry-After', (string) LoginThrottle::WINDOW);
         }
 
+        // Recorded before the slow check, so parallel requests can't all pass the limit.
+        $this->throttle->recordFailure($ip, $bucket);
+
         $userId = $this->admin->verify($username, $password, $code);
         if ($userId === null) {
-            $this->throttle->recordFailure($ip, $bucket);
-
             return $this->renderLogin($request, $response->withStatus(401), 'Those credentials are not valid.');
         }
 
@@ -115,6 +116,20 @@ final readonly class AdminAuthController
         return $response
             ->withHeader('Content-Type', 'text/html; charset=utf-8')
             ->withHeader('Cache-Control', 'no-store');
+    }
+
+    /**
+     * Valid credentials never contain NUL bytes or invalid UTF-8, and both break
+     * bcrypt or the database driver. They count as empty, so such a request takes
+     * the normal failure path and reveals nothing.
+     *
+     * @param array<mixed>|object|null $body
+     */
+    private static function credential(array|object|null $body, string $name): string
+    {
+        $value = is_array($body) ? ($body[$name] ?? null) : null;
+
+        return is_string($value) && !str_contains($value, "\0") && mb_check_encoding($value, 'UTF-8') ? $value : '';
     }
 
     private static function session(ServerRequestInterface $request): ?Session

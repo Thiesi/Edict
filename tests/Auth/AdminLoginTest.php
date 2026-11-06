@@ -134,6 +134,52 @@ final class AdminLoginTest extends DbTestCase
         self::assertSame(303, $this->attempt()->getStatusCode());
     }
 
+    public function testMalformedCredentialsFailLikeAnyOther(): void
+    {
+        foreach ([
+            $this->attempt(password: "a\0b"),
+            $this->attempt(password: "a\0b", username: 'nobody'),
+            $this->attempt(username: "sovereign\0x"),
+            $this->attempt(username: "\xFF"),
+            $this->attempt(code: "\0"),
+        ] as $response) {
+            self::assertSame(401, $response->getStatusCode());
+        }
+    }
+
+    public function testSuccessfulLoginLeavesNoFailureBehind(): void
+    {
+        $this->attempt();
+
+        $stmt = $this->pdo->query('SELECT count(*) FROM login_attempt');
+        self::assertNotFalse($stmt);
+        self::assertSame(0, (int) $stmt->fetchColumn());
+    }
+
+    public function testResetLiftsTheUsernameBlock(): void
+    {
+        $throttle = $this->service(LoginThrottle::class);
+        for ($i = 1; $i <= 10; ++$i) {
+            $throttle->recordFailure("198.51.100.$i", 'sovereign');
+        }
+        self::assertTrue($throttle->isBlocked('203.0.113.7', 'sovereign'));
+
+        $this->service(AdminAccount::class)->reset('a brand new passphrase');
+
+        self::assertFalse($throttle->isBlocked('203.0.113.7', 'sovereign'));
+    }
+
+    public function testIpv6ClientsCannotDodgeTheLimitWithinTheirNetwork(): void
+    {
+        $throttle = $this->service(LoginThrottle::class);
+        for ($i = 1; $i <= 5; ++$i) {
+            $throttle->recordFailure("2001:db8:1:2::$i", "user$i");
+        }
+
+        self::assertTrue($throttle->isBlocked('2001:db8:1:2:ffff::9', 'someone'));
+        self::assertFalse($throttle->isBlocked('2001:db8:1:3::1', 'someone'));
+    }
+
     public function testThrottleTableStoresNoRawValues(): void
     {
         $this->attempt(password: 'wrong wrong wrong');

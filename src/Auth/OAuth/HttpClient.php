@@ -15,5 +15,5 @@ interface HttpClient
      *
      * @throws OAuthException when no HTTP response could be obtained
      */
-    public function postForm(string $url, array $fields): array;
+    public function postForm(string $url, #[\SensitiveParameter] array $fields): array;
 }

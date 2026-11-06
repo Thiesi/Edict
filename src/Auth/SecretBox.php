@@ -17,12 +17,12 @@ final readonly class SecretBox
 
     private string $key;
 
-    public function __construct(string $appSecret)
+    public function __construct(#[\SensitiveParameter] string $appSecret)
     {
         $this->key = hash_hkdf('sha256', $appSecret, 32, 'edict-secretbox-v1');
     }
 
-    public function seal(string $plaintext): string
+    public function seal(#[\SensitiveParameter] string $plaintext): string
     {
         $iv = random_bytes(self::IV_BYTES);
         $tag = '';
@@ -34,7 +34,7 @@ final readonly class SecretBox
         return base64_encode($iv . $tag . $ciphertext);
     }
 
-    public function open(string $sealed): string
+    public function open(#[\SensitiveParameter] string $sealed): string
     {
         $raw = base64_decode($sealed, true);
         if ($raw === false || strlen($raw) < self::IV_BYTES + self::TAG_BYTES) {

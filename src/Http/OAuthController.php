@@ -56,6 +56,11 @@ final readonly class OAuthController
         $provider = $this->provider($request, $args);
         $next = self::param($request->getQueryParams(), 'next');
 
+        // Anyone can link here, so a link must not be able to swap a signed-in person's session.
+        if (self::session($request) !== null) {
+            return self::redirect($response, FlowState::safeNext($next === '' ? '/account' : $next));
+        }
+
         return $this->leaveFor($provider, $this->flowCookie->begin($provider->name, $next, null), $response);
     }
 
@@ -89,18 +94,13 @@ final readonly class OAuthController
         $home = $session === null ? '/login' : '/account';
         $ip = self::clientIp($request);
 
-        if ($this->throttle->isOAuthBlocked($ip)) {
-            return $this->renderLogin($response->withStatus(429), Notices::text('throttled'), '/')
-                ->withHeader('Retry-After', (string) LoginThrottle::WINDOW);
-        }
-
         $flow = $this->flowCookie->read($request);
         $response = $this->flowCookie->clear($response);
         $query = $request->getQueryParams();
 
+        // Not counted as a failure: any site can make a browser request this URL, and
+        // that must not be able to lock its owner out. It costs no provider request.
         if ($flow === null || $flow->provider !== $provider->name || !hash_equals($flow->state, self::param($query, 'state'))) {
-            $this->throttle->recordOAuthFailure($ip);
-
             return self::redirect($response, $home . '?notice=expired');
         }
 
@@ -108,6 +108,11 @@ final readonly class OAuthController
         if ($code === '') {
             // The person declined at the provider, or the provider reported an error.
             return self::redirect($response, $home . '?notice=cancelled');
+        }
+
+        if ($this->throttle->isOAuthBlocked($ip)) {
+            return $this->renderLogin($response->withStatus(429), Notices::text('throttled'), '/')
+                ->withHeader('Retry-After', (string) LoginThrottle::WINDOW);
         }
 
         try {

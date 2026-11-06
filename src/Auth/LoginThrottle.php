@@ -24,30 +24,63 @@ final readonly class LoginThrottle
 
     public function isBlocked(string $ip, string $username): bool
     {
-        return $this->failures($this->bucket('ip', $ip)) >= self::MAX_PER_IP
+        return $this->failures($this->ipBucket('ip', $ip)) >= self::MAX_PER_IP
             || $this->failures($this->bucket('user', $username)) >= self::MAX_PER_USERNAME;
     }
 
     public function recordFailure(string $ip, string $username): void
     {
-        $this->record($this->bucket('ip', $ip), $this->bucket('user', $username));
+        $this->record($this->ipBucket('ip', $ip), $this->bucket('user', $username));
     }
 
     public function isOAuthBlocked(string $ip): bool
     {
-        return $this->failures($this->bucket('oauth-ip', $ip)) >= self::MAX_OAUTH_PER_IP;
+        return $this->failures($this->ipBucket('oauth-ip', $ip)) >= self::MAX_OAUTH_PER_IP;
     }
 
     public function recordOAuthFailure(string $ip): void
     {
-        $this->record($this->bucket('oauth-ip', $ip));
+        $this->record($this->ipBucket('oauth-ip', $ip));
     }
 
     public function clear(string $ip, string $username): void
     {
         $delete = $this->pdo->prepare('DELETE FROM login_attempt WHERE bucket = ?');
-        $delete->execute([$this->bucket('ip', $ip)]);
+        $delete->execute([$this->ipBucket('ip', $ip)]);
         $delete->execute([$this->bucket('user', $username)]);
+    }
+
+    /**
+     * Lifts the username block. For admin:reset, the recovery path when someone
+     * keeps failing with the admin's username.
+     */
+    public function clearUsername(string $username): void
+    {
+        $this->pdo->prepare('DELETE FROM login_attempt WHERE bucket = ?')->execute([$this->bucket('user', $username)]);
+    }
+
+    /**
+     * The unit one client controls: an IPv4 address or an IPv6 /64, since one
+     * connection commonly has a whole /64 to hop around in.
+     */
+    public static function network(string $ip): string
+    {
+        $packed = @inet_pton($ip);
+        if ($packed === false || strlen($packed) !== 16) {
+            return $ip;
+        }
+
+        // ::ffff:192.0.2.1 is an IPv4 client on a dual-stack socket.
+        if (str_starts_with($packed, str_repeat("\0", 10) . "\xff\xff")) {
+            return inet_ntop(substr($packed, 12)) ?: $ip;
+        }
+
+        return bin2hex(substr($packed, 0, 8)) . '::/64';
+    }
+
+    private function ipBucket(string $kind, string $ip): string
+    {
+        return $this->bucket($kind, self::network($ip));
     }
 
     private function record(string ...$buckets): void

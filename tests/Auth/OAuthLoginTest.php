@@ -334,20 +334,58 @@ final class OAuthLoginTest extends DbTestCase
         self::assertSame(0, $this->countRows('SELECT count(*) FROM login_attempt'));
     }
 
-    public function testRepeatedFailuresAreThrottledWithoutTouchingPasswordLogin(): void
+    public function testRepeatedProviderFailuresAreThrottledWithoutTouchingPasswordLogin(): void
     {
         $this->createAdmin();
+        $this->http->unreachable = true;
         for ($i = 0; $i < 20; ++$i) {
-            $this->get('/auth/google/callback?state=x&code=y');
+            $this->finish($this->startFlow());
         }
+        self::assertCount(20, $this->http->requests);
 
-        $flow = $this->startFlow();
-        $blocked = $this->finish($flow);
+        $blocked = $this->finish($this->startFlow());
         self::assertSame(429, $blocked->getStatusCode());
-        self::assertSame([], $this->http->requests);
+        self::assertCount(20, $this->http->requests);
 
         $password = $this->post('/admin/login', ['username' => 'sovereign', 'password' => 'wrong wrong wrong', 'code' => '000000']);
         self::assertSame(401, $password->getStatusCode());
+    }
+
+    public function testCrossSiteCallbacksCannotLockAnyoneOut(): void
+    {
+        for ($i = 0; $i < 25; ++$i) {
+            $this->get('/auth/google/callback');
+        }
+
+        self::assertSame(0, $this->countRows('SELECT count(*) FROM login_attempt'));
+        self::assertSame(303, $this->finish($this->startFlow())->getStatusCode());
+    }
+
+    public function testStartWhileSignedInKeepsTheSession(): void
+    {
+        $cookies = $this->signIn();
+
+        $response = $this->get('/auth/twitch?next=%2Fan-article', $cookies);
+
+        self::assertSame('/an-article', $response->getHeaderLine('Location'));
+        self::assertSame('', $response->getHeaderLine('Set-Cookie'));
+        self::assertSame(200, $this->get('/account', $cookies)->getStatusCode());
+    }
+
+    public function testCookiesAreReadFromTheRawHeader(): void
+    {
+        $token = $this->signIn()[self::SESSION];
+
+        self::assertSame(200, $this->get('/account', [], ['Cookie' => self::SESSION . '=' . $token])->getStatusCode());
+        self::assertSame(303, $this->get('/account', [], ['Cookie' => 'edict%5Fsession=' . $token])->getStatusCode());
+
+        $flow = $this->startFlow();
+        $response = $this->get(
+            '/auth/google/callback?code=c&state=' . urlencode($flow['params']['state']),
+            [],
+            ['Cookie' => 'edict%5Foauth=' . $flow['cookie']],
+        );
+        self::assertSame('/login?notice=expired', $response->getHeaderLine('Location'));
     }
 
     public function testNoticeOnlyShowsKnownTexts(): void

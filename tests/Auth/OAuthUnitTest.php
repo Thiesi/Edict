@@ -5,13 +5,17 @@ declare(strict_types=1);
 namespace Edict\Tests\Auth;
 
 use Edict\Auth\Accounts;
+use Edict\Auth\LoginThrottle;
 use Edict\Auth\OAuth\FlowState;
 use Edict\Auth\OAuth\OAuthException;
 use Edict\Auth\OAuth\ProviderRegistry;
 use Edict\Auth\OAuth\StreamHttpClient;
 use Edict\Config;
+use Edict\Http\Middleware\RawCookieMiddleware;
+use Edict\Http\SessionCookie;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Slim\Psr7\Factory\ServerRequestFactory;
 
 final class OAuthUnitTest extends TestCase
 {
@@ -29,6 +33,7 @@ final class OAuthUnitTest extends TestCase
         yield 'backslash later' => ['/a\b', '/'];
         yield 'header injection' => ["/a\r\nSet-Cookie: x=y", '/'];
         yield 'trailing newline' => ["/a\n", '/'];
+        yield 'invalid UTF-8' => ["/\xFF", '/'];
         yield 'too long' => ['/' . str_repeat('a', 600), '/'];
     }
 
@@ -87,6 +92,39 @@ final class OAuthUnitTest extends TestCase
         ]);
 
         self::assertSame(['twitch'], array_keys((new ProviderRegistry($config))->all()));
+    }
+
+    public function testEncodedCookieNamesDoNotPassForTheRealOnes(): void
+    {
+        $config = Config::fromEnvironment('/x', ['APP_ENV' => 'production', 'APP_SECRET' => str_repeat('k', 32)]);
+        $cookie = new SessionCookie($config);
+        $read = static fn(string $header): ?string => $cookie->read(
+            (new ServerRequestFactory())->createServerRequest('GET', '/')
+                ->withCookieParams(RawCookieMiddleware::parse($header)),
+        );
+
+        self::assertNull($read('%5F%5FHost-edict_session=planted'));
+        self::assertNull($read('edict_session=wrong-name'));
+        self::assertSame('real', $read('%5F%5FHost-edict_session=planted; __Host-edict_session=real'));
+        self::assertSame('a=b', $read('other=1;  __Host-edict_session=a=b; flag'));
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function addresses(): iterable
+    {
+        yield 'IPv4' => ['192.0.2.1', '192.0.2.1'];
+        yield 'IPv4-mapped' => ['::ffff:192.0.2.1', '192.0.2.1'];
+        yield 'IPv6' => ['2001:db8:1:2:3:4:5:6', '20010db800010002::/64'];
+        yield 'same IPv6 /64' => ['2001:db8:1:2:ffff::1', '20010db800010002::/64'];
+        yield 'not an address' => ['unknown', 'unknown'];
+    }
+
+    #[DataProvider('addresses')]
+    public function testThrottleGroupsAddressesByNetwork(string $ip, string $network): void
+    {
+        self::assertSame($network, LoginThrottle::network($ip));
     }
 
     public function testUnreachableHostRaisesOAuthException(): void

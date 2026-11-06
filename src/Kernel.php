@@ -8,6 +8,7 @@ use DI\Container;
 use DI\ContainerBuilder;
 use Dotenv\Dotenv;
 use Edict\Http\Middleware\CsrfMiddleware;
+use Edict\Http\Middleware\RawCookieMiddleware;
 use Edict\Http\Middleware\SessionMiddleware;
 use Slim\App;
 use Slim\Factory\AppFactory;
@@ -41,9 +42,10 @@ final class Kernel
 
         (require $projectDir . '/config/routes.php')($app);
 
-        // Slim runs the last-added middleware first: errors, routing, body parsing, session, CSRF.
+        // Slim runs the last-added middleware first: errors, routing, body parsing, raw cookies, session, CSRF.
         $app->add(CsrfMiddleware::class);
         $app->add(SessionMiddleware::class);
+        $app->add(RawCookieMiddleware::class);
         $app->addBodyParsingMiddleware();
         $app->addRoutingMiddleware();
         // Errors are logged except in tests, where log output would make tests risky.

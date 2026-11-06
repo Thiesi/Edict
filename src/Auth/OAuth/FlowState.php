@@ -50,7 +50,7 @@ final readonly class FlowState
      */
     public static function safeNext(string $next): string
     {
-        if (strlen($next) > self::MAX_NEXT_LENGTH || preg_match('#^/(?![/\\\\])[^\\\\\x00-\x20\x7f]*$#D', $next) !== 1) {
+        if (strlen($next) > self::MAX_NEXT_LENGTH || preg_match('#^/(?![/\\\\])[^\\\\\x00-\x20\x7f]*$#Du', $next) !== 1) {
             return '/';
         }
 

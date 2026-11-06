@@ -13,7 +13,7 @@ final readonly class StreamHttpClient implements HttpClient
     private const TIMEOUT_SECONDS = 10;
     private const MAX_BYTES = 1_048_576;
 
-    public function postForm(string $url, array $fields): array
+    public function postForm(string $url, #[\SensitiveParameter] array $fields): array
     {
         $context = stream_context_create([
             'http' => [

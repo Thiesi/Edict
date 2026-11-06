@@ -38,7 +38,7 @@ final readonly class SessionStore
         return $token;
     }
 
-    public function load(string $token): ?Session
+    public function load(#[\SensitiveParameter] string $token): ?Session
     {
         $now = $this->clock->now();
         $hash = self::hashToken($token);
@@ -83,7 +83,7 @@ final readonly class SessionStore
         return $stmt->rowCount();
     }
 
-    private static function hashToken(string $token): string
+    private static function hashToken(#[\SensitiveParameter] string $token): string
     {
         return hash('sha256', $token);
     }

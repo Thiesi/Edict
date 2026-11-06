@@ -31,7 +31,7 @@ final readonly class OAuthClient
     /**
      * @throws OAuthException
      */
-    public function identify(Provider $provider, FlowState $flow, string $code): ProviderIdentity
+    public function identify(Provider $provider, FlowState $flow, #[\SensitiveParameter] string $code): ProviderIdentity
     {
         $response = $this->http->postForm($provider->tokenUrl, [
             'grant_type' => 'authorization_code',
