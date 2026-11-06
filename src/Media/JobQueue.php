@@ -81,14 +81,32 @@ final readonly class JobQueue
     }
 
     /**
-     * Requeues jobs whose worker died, and forgets old finished ones.
+     * Requeues jobs whose worker died, unless they've used up their attempts, and
+     * forgets old finished ones.
+     *
+     * @return list<array{type: string, payload: array<mixed>}> jobs that failed for good
      */
-    public function housekeeping(): void
+    public function housekeeping(): array
     {
         $now = $this->clock->now();
-        $this->pdo->prepare("UPDATE job SET state = 'queued', locked_at = NULL WHERE state = 'running' AND locked_at < to_timestamp(?)")
-            ->execute([$now - self::STALE_AFTER]);
+        $stale = $this->pdo->prepare(
+            "UPDATE job SET state = CASE WHEN attempts < ? THEN 'queued' ELSE 'failed' END, locked_at = NULL,
+                    error = 'The worker stopped during this job.'
+             WHERE state = 'running' AND locked_at < to_timestamp(?)
+             RETURNING state, type, payload::text AS payload",
+        );
+        $stale->execute([self::MAX_ATTEMPTS, $now - self::STALE_AFTER]);
+        $failed = [];
+        foreach ($stale->fetchAll() as $row) {
+            if (is_array($row) && Row::str($row, 'state') === 'failed') {
+                $payload = json_decode(Row::str($row, 'payload'), true);
+                $failed[] = ['type' => Row::str($row, 'type'), 'payload' => is_array($payload) ? $payload : []];
+            }
+        }
+
         $this->pdo->prepare("DELETE FROM job WHERE state = 'done' AND created_at < to_timestamp(?)")
             ->execute([$now - self::KEEP_FINISHED_FOR]);
+
+        return $failed;
     }
 }

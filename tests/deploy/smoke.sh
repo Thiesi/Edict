@@ -105,6 +105,9 @@ location=$(curl -s -D - -o /dev/null -H "Cookie: %5F%5FHost-edict_oauth=$flow" "
     sed -n 's/^[Ll]ocation: //p' | tr -d '\r')
 [ "$location" = '/login?notice=expired' ] || fail "encoded cookie name was accepted: $location"
 
+# Apache serves /media/ when deployed. The development route must not exist here.
+[ "$(curl -s -o /dev/null -w '%{http_code}' "$url/media/ab/cd/$(printf 'a%.0s' $(seq 64))-full.jpg")" = 404 ] || fail "media route"
+
 # A failing request must not reveal details in production mode.
 if curl -s "$url/does-not-exist" | grep -qi 'stack trace'; then
     fail "error page shows a stack trace"

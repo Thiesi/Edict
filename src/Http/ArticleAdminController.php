@@ -107,6 +107,9 @@ final readonly class ArticleAdminController
         if (Body::isTooDeep($draft['body'] ?? null)) {
             return self::json($response->withStatus(422), ['error' => 'The lists or quotes are nested too deeply.']);
         }
+        if (Body::hasOversizedGallery($draft['body'] ?? null)) {
+            return self::json($response->withStatus(422), ['error' => 'A gallery can have up to 100 images.']);
+        }
         $json = ArticleInput::fromArray($draft)->toJson();
         if (strlen($json) > ArticleInput::MAX_DRAFT_BYTES) {
             return self::json($response->withStatus(413), ['error' => 'The text is too long.']);

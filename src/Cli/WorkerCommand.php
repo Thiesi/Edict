@@ -6,7 +6,6 @@ namespace Edict\Cli;
 
 use Edict\Clock;
 use Edict\Database\Row;
-use Edict\Media\JobQueue;
 use Edict\Media\JobRunner;
 use Edict\Media\MediaLibrary;
 use Edict\Media\MediaStore;
@@ -54,11 +53,10 @@ final class WorkerCommand extends Command
             return self::SUCCESS;
         }
 
-        $jobs = $this->services->get(JobQueue::class);
         $runner = $this->services->get(JobRunner::class);
         $clock = $this->services->get(Clock::class);
 
-        $jobs->housekeeping();
+        $runner->housekeeping();
         $staleBefore = $clock->now() - self::TEMP_FILES_LIVE_FOR;
         $store->sweep($staleBefore);
         $this->services->get(MediaLibrary::class)->forgetUploadsOlderThan($staleBefore);

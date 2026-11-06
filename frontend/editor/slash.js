@@ -12,6 +12,8 @@ const BLOCKS = [
     { title: 'Code block', run: (chain) => chain.toggleCodeBlock() },
     { title: 'Divider', run: (chain) => chain.setHorizontalRule() },
     { title: 'Table', run: (chain) => chain.insertTable({ rows: 3, cols: 3, withHeaderRow: true }) },
+    { title: 'Image or gallery', action: 'chooseFiles' },
+    { title: 'Media library', action: 'openLibrary' },
 ];
 
 const renderMenu = () => {
@@ -93,7 +95,13 @@ const renderMenu = () => {
 export const SlashCommands = Extension.create({
     name: 'slashCommands',
 
+    addOptions() {
+        return { actions: {} };
+    },
+
     addProseMirrorPlugins() {
+        const { actions } = this.options;
+
         return [
             Suggestion({
                 editor: this.editor,
@@ -101,7 +109,12 @@ export const SlashCommands = Extension.create({
                 startOfLine: false,
                 items: ({ query }) => BLOCKS.filter((block) => block.title.toLowerCase().includes(query.toLowerCase())),
                 command: ({ editor, range, props }) => {
-                    props.run(editor.chain().focus().deleteRange(range)).run();
+                    if (props.action) {
+                        editor.chain().focus().deleteRange(range).run();
+                        actions[props.action]();
+                    } else {
+                        props.run(editor.chain().focus().deleteRange(range)).run();
+                    }
                 },
                 render: renderMenu,
             }),

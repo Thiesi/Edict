@@ -173,7 +173,6 @@ final class MediaFlowTest extends DbTestCase
         $sha = hash('sha256', $bytes);
         self::assertSame([sprintf('private/%s/%s/%s', substr($sha, 0, 2), substr($sha, 2, 2), $sha)], $this->files());
         self::assertSame($bytes, file_get_contents($this->dataDir . '/' . $this->files()[0]));
-        self::assertSame(0, $this->rows('upload'));
     }
 
     public function testARepeatedOrMisplacedChunkChangesNothing(): void
@@ -305,7 +304,100 @@ final class MediaFlowTest extends DbTestCase
 
         self::assertSame(422, $response->getStatusCode());
         self::assertStringContainsString('storage limit', (string) $response->getBody());
-        self::assertSame(0, $this->rows('upload'));
+        self::assertSame(1, $this->rows('upload'), 'only the finished one');
+    }
+
+    public function testUnfinishedUploadsReserveTheirSize(): void
+    {
+        $this->reboot(['MEDIA_MAX_BYTES' => '100']);
+        $first = $this->started('a.txt', 60);
+
+        self::assertSame(422, $this->begin('b.txt', 60)->getStatusCode(), 'the first has reserved 60');
+
+        self::assertSame(200, $this->raw('DELETE', "/admin/uploads/$first", (new StreamFactory())->createStream(''), $this->admin, $this->csrf)->getStatusCode());
+        self::assertFileDoesNotExist($this->service(MediaStore::class)->uploadPath($first));
+
+        self::assertSame(200, $this->begin('b.txt', 60)->getStatusCode(), 'aborting frees it');
+    }
+
+    public function testTheNumberOfOpenUploadsIsLimited(): void
+    {
+        for ($i = 0; $i < 20; ++$i) {
+            $this->started("$i.txt", 1);
+        }
+
+        $response = $this->begin('one-too-many.txt', 1);
+
+        self::assertSame(422, $response->getStatusCode());
+        self::assertStringContainsString('unfinished', (string) $response->getBody());
+    }
+
+    public function testCompletingCountsAgainstTheCapButNotTwice(): void
+    {
+        $this->reboot(['MEDIA_MAX_BYTES' => '100']);
+
+        // Its own reservation doesn't block it.
+        self::assertSame(90, $this->upload('a.txt', str_repeat('a', 90))['bytes']);
+    }
+
+    public function testCompletingAgainGivesTheSameAnswer(): void
+    {
+        $id = $this->started('a.txt', 3);
+        $this->chunk($id, 0, 'abc');
+
+        $first = self::data($this->post("/admin/uploads/$id/complete", [], $this->admin, $this->csrf));
+        $again = self::data($this->post("/admin/uploads/$id/complete", [], $this->admin, $this->csrf));
+
+        self::assertSame($first, $again);
+        self::assertSame(1, $this->rows('media'));
+    }
+
+    public function testAFinishedUploadTakesNoMoreChunksAndCantBeAborted(): void
+    {
+        $id = $this->started('a.txt', 3);
+        $this->chunk($id, 0, 'abc');
+        $this->post("/admin/uploads/$id/complete", [], $this->admin, $this->csrf);
+
+        self::assertSame(422, $this->chunk($id, 3, 'd')->getStatusCode());
+        $this->raw('DELETE', "/admin/uploads/$id", (new StreamFactory())->createStream(''), $this->admin, $this->csrf);
+        self::assertSame(1, $this->rows('upload'));
+    }
+
+    public function testReuploadingAFailedImageTriesAgain(): void
+    {
+        $this->reboot(['VIPSHEADER_BIN' => 'no-such-tool-anywhere']);
+        $bytes = self::PNG . 'rest';
+        $media = $this->upload('a.png', $bytes);
+        $runner = $this->service(JobRunner::class);
+        $runner->runNext();
+        for ($i = 0; $i < 2; ++$i) {
+            $this->clock->advance(61);
+            $runner->runNext();
+        }
+        self::assertSame('failed', $this->service(MediaLibrary::class)->find(self::id($media))['status'] ?? null);
+
+        $again = $this->upload('a.png', $bytes);
+
+        self::assertSame($media['id'], $again['id']);
+        self::assertSame('processing', $again['status']);
+        self::assertNull($again['error']);
+        self::assertTrue($runner->runNext(), 'a new job was queued');
+    }
+
+    public function testADeadWorkersJobEventuallyFailsTheMedia(): void
+    {
+        $media = $this->upload('a.png', self::PNG . 'rest');
+        $queue = $this->service(JobQueue::class);
+        $runner = $this->service(JobRunner::class);
+
+        for ($i = 0; $i < 3; ++$i) {
+            self::assertNotNull($queue->claim(), "attempt $i");
+            $this->clock->advance(3601);
+            $runner->housekeeping();
+        }
+
+        self::assertNull($queue->claim());
+        self::assertSame('failed', $this->service(MediaLibrary::class)->find(self::id($media))['status'] ?? null);
     }
 
     public function testFileCapFailsBeforeWriting(): void
@@ -448,7 +540,7 @@ final class MediaFlowTest extends DbTestCase
     {
         $path = $this->dataDir . '/source.jpg';
         shell_exec('vips black ' . escapeshellarg($path) . ' 3000 2000 2>&1');
-        shell_exec('exiftool -overwrite_original -GPSLatitude=52.5 -GPSLongitude=13.4 -Orientation#=6 ' . escapeshellarg($path) . ' 2>&1');
+        shell_exec('exiftool -overwrite_original -GPSLatitude=52.5 -GPSLongitude=13.4 -XMP:Creator=Someone -IPTC:Keywords=private -Orientation#=6 ' . escapeshellarg($path) . ' 2>&1');
         // Proves the checks below would notice.
         self::assertNotSame('', trim((string) shell_exec('exiftool -s -s -s -gps:all ' . escapeshellarg($path) . ' 2>&1')));
         $bytes = file_get_contents($path);
@@ -487,6 +579,7 @@ final class MediaFlowTest extends DbTestCase
             self::assertSame('0644', substr(sprintf('%o', fileperms($path)), -4), $variant['url']);
             self::assertSame('', trim((string) shell_exec('exiftool -s -s -s -gps:all ' . escapeshellarg($path) . ' 2>&1')), 'GPS in ' . $variant['url']);
             self::assertSame('', trim((string) shell_exec('exiftool -s -s -s -Orientation ' . escapeshellarg($path) . ' 2>&1')), 'orientation in ' . $variant['url']);
+            self::assertSame('', trim((string) shell_exec('exiftool -s -s -s -xmp:all -iptc:all ' . escapeshellarg($path) . ' 2>&1')), 'XMP or IPTC in ' . $variant['url']);
         }
 
         $original = $this->service(MediaStore::class)->originalPath(hash('sha256', $bytes));
@@ -533,6 +626,49 @@ final class MediaFlowTest extends DbTestCase
 
         self::assertSame('failed', $this->service(MediaLibrary::class)->find(self::id($media))['status'] ?? null);
         self::assertSame([], array_values(array_filter($this->files(), static fn(string $file): bool => str_starts_with($file, 'media/'))));
+    }
+
+    public function testAFailureHalfwayPublishesNothing(): void
+    {
+        $this->requireTools();
+        // The real tool, except that it refuses AVIF: by then other versions exist.
+        $script = $this->dataDir . '/fussy-vipsthumbnail';
+        file_put_contents($script, "#!/bin/sh\ncase \"$*\" in *.avif*) exit 1 ;; esac\nexec vipsthumbnail \"$@\"\n");
+        chmod($script, 0o755);
+        $this->reboot(['VIPSTHUMBNAIL_BIN' => $script]);
+
+        $media = $this->upload('photo.jpg', $this->jpegWithGps());
+        $this->service(JobRunner::class)->runNext();
+
+        self::assertSame('processing', $this->service(MediaLibrary::class)->find(self::id($media))['status'] ?? null);
+        self::assertSame(0, $this->rows('media_variant'));
+        self::assertSame([], array_values(array_filter($this->files(), static fn(string $file): bool => str_starts_with($file, 'media/'))));
+        self::assertSame([], glob($this->dataDir . '/job-tmp/*'));
+    }
+
+    public function testTransparentImagesGetAWhiteBackgroundInJpeg(): void
+    {
+        $this->requireTools();
+        $path = $this->dataDir . '/clear.png';
+        shell_exec('vips black ' . escapeshellarg($path) . ' 600 400 --bands 4 2>&1');
+        $bytes = file_get_contents($path);
+        self::assertIsString($bytes);
+        unlink($path);
+
+        $media = $this->upload('clear.png', $bytes);
+        $this->service(JobRunner::class)->runNext();
+
+        $done = $this->service(MediaLibrary::class)->find(self::id($media));
+        self::assertSame('ready', $done['status'] ?? null, (string) json_encode($done));
+        self::assertIsArray($done['variants'] ?? null);
+        foreach ($done['variants'] as $variant) {
+            self::assertIsArray($variant);
+            if ($variant['format'] === 'jpg') {
+                self::assertIsString($variant['url']);
+                $average = trim((string) shell_exec('vips avg ' . escapeshellarg($this->dataDir . $variant['url']) . ' 2>&1'));
+                self::assertGreaterThan(250.0, (float) $average, 'not black');
+            }
+        }
     }
 
     public function testGeneratedFilesAreServedInDevelopment(): void

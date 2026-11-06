@@ -18,9 +18,11 @@ final class Body
     public const EMPTY = '{"type":"doc","content":[]}';
 
     private const MAX_DEPTH = 100;
+    private const MAX_GALLERY_ITEMS = 100;
+    private const MAX_MEDIA_TEXT = 500;
     private const WRAPPERS = ['paragraph', 'bulletList', 'listItem', 'blockquote', 'table', 'tableRow'];
     private const INLINE = ['text', 'hardBreak'];
-    private const BLOCKS = ['paragraph', 'heading', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'horizontalRule', 'table'];
+    private const BLOCKS = ['paragraph', 'heading', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'horizontalRule', 'table', 'image', 'gallery'];
 
     /** What may sit where. The editor can't load a document that breaks these rules. */
     private const ALLOWED_CHILDREN = [
@@ -47,6 +49,27 @@ final class Body
         $isDocument = is_array($document) && ($document['type'] ?? null) === 'doc';
 
         return ['type' => 'doc', 'content' => $isDocument ? self::cleanChildren($document, 'doc', 0) : []];
+    }
+
+    /**
+     * True if clean() would cut a gallery short. Refused rather than silently shortened.
+     */
+    public static function hasOversizedGallery(mixed $node): bool
+    {
+        if (!is_array($node)) {
+            return false;
+        }
+        $items = is_array($node['attrs'] ?? null) ? ($node['attrs']['items'] ?? null) : null;
+        if (is_array($items) && count($items) > self::MAX_GALLERY_ITEMS) {
+            return true;
+        }
+        foreach (is_array($node['content'] ?? null) ? $node['content'] : [] as $child) {
+            if (self::hasOversizedGallery($child)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -86,9 +109,45 @@ final class Body
         return self::clean(json_decode($json, true));
     }
 
-    public static function toHtml(string $json): string
+    /**
+     * @param (callable(array<string, mixed>): string)|null $media renders image and gallery blocks
+     */
+    public static function toHtml(string $json, ?callable $media = null): string
     {
-        return self::renderAll(self::decode($json)['content']);
+        return self::renderAll(self::decode($json)['content'], $media);
+    }
+
+    /**
+     * Every media ID a document uses, wherever it is nested.
+     *
+     * @param array<mixed> $node a clean document
+     *
+     * @return list<int>
+     */
+    public static function mediaIds(array $node): array
+    {
+        $attrs = is_array($node['attrs'] ?? null) ? $node['attrs'] : [];
+        $ids = [];
+        if (($node['type'] ?? null) === 'image' && is_int($attrs['mediaId'] ?? null)) {
+            $ids[] = $attrs['mediaId'];
+        }
+        foreach (is_array($attrs['items'] ?? null) ? $attrs['items'] : [] as $item) {
+            if (is_array($item) && is_int($item['mediaId'] ?? null)) {
+                $ids[] = $item['mediaId'];
+            }
+        }
+        foreach (is_array($node['content'] ?? null) ? $node['content'] : [] as $child) {
+            if (is_array($child)) {
+                $ids = [...$ids, ...self::mediaIds($child)];
+            }
+        }
+
+        return array_values(array_unique($ids));
+    }
+
+    public static function escape(string $text): string
+    {
+        return htmlspecialchars($text, ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5, 'UTF-8');
     }
 
     /**
@@ -130,6 +189,12 @@ final class Body
         }
         if ($type === 'hardBreak' || $type === 'horizontalRule') {
             return ['type' => $type];
+        }
+        if ($type === 'image') {
+            return self::cleanImage($attrs);
+        }
+        if ($type === 'gallery') {
+            return self::cleanGallery($attrs);
         }
         if (!is_string($type)) {
             return null;
@@ -183,6 +248,48 @@ final class Body
         }
 
         return $marks === [] ? ['type' => 'text', 'text' => $text] : ['type' => 'text', 'text' => $text, 'marks' => $marks];
+    }
+
+    /**
+     * @param array<mixed> $attrs
+     *
+     * @return array<string, mixed>|null
+     */
+    private static function cleanImage(array $attrs): ?array
+    {
+        $id = $attrs['mediaId'] ?? null;
+        if (!is_int($id) || $id <= 0) {
+            return null;
+        }
+
+        return ['type' => 'image', 'attrs' => [
+            'mediaId' => $id,
+            'alt' => self::shortText($attrs['alt'] ?? null),
+            'caption' => self::shortText($attrs['caption'] ?? null),
+        ]];
+    }
+
+    /**
+     * @param array<mixed> $attrs
+     *
+     * @return array<string, mixed>|null
+     */
+    private static function cleanGallery(array $attrs): ?array
+    {
+        $items = [];
+        foreach (is_array($attrs['items'] ?? null) ? $attrs['items'] : [] as $item) {
+            $id = is_array($item) ? ($item['mediaId'] ?? null) : null;
+            if (is_int($id) && $id > 0 && count($items) < self::MAX_GALLERY_ITEMS) {
+                $items[] = ['mediaId' => $id, 'alt' => self::shortText($item['alt'] ?? null)];
+            }
+        }
+
+        return $items === [] ? null : ['type' => 'gallery', 'attrs' => ['items' => $items]];
+    }
+
+    private static function shortText(mixed $value): string
+    {
+        return is_string($value) ? mb_substr(str_replace("\0", '', $value), 0, self::MAX_MEDIA_TEXT) : '';
     }
 
     /**
@@ -251,20 +358,22 @@ final class Body
 
     /**
      * @param list<array<string, mixed>> $nodes
+     * @param (callable(array<string, mixed>): string)|null $media
      */
-    private static function renderAll(array $nodes): string
+    private static function renderAll(array $nodes, ?callable $media): string
     {
-        return implode('', array_map(self::render(...), $nodes));
+        return implode('', array_map(static fn(array $node): string => self::render($node, $media), $nodes));
     }
 
     /**
      * @param array<string, mixed> $node
+     * @param (callable(array<string, mixed>): string)|null $media
      */
-    private static function render(array $node): string
+    private static function render(array $node, ?callable $media): string
     {
         /** @var list<array<string, mixed>> $children */
         $children = $node['content'] ?? [];
-        $inner = self::renderAll($children);
+        $inner = self::renderAll($children, $media);
         /** @var array<string, mixed> $attrs */
         $attrs = $node['attrs'] ?? [];
 
@@ -272,6 +381,7 @@ final class Body
             'text' => self::renderText($node),
             'hardBreak' => '<br>',
             'horizontalRule' => "<hr>\n",
+            'image', 'gallery' => $media === null ? '' : $media($node),
             'paragraph' => "<p>$inner</p>\n",
             'heading' => self::heading($attrs, $inner),
             'bulletList' => "<ul>\n$inner</ul>\n",
@@ -350,10 +460,5 @@ final class Body
     private static function int(mixed $value): int
     {
         return is_int($value) ? $value : 1;
-    }
-
-    private static function escape(string $text): string
-    {
-        return htmlspecialchars($text, ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5, 'UTF-8');
     }
 }

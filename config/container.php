@@ -8,9 +8,10 @@ use Edict\Auth\SecretBox;
 use Edict\Clock;
 use Edict\Config;
 use Edict\Content\ArticleDate;
-use Edict\Content\Body;
+use Edict\Content\BodyRenderer;
 use Edict\Database\ConnectionFactory;
 use Edict\Database\Migrator;
+use Edict\Services;
 use Edict\SystemClock;
 use Psr\Http\Message\ResponseFactoryInterface;
 use Slim\Psr7\Factory\ResponseFactory;
@@ -41,7 +42,7 @@ return [
     // PHP-DI injects factory parameters by type.
     // The explicit root path keeps Twig's cache keys independent of the working
     // directory, which differs between the deploy (cache:warmup) and php-fpm.
-    Environment::class => static function (Config $config): Environment {
+    Environment::class => static function (Config $config, Services $services): Environment {
         $cache = $config->cacheDir();
 
         $twig = new Environment(new FilesystemLoader($config->projectDir . '/templates', $config->projectDir), [
@@ -53,8 +54,13 @@ return [
         $twig->addGlobal('tested_commit', $config->testedCommit());
         $twig->addFilter(new TwigFilter('article_date', ArticleDate::format(...)));
         $twig->addFilter(new TwigFilter('article_iso', ArticleDate::iso(...)));
-        // Safe because Body::toHtml() is an allow-list that escapes all text.
-        $twig->addFilter(new TwigFilter('body_html', Body::toHtml(...), ['is_safe' => ['html']]));
+        // Safe because BodyRenderer and Body build HTML from fixed tags and escape all values.
+        // Resolved only when used, so pages without an article open no database connection.
+        $twig->addFilter(new TwigFilter(
+            'body_html',
+            static fn(string $json): string => $services->get(BodyRenderer::class)->html($json),
+            ['is_safe' => ['html']],
+        ));
 
         return $twig;
     },

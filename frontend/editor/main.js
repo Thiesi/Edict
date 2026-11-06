@@ -11,7 +11,9 @@ import { TableKit } from '@tiptap/extension-table';
 import { Placeholder } from '@tiptap/extensions';
 import StarterKit from '@tiptap/starter-kit';
 
+import { MediaGallery, MediaImage, preview } from './media.js';
 import { SlashCommands } from './slash.js';
+import { Uploader } from './uploads.js';
 
 const SAVE_DELAY_MS = 3000;
 const RETRY_DELAY_MS = 5000;
@@ -48,8 +50,24 @@ const editor = new Editor({
         TableKit.configure({ table: { resizable: false } }),
         Placeholder.configure({ placeholder: "Write, or type '/' for blocks" }),
         BubbleMenu.configure({ element: field('bubble-menu') }),
-        SlashCommands,
+        MediaImage,
+        MediaGallery,
+        SlashCommands.configure({
+            actions: {
+                chooseFiles: () => field('file-input').click(),
+                openLibrary: () => openLibrary(),
+            },
+        }),
     ],
+    editorProps: {
+        // Word and Excel put a picture of the text on the clipboard as well. Text wins.
+        handlePaste: (_view, event) => !event.clipboardData?.types.includes('text/html')
+            && receiveFiles(event.clipboardData?.files, editor.state.selection.to),
+        handleDrop: (view, event) => receiveFiles(
+            event.dataTransfer?.files,
+            view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos ?? editor.state.selection.to,
+        ),
+    },
     onUpdate: () => bodyUpdated(),
     onSelectionUpdate: () => {
         field('table-tools').hidden = !editor.isActive('table');
@@ -225,7 +243,7 @@ const flush = async () => {
 Object.values(fields).forEach((input) => input?.addEventListener('input', changed));
 
 window.addEventListener('beforeunload', (event) => {
-    if (dirty || saving !== null) {
+    if (dirty || saving !== null || uploader.active > 0) {
         event.preventDefault();
     }
 });
@@ -300,6 +318,139 @@ field('restore-no').addEventListener('click', () => {
 });
 
 offerNextBackup();
+
+/* Images */
+
+const uploader = new Uploader(() => state.csrf, refreshToken, field('upload-tray'));
+
+// Where uploads will land, moved along as the text changes during a long upload.
+const landingSpots = new Set();
+editor.on('transaction', ({ transaction }) => {
+    landingSpots.forEach((spot) => {
+        spot.position = transaction.mapping.map(spot.position);
+    });
+});
+
+const insertImages = (ids, position) => {
+    const content = ids.length === 1
+        ? { type: 'image', attrs: { mediaId: ids[0] } }
+        : { type: 'gallery', attrs: { items: ids.map((mediaId) => ({ mediaId, alt: '' })) } };
+    editor.chain().focus().insertContentAt(position, content).run();
+};
+
+// One image becomes an image block, and several at once become a gallery. One at a
+// time, so a whole folder doesn't saturate the line or reserve the disk all at once.
+const uploadAll = async (files, spot) => {
+    landingSpots.add(spot);
+    const uploaded = [];
+    for (const file of files) {
+        uploaded.push(await uploader.upload(file));
+    }
+    landingSpots.delete(spot);
+
+    const images = uploaded.filter((media) => media?.kind === 'image');
+    if (images.length < uploaded.filter(Boolean).length) {
+        const note = document.createElement('li');
+        note.setAttribute('role', 'alert');
+        note.textContent = 'Only images can go into an article so far. The other files were kept in the library.';
+        field('upload-tray').append(note);
+        field('upload-tray').hidden = false;
+    }
+    if (images.length > 0) {
+        insertImages(images.map((media) => media.id), spot.position);
+    }
+};
+
+function receiveFiles(list, position) {
+    const files = [...(list ?? [])];
+    if (files.length === 0) {
+        return false;
+    }
+    uploadAll(files, { position });
+
+    return true;
+}
+
+field('file-input').addEventListener('change', (event) => {
+    receiveFiles(event.target.files, editor.state.selection.to);
+    event.target.value = '';
+});
+
+/* The media library */
+
+const panel = field('media-panel');
+const grid = field('media-grid');
+const toggle = field('media-toggle');
+const insertButton = field('media-insert');
+const moreButton = field('media-more');
+let libraryPage = 1;
+let chosen = [];
+
+const addToLibrary = (media) => {
+    const url = preview(media);
+    if (media.kind !== 'image' || media.status !== 'ready' || url === null) {
+        return;
+    }
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.mediaId = media.id;
+    button.title = media.name;
+    button.setAttribute('aria-pressed', 'false');
+    const image = document.createElement('img');
+    image.src = url;
+    image.alt = media.name;
+    image.loading = 'lazy';
+    button.append(image);
+    button.addEventListener('click', () => {
+        const selected = chosen.includes(media.id);
+        chosen = selected ? chosen.filter((id) => id !== media.id) : [...chosen, media.id];
+        button.setAttribute('aria-pressed', String(!selected));
+        insertButton.disabled = chosen.length === 0;
+    });
+    grid.append(button);
+};
+
+const loadLibrary = async () => {
+    const response = await fetch(`/admin/media?page=${libraryPage}`, { credentials: 'same-origin', redirect: 'manual' });
+    if (!response.ok) {
+        setStatus('The media library could not be loaded.');
+
+        return;
+    }
+    const { media } = await response.json();
+    media.forEach(addToLibrary);
+    moreButton.hidden = media.length === 0;
+    libraryPage += 1;
+};
+
+function openLibrary() {
+    panel.hidden = false;
+    toggle.setAttribute('aria-expanded', 'true');
+    grid.replaceChildren();
+    chosen = [];
+    insertButton.disabled = true;
+    libraryPage = 1;
+    loadLibrary();
+}
+
+toggle.addEventListener('click', () => {
+    if (panel.hidden) {
+        openLibrary();
+    } else {
+        panel.hidden = true;
+        toggle.setAttribute('aria-expanded', 'false');
+    }
+});
+moreButton.addEventListener('click', loadLibrary);
+field('media-upload').addEventListener('click', () => field('file-input').click());
+insertButton.addEventListener('click', () => {
+    if (chosen.length > 0) {
+        insertImages(chosen, editor.state.selection.to);
+    }
+    grid.querySelectorAll('[aria-pressed="true"]').forEach((button) => button.setAttribute('aria-pressed', 'false'));
+    chosen = [];
+    insertButton.disabled = true;
+});
 
 /* Toolbar */
 

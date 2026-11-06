@@ -327,6 +327,17 @@ final class ArticleFlowTest extends DbTestCase
         self::assertSame('Kept', $this->service(Articles::class)->find($id)?->input()->title);
     }
 
+    public function testAGalleryTooLongIsRefusedNotCut(): void
+    {
+        $id = $this->saved(['title' => 'Kept']);
+        $items = array_map(static fn(int $i): array => ['mediaId' => $i, 'alt' => ''], range(1, 101));
+
+        $response = $this->save($id, ['title' => 'Replaced', 'body' => ['type' => 'doc', 'content' => [['type' => 'gallery', 'attrs' => ['items' => $items]]]]]);
+
+        self::assertSame(422, $response->getStatusCode());
+        self::assertSame('Kept', $this->service(Articles::class)->find($id)?->input()->title);
+    }
+
     public function testAutosaveReportsItsNewVersion(): void
     {
         $id = $this->newRow();

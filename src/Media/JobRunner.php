@@ -36,6 +36,15 @@ final readonly class JobRunner
         return true;
     }
 
+    public function housekeeping(): void
+    {
+        foreach ($this->jobs->housekeeping() as $job) {
+            if ($job['type'] === ImageProcessor::JOB) {
+                $this->images->markFailed(self::mediaId($job['payload']), 'Processing stopped unexpectedly. Upload the file again to retry.');
+            }
+        }
+    }
+
     /**
      * @param array<mixed> $payload
      */
