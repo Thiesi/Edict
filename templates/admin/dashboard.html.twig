@@ -6,6 +6,7 @@
     <main>
         <h1>Admin</h1>
         <p>Signed in as {{ display_name }}.</p>
+        <p><a href="/admin/passkeys">Passkeys</a></p>
         <form method="post" action="/admin/logout">
             <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
             <button type="submit">Sign out</button>

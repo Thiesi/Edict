@@ -9,6 +9,7 @@ use Edict\Http\HomeAction;
 use Edict\Http\Middleware\RequireAdmin;
 use Edict\Http\Middleware\RequireLogin;
 use Edict\Http\OAuthController;
+use Edict\Http\PasskeyController;
 use Slim\App;
 use Slim\Routing\RouteCollectorProxy;
 
@@ -32,10 +33,16 @@ return static function (App $app): void {
 
     $app->get('/admin/login', [AdminAuthController::class, 'showLogin']);
     $app->post('/admin/login', [AdminAuthController::class, 'login']);
+    $app->post('/admin/passkey/options', [PasskeyController::class, 'loginOptions']);
+    $app->post('/admin/passkey/login', [PasskeyController::class, 'login']);
 
     $app->group('/admin', function (RouteCollectorProxy $group): void {
         $group->get('', [AdminAuthController::class, 'dashboard']);
         $group->post('/logout', [AdminAuthController::class, 'logout']);
         $group->post('/logout-everywhere', [AdminAuthController::class, 'logoutEverywhere']);
+        $group->get('/passkeys', [PasskeyController::class, 'manage']);
+        $group->post('/passkeys', [PasskeyController::class, 'register']);
+        $group->post('/passkeys/options', [PasskeyController::class, 'registerOptions']);
+        $group->post('/passkeys/{id}/remove', [PasskeyController::class, 'remove']);
     })->add(RequireAdmin::class);
 };

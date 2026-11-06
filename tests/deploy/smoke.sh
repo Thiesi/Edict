@@ -64,6 +64,10 @@ if grep -qi 'fatal\|warning' "$work/server.log"; then
     fail "problems in the server log"
 fi
 
+# The passkey script must ship with the release, and the page must load it.
+curl -fs "$url/assets/admin/passkey.js" | grep -q 'navigator.credentials' || fail "passkey script"
+curl -fs "$url/admin/login" | grep -q '/assets/admin/passkey.js' || fail "passkey script is not on the login page"
+
 # Login start: the provider redirect uses the lowercase host and a __Host- cookie.
 headers=$(curl -s -D - -o /dev/null "$url/auth/google")
 echo "$headers" | grep -qi '^location: https://accounts\.google\.com/.*redirect_uri=https%3A%2F%2Fstaging\.edict\.networkxxiii\.de%2Fauth%2Fgoogle%2Fcallback' ||

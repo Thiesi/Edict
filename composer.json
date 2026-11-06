@@ -10,6 +10,7 @@
         "ext-pdo": "*",
         "ext-pdo_pgsql": "*",
         "bacon/bacon-qr-code": "^3.1",
+        "lbuchs/webauthn": "^2.2",
         "php-di/php-di": "^7.0",
         "slim/psr7": "^1.7",
         "slim/slim": "^4.14",

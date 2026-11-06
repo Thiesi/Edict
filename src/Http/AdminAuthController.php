@@ -125,7 +125,7 @@ final readonly class AdminAuthController
      *
      * @param array<mixed>|object|null $body
      */
-    private static function credential(array|object|null $body, string $name): string
+    public static function credential(array|object|null $body, string $name): string
     {
         $value = is_array($body) ? ($body[$name] ?? null) : null;
 
