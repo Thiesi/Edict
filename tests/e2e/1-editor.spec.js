@@ -12,6 +12,8 @@ const saved = (page) => expect(page.locator('#save-status')).toContainText('Save
 const publish = async (page) => {
     await page.locator('#publish').click();
     await expect(page.getByRole('link', { name: 'View' })).toBeVisible();
+    // The link shows while the reloaded page is still loading its script.
+    await page.waitForLoadState('load');
 };
 
 test('writes, autosaves, survives a reload and publishes', async ({ page, request }) => {
