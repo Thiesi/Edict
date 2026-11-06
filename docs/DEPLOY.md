@@ -35,6 +35,8 @@ The log of that run lists the releases afterwards. The next push to `main` deplo
 
 **The key:** `EDICT_STAGING_DEPLOY_KEY` is a secret of the GitHub environment `staging`, whose deployments are restricted to `main`. Pull requests never reach it. The workflows pin Roanoke's host key instead of scanning for it. If the host key ever changes, update both workflows.
 
+**Which build is this?** Every page on staging ends with a small link to the commit it was built from. Production doesn't show it, but its `/healthz` names the release.
+
 **Production** isn't set up yet. It comes with S11, and each deploy will need an approval in GitHub.
 
 ## Host setup for staging

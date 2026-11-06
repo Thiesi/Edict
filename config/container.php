@@ -50,6 +50,7 @@ return [
             'strict_variables' => $config->debug,
             'autoescape' => 'html',
         ]);
+        $twig->addGlobal('tested_commit', $config->testedCommit());
         $twig->addFilter(new TwigFilter('article_date', ArticleDate::format(...)));
         $twig->addFilter(new TwigFilter('article_iso', ArticleDate::iso(...)));
         // Safe because Body::toHtml() is an allow-list that escapes all text.

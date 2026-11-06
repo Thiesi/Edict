@@ -11,5 +11,6 @@
 </head>
 <body>
 {% block body %}{% endblock %}
+{% if tested_commit %}<small><a href="https://github.com/Thiesi/Edict/commit/{{ tested_commit }}" rel="noopener">{{ tested_commit|slice(0, 7) }}</a></small>{% endif %}
 </body>
 </html>
