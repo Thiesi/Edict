@@ -59,6 +59,8 @@ grep -q '"templates":"ok"' "$work/health.json" || fail "templates: $(cat "$work/
 grep -q '"release":"smoke-release"' "$work/health.json" || fail "wrong release: $(cat "$work/health.json")"
 
 curl -fs "$url/" | grep -q 'Hello, Edict' || fail "home page"
+curl -fs "$url/" | grep -q "github.com/Thiesi/Edict/commit/$(cat "$work/BUILD_SHA")" || fail "commit link on the home page"
+curl -fs "$url/admin/login" | grep -q "github.com/Thiesi/Edict/commit/" || fail "commit link on admin pages"
 if grep -qi 'fatal\|warning' "$work/server.log"; then
     cat "$work/server.log"
     fail "problems in the server log"

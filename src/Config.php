@@ -72,6 +72,21 @@ final readonly class Config
         return $release === false ? 'unreleased' : trim($release);
     }
 
+    /**
+     * The commit this release was built from, for the small link on test deployments.
+     * Production readers have no use for it, and a local checkout has no build.
+     */
+    public function testedCommit(): ?string
+    {
+        if ($this->env === 'production') {
+            return null;
+        }
+
+        $sha = trim((string) @file_get_contents($this->projectDir . '/BUILD_SHA'));
+
+        return preg_match('/^[0-9a-f]{40}$/D', $sha) === 1 ? $sha : null;
+    }
+
     public function cacheDir(): ?string
     {
         // Compiled-template cache only outside dev/test. It lives inside the
