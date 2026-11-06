@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Edict\Http;
 
 use Edict\Auth\Session;
+use Edict\Config;
 use Edict\Content\Article;
 use Edict\Content\ArticleInput;
 use Edict\Content\Articles;
@@ -18,44 +19,39 @@ use Slim\Exception\HttpNotFoundException;
 use Twig\Environment;
 
 /**
- * The article list and form. All routes sit behind RequireAdmin.
+ * The article and page lists and the editor. All routes sit behind RequireAdmin.
  */
 final readonly class ArticleAdminController
 {
-    public function __construct(private Environment $twig, private Articles $articles) {}
+    public function __construct(private Environment $twig, private Articles $articles, private Config $config) {}
 
     public function index(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
     {
-        $trash = ($request->getQueryParams()['trash'] ?? null) === '1';
+        $query = $request->getQueryParams();
+        $trash = ($query['trash'] ?? null) === '1';
+        $kind = ($query['kind'] ?? null) === 'page' ? 'page' : 'article';
         if ($trash) {
             $this->articles->purgeTrash();
         }
 
         return $this->html($request, $response, 'admin/articles.html.twig', [
-            'articles' => $this->articles->adminList($trash),
+            'articles' => $this->articles->adminList($kind, $trash),
+            'kind' => $kind,
             'trash' => $trash,
             'trash_days' => Articles::TRASH_DAYS,
         ]);
     }
 
-    public function new(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
-    {
-        return $this->form($request, $response, null, new ArticleInput('', '', $this->articles->lastLanguage(), '', '', ''), []);
-    }
-
+    /**
+     * Creates the row straight away, so autosave has somewhere to write from the
+     * first keystroke.
+     */
     public function create(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
     {
-        $input = ArticleInput::fromForm($request->getParsedBody());
-        $errors = $input->errors();
-        if ($errors === []) {
-            try {
-                return self::toEdit($response, $this->articles->create($input));
-            } catch (SlugTaken) {
-                $errors['slug'] = 'That address is already in use.';
-            }
-        }
+        $body = $request->getParsedBody();
+        $kind = is_array($body) && ($body['kind'] ?? null) === 'page' ? 'page' : 'article';
 
-        return $this->form($request, $response->withStatus(422), null, $input, $errors);
+        return $response->withStatus(303)->withHeader('Location', '/admin/articles/' . $this->articles->createEmpty($kind));
     }
 
     /**
@@ -64,47 +60,77 @@ final readonly class ArticleAdminController
     public function edit(ServerRequestInterface $request, ResponseInterface $response, array $args): ResponseInterface
     {
         $article = $this->article($request, $args);
+        $input = $article->input();
+        $session = $request->getAttribute(SessionMiddleware::ATTRIBUTE);
 
-        return $this->form($request, $response, $article, new ArticleInput(
-            $article->title,
-            $article->slug,
-            $article->lang,
-            $article->teaser,
-            Body::toPlainText($article->bodyJson),
-            $article->tagNames(),
-        ), []);
+        return $this->html($request, $response, 'admin/editor.html.twig', [
+            'article' => $article,
+            'input' => $input,
+            'asset_version' => $this->config->release(),
+            'state' => [
+                'id' => $article->id,
+                'version' => $article->draftVersion,
+                'body' => Body::decode($input->body),
+                'csrf' => $session instanceof Session ? $session->csrfToken : '',
+            ],
+        ]);
     }
 
     /**
      * @param array<string, string> $args
      */
-    public function update(ServerRequestInterface $request, ResponseInterface $response, array $args): ResponseInterface
+    public function autosave(ServerRequestInterface $request, ResponseInterface $response, array $args): ResponseInterface
     {
         $article = $this->article($request, $args);
-        $input = ArticleInput::fromForm($request->getParsedBody());
-        $errors = $input->errors();
-        if ($errors === []) {
-            try {
-                $this->articles->update($article, $input);
+        $payload = $request->getParsedBody();
+        $draft = is_array($payload) ? ($payload['draft'] ?? null) : null;
+        $version = is_array($payload) ? ($payload['version'] ?? null) : null;
 
-                return self::toEdit($response, $article->id);
-            } catch (SlugTaken) {
-                $errors['slug'] = 'That address is already in use.';
-            }
+        // A malformed request must never replace a real draft with an empty one.
+        if (!is_array($draft) || !is_int($version)) {
+            return self::json($response->withStatus(400), ['error' => 'Malformed save.']);
         }
 
-        return $this->form($request, $response->withStatus(422), $article, $input, $errors);
+        $json = ArticleInput::fromArray($draft)->toJson();
+        if (strlen($json) > ArticleInput::MAX_DRAFT_BYTES) {
+            return self::json($response->withStatus(413), ['error' => 'The text is too long to save.']);
+        }
+
+        $saved = $this->articles->saveDraft($article->id, $version, $json);
+        if ($saved === null) {
+            return self::json($response->withStatus(409), ['error' => 'This was changed elsewhere.']);
+        }
+
+        return self::json($response, ['version' => $saved]);
     }
 
     /**
+     * Makes the stored draft live. The editor saves first, and sends the version it
+     * saved so that newer text from elsewhere can't go live unseen.
+     *
      * @param array<string, string> $args
      */
     public function publish(ServerRequestInterface $request, ResponseInterface $response, array $args): ResponseInterface
     {
         $article = $this->article($request, $args);
-        $this->articles->publish($article->id);
+        $payload = $request->getParsedBody();
+        if (!is_array($payload) || ($payload['version'] ?? null) !== $article->draftVersion || $article->deletedAt !== null) {
+            return self::json($response->withStatus(409), ['error' => 'This was changed elsewhere.']);
+        }
 
-        return self::toEdit($response, $article->id);
+        $input = $article->input();
+        $errors = $input->errors();
+        if ($errors === []) {
+            try {
+                $this->articles->publish($article, $input);
+
+                return self::json($response, ['redirect' => '/admin/articles/' . $article->id]);
+            } catch (SlugTaken) {
+                $errors['slug'] = 'That address is already in use.';
+            }
+        }
+
+        return self::json($response->withStatus(422), ['errors' => $errors]);
     }
 
     /**
@@ -123,9 +149,10 @@ final readonly class ArticleAdminController
      */
     public function trash(ServerRequestInterface $request, ResponseInterface $response, array $args): ResponseInterface
     {
-        $this->articles->trash($this->article($request, $args)->id);
+        $article = $this->article($request, $args);
+        $this->articles->trash($article->id);
 
-        return $response->withStatus(303)->withHeader('Location', '/admin/articles');
+        return $response->withStatus(303)->withHeader('Location', '/admin/articles?kind=' . $article->kind);
     }
 
     /**
@@ -150,33 +177,32 @@ final readonly class ArticleAdminController
             $this->articles->delete($article->id);
         }
 
-        return $response->withStatus(303)->withHeader('Location', '/admin/articles?trash=1');
+        return $response->withStatus(303)->withHeader('Location', '/admin/articles?trash=1&kind=' . $article->kind);
     }
 
     /**
-     * The public template, so a draft looks exactly as readers will see it.
+     * The draft in the public template, so it looks exactly as readers will see it.
      *
      * @param array<string, string> $args
      */
     public function preview(ServerRequestInterface $request, ResponseInterface $response, array $args): ResponseInterface
     {
         return $this->html($request, $response, 'public/article.html.twig', [
-            'article' => $this->article($request, $args),
+            'article' => $this->article($request, $args)->asDraft(),
             'preview' => true,
             'signed_in' => true,
         ])->withHeader('X-Robots-Tag', 'noindex');
     }
 
     /**
-     * @param array<string, string> $errors
+     * After signing in again in another tab, an open editor needs the new session's
+     * token before it can save the text it is holding.
      */
-    private function form(ServerRequestInterface $request, ResponseInterface $response, ?Article $article, ArticleInput $input, array $errors): ResponseInterface
+    public function csrf(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
     {
-        return $this->html($request, $response, 'admin/article_form.html.twig', [
-            'article' => $article,
-            'input' => $input,
-            'errors' => $errors,
-        ]);
+        $session = $request->getAttribute(SessionMiddleware::ATTRIBUTE);
+
+        return self::json($response, ['csrf' => $session instanceof Session ? $session->csrfToken : '']);
     }
 
     /**
@@ -199,6 +225,13 @@ final readonly class ArticleAdminController
     private function article(ServerRequestInterface $request, array $args): Article
     {
         return $this->articles->find((int) ($args['id'] ?? 0)) ?? throw new HttpNotFoundException($request);
+    }
+
+    private static function json(ResponseInterface $response, mixed $data): ResponseInterface
+    {
+        $response->getBody()->write(json_encode($data, JSON_THROW_ON_ERROR));
+
+        return $response->withHeader('Content-Type', 'application/json');
     }
 
     private static function toEdit(ResponseInterface $response, int $id): ResponseInterface

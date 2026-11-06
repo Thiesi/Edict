@@ -45,6 +45,18 @@ Database facts (from Ops, 2026-11-05):
 - The cluster collation is `C` (byte order). Use explicit ICU collations where locale-aware sorting matters.
 - Both DBs are included in Roanoke's nightly `pg_dumpall`.
 
+## The editor
+
+The editor bundle lives in `frontend/editor/`. Vite builds it into `public/assets/build/`, which is gitignored and shipped with each release. `node_modules` never reaches the host.
+
+```sh
+npm ci
+npm run build         # needed once before the editor page works locally
+npm run test:e2e      # browser tests; see the "browser" job in .github/workflows/ci.yml for the setup
+```
+
+Adding a block type means changing both `frontend/editor/main.js` and the allow-lists in `src/Content/Body.php`. Anything `Body` doesn't know is dropped on save.
+
 ## Admin commands
 
 | Command | Purpose |

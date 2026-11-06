@@ -5,113 +5,310 @@ declare(strict_types=1);
 namespace Edict\Content;
 
 /**
- * Article bodies as ProseMirror JSON, which the editor (S4) will produce directly.
- * HTML only ever comes out of toHtml(), which is an allow-list: anything it doesn't
- * know is left out, and all text is escaped.
+ * Article bodies as ProseMirror JSON, the editor's own format and the source of
+ * truth. Two allow-lists guard it: clean() keeps only known nodes, marks and
+ * attributes before anything is stored, and toHtml() builds HTML from fixed tags and
+ * escapes every value. No stored HTML is ever passed through, so there is nothing
+ * for an HTML sanitiser to do.
+ *
+ * Adding a block type means adding it here and in frontend/editor/main.js.
  */
 final class Body
 {
-    public static function fromPlainText(string $text): string
+    public const EMPTY = '{"type":"doc","content":[]}';
+
+    private const MAX_DEPTH = 32;
+    private const WRAPPERS = ['paragraph', 'bulletList', 'listItem', 'blockquote', 'table', 'tableRow'];
+    private const SIMPLE_MARKS = ['bold' => 'strong', 'italic' => 'em', 'strike' => 's', 'code' => 'code'];
+
+    /**
+     * @return array{type: 'doc', content: list<array<string, mixed>>}
+     */
+    public static function clean(mixed $document): array
     {
-        $paragraphs = [];
-        foreach (preg_split('/\n{2,}/', trim(str_replace(["\r\n", "\r"], "\n", $text))) ?: [] as $paragraph) {
-            if ($paragraph === '') {
-                continue;
-            }
+        $isDocument = is_array($document) && ($document['type'] ?? null) === 'doc';
 
-            $content = [];
-            foreach (explode("\n", $paragraph) as $i => $line) {
-                if ($i > 0) {
-                    $content[] = ['type' => 'hardBreak'];
-                }
-                if ($line !== '') {
-                    $content[] = ['type' => 'text', 'text' => $line];
-                }
-            }
-            $paragraphs[] = ['type' => 'paragraph', 'content' => $content];
-        }
-
-        return json_encode(['type' => 'doc', 'content' => $paragraphs], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
+        return ['type' => 'doc', 'content' => $isDocument ? self::cleanChildren($document, 0) : []];
     }
 
-    public static function toPlainText(string $json): string
+    /**
+     * @param array<mixed> $document
+     */
+    public static function encode(array $document): string
     {
-        $paragraphs = [];
-        foreach (self::children(self::decode($json)) as $node) {
-            if (is_array($node) && ($node['type'] ?? null) === 'paragraph') {
-                $text = '';
-                foreach (self::children($node) as $inline) {
-                    if (is_array($inline)) {
-                        $text .= ($inline['type'] ?? null) === 'hardBreak' ? "\n" : self::text($inline);
-                    }
-                }
-                $paragraphs[] = $text;
-            }
-        }
+        return json_encode($document, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
+    }
 
-        return implode("\n\n", $paragraphs);
+    /**
+     * @return array{type: 'doc', content: list<array<string, mixed>>}
+     */
+    public static function decode(string $json): array
+    {
+        return self::clean(json_decode($json, true));
     }
 
     public static function toHtml(string $json): string
     {
-        $html = '';
-        foreach (self::children(self::decode($json)) as $node) {
-            if (is_array($node) && ($node['type'] ?? null) === 'paragraph') {
-                $html .= '<p>' . self::inlineHtml($node) . "</p>\n";
-            }
-        }
-
-        return $html;
+        return self::renderAll(self::decode($json)['content']);
     }
 
     /**
-     * @param array<mixed> $paragraph
+     * @param array<mixed> $parent
+     *
+     * @return list<array<string, mixed>>
      */
-    private static function inlineHtml(array $paragraph): string
+    private static function cleanChildren(array $parent, int $depth): array
     {
-        $html = '';
-        foreach (self::children($paragraph) as $inline) {
-            if (is_array($inline)) {
-                $html .= match ($inline['type'] ?? null) {
-                    'text' => htmlspecialchars(self::text($inline), ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5, 'UTF-8'),
-                    'hardBreak' => '<br>',
-                    default => '',
-                };
+        $children = $parent['content'] ?? null;
+        if (!is_array($children) || $depth >= self::MAX_DEPTH) {
+            return [];
+        }
+
+        $clean = [];
+        foreach ($children as $child) {
+            $node = is_array($child) ? self::cleanNode($child, $depth + 1) : null;
+            if ($node !== null) {
+                $clean[] = $node;
             }
         }
 
-        return $html;
-    }
-
-    /**
-     * @return array<mixed>
-     */
-    private static function decode(string $json): array
-    {
-        $document = json_decode($json, true);
-
-        return is_array($document) ? $document : [];
+        return $clean;
     }
 
     /**
      * @param array<mixed> $node
      *
-     * @return array<mixed>
+     * @return array<string, mixed>|null
      */
-    private static function children(array $node): array
+    private static function cleanNode(array $node, int $depth): ?array
     {
-        $content = $node['content'] ?? null;
+        $type = $node['type'] ?? null;
+        $attrs = is_array($node['attrs'] ?? null) ? $node['attrs'] : [];
 
-        return is_array($content) ? $content : [];
+        if ($type === 'text') {
+            return self::cleanText($node);
+        }
+        if ($type === 'hardBreak' || $type === 'horizontalRule') {
+            return ['type' => $type];
+        }
+        if (!is_string($type)) {
+            return null;
+        }
+
+        $clean = match (true) {
+            in_array($type, self::WRAPPERS, true) => ['type' => $type],
+            $type === 'heading' => in_array($attrs['level'] ?? null, [2, 3, 4], true)
+                ? ['type' => 'heading', 'attrs' => ['level' => $attrs['level']]]
+                : ['type' => 'paragraph'],
+            $type === 'orderedList' => self::withStart($attrs),
+            $type === 'codeBlock' => self::withLanguage($attrs),
+            $type === 'tableCell', $type === 'tableHeader' => self::withSpans($type, $attrs),
+            default => null,
+        };
+        if ($clean === null) {
+            return null;
+        }
+
+        $children = self::cleanChildren($node, $depth);
+
+        return $children === [] ? $clean : $clean + ['content' => $children];
     }
 
     /**
      * @param array<mixed> $node
+     *
+     * @return array<string, mixed>|null
      */
-    private static function text(array $node): string
+    private static function cleanText(array $node): ?array
     {
-        $text = $node['text'] ?? null;
+        $text = is_string($node['text'] ?? null) ? str_replace("\0", '', $node['text']) : '';
+        if ($text === '') {
+            return null; // ProseMirror refuses empty text nodes.
+        }
 
-        return is_string($text) ? $text : '';
+        $marks = [];
+        foreach (is_array($node['marks'] ?? null) ? $node['marks'] : [] as $mark) {
+            if (!is_array($mark)) {
+                continue;
+            }
+            $type = $mark['type'] ?? null;
+            if (is_string($type) && isset(self::SIMPLE_MARKS[$type])) {
+                $marks[] = ['type' => $type];
+            } elseif ($type === 'link' && is_array($mark['attrs'] ?? null) && is_string($mark['attrs']['href'] ?? null)) {
+                $href = self::safeHref($mark['attrs']['href']);
+                if ($href !== null) {
+                    $marks[] = ['type' => 'link', 'attrs' => ['href' => $href]];
+                }
+            }
+        }
+
+        return $marks === [] ? ['type' => 'text', 'text' => $text] : ['type' => 'text', 'text' => $text, 'marks' => $marks];
+    }
+
+    /**
+     * @param array<mixed> $attrs
+     *
+     * @return array<string, mixed>
+     */
+    private static function withStart(array $attrs): array
+    {
+        $start = $attrs['start'] ?? null;
+
+        return is_int($start) && $start > 1 && $start <= 1_000_000
+            ? ['type' => 'orderedList', 'attrs' => ['start' => $start]]
+            : ['type' => 'orderedList'];
+    }
+
+    /**
+     * @param array<mixed> $attrs
+     *
+     * @return array<string, mixed>
+     */
+    private static function withLanguage(array $attrs): array
+    {
+        $language = $attrs['language'] ?? null;
+
+        return is_string($language) && preg_match('/^[a-z0-9+#-]{1,30}$/D', $language) === 1
+            ? ['type' => 'codeBlock', 'attrs' => ['language' => $language]]
+            : ['type' => 'codeBlock'];
+    }
+
+    /**
+     * @param array<mixed> $attrs
+     *
+     * @return array<string, mixed>
+     */
+    private static function withSpans(string $type, array $attrs): array
+    {
+        $clean = [];
+        foreach (['colspan', 'rowspan'] as $name) {
+            $value = $attrs[$name] ?? null;
+            if (is_int($value) && $value > 1 && $value <= 100) {
+                $clean[$name] = $value;
+            }
+        }
+
+        return $clean === [] ? ['type' => $type] : ['type' => $type, 'attrs' => $clean];
+    }
+
+    /**
+     * Web and mail addresses and same-site paths. Everything else, such as
+     * "javascript:", loses its link and stays plain text.
+     */
+    private static function safeHref(string $href): ?string
+    {
+        if (preg_match('/[\x00-\x20\x7f\\\\]/', $href) === 1 || strlen($href) > 2048) {
+            return null;
+        }
+
+        return preg_match('#^(https?://|mailto:|/(?!/))#i', $href) === 1 ? $href : null;
+    }
+
+    /**
+     * @param list<array<string, mixed>> $nodes
+     */
+    private static function renderAll(array $nodes): string
+    {
+        return implode('', array_map(self::render(...), $nodes));
+    }
+
+    /**
+     * @param array<string, mixed> $node
+     */
+    private static function render(array $node): string
+    {
+        /** @var list<array<string, mixed>> $children */
+        $children = $node['content'] ?? [];
+        $inner = self::renderAll($children);
+        /** @var array<string, mixed> $attrs */
+        $attrs = $node['attrs'] ?? [];
+
+        return match ($node['type'] ?? null) {
+            'text' => self::renderText($node),
+            'hardBreak' => '<br>',
+            'horizontalRule' => "<hr>\n",
+            'paragraph' => "<p>$inner</p>\n",
+            'heading' => self::heading($attrs, $inner),
+            'bulletList' => "<ul>\n$inner</ul>\n",
+            'orderedList' => isset($attrs['start']) ? '<ol start="' . self::int($attrs['start']) . "\">\n$inner</ol>\n" : "<ol>\n$inner</ol>\n",
+            'listItem' => "<li>$inner</li>\n",
+            'blockquote' => "<blockquote>\n$inner</blockquote>\n",
+            'codeBlock' => self::codeBlock($attrs, $inner),
+            'table' => "<table><tbody>\n$inner</tbody></table>\n",
+            'tableRow' => "<tr>$inner</tr>\n",
+            'tableCell' => '<td' . self::spans($attrs) . ">$inner</td>",
+            'tableHeader' => '<th' . self::spans($attrs) . ">$inner</th>",
+            default => '',
+        };
+    }
+
+    /**
+     * @param array<string, mixed> $attrs
+     */
+    private static function heading(array $attrs, string $inner): string
+    {
+        $tag = 'h' . self::int($attrs['level'] ?? 2);
+
+        return "<$tag>$inner</$tag>\n";
+    }
+
+    /**
+     * @param array<string, mixed> $attrs
+     */
+    private static function codeBlock(array $attrs, string $inner): string
+    {
+        $language = $attrs['language'] ?? null;
+        $class = is_string($language) ? ' class="language-' . self::escape($language) . '"' : '';
+
+        return "<pre><code$class>$inner</code></pre>\n";
+    }
+
+    /**
+     * @param array<string, mixed> $attrs
+     */
+    private static function spans(array $attrs): string
+    {
+        $html = '';
+        foreach (['colspan', 'rowspan'] as $name) {
+            if (isset($attrs[$name])) {
+                $html .= " $name=\"" . self::int($attrs[$name]) . '"';
+            }
+        }
+
+        return $html;
+    }
+
+    /**
+     * @param array<string, mixed> $node
+     */
+    private static function renderText(array $node): string
+    {
+        $html = self::escape(is_string($node['text'] ?? null) ? $node['text'] : '');
+
+        /** @var list<array<string, mixed>> $marks */
+        $marks = $node['marks'] ?? [];
+        foreach ($marks as $mark) {
+            $type = $mark['type'] ?? null;
+            if (is_string($type) && isset(self::SIMPLE_MARKS[$type])) {
+                $tag = self::SIMPLE_MARKS[$type];
+                $html = "<$tag>$html</$tag>";
+            } elseif ($type === 'link') {
+                /** @var array{href: string} $attrs */
+                $attrs = $mark['attrs'];
+                $html = '<a href="' . self::escape($attrs['href']) . '" rel="noopener">' . $html . '</a>';
+            }
+        }
+
+        return $html;
+    }
+
+    private static function int(mixed $value): int
+    {
+        return is_int($value) ? $value : 1;
+    }
+
+    private static function escape(string $text): string
+    {
+        return htmlspecialchars($text, ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5, 'UTF-8');
     }
 }

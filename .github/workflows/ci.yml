@@ -51,8 +51,70 @@ jobs:
       - run: composer stan
       - run: composer test
 
-  release:
+  # A real browser against the real app, because neither the editor nor the passkey
+  # ceremony means anything until one has run them.
+  browser:
     needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: edict
+          POSTGRES_PASSWORD: edict
+          POSTGRES_DB: edict_e2e
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U edict"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      APP_ENV: dev
+      APP_URL: http://localhost:8080
+      DATABASE_URL: pgsql://edict:edict@127.0.0.1:5432/edict_e2e
+      E2E_ADMIN_PASSWORD: a throwaway password for ci
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: pdo_pgsql
+          coverage: none
+          tools: composer:v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - run: composer install --no-interaction --no-progress --prefer-dist
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+
+      - name: Create the database and the admin
+        env:
+          EDICT_ADMIN_PASSWORD: ${{ env.E2E_ADMIN_PASSWORD }}
+        run: |
+          php bin/edict migrate
+          key=$(php bin/edict admin:create owner --no-ansi | sed -n 's/^Manual entry key: //p')
+          test -n "$key"
+          echo "E2E_TOTP_KEY=$key" >>"$GITHUB_ENV"
+
+      - run: npm run test:e2e
+
+      - name: Keep the traces of failed tests
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: .scratch/playwright/
+          include-hidden-files: true
+          retention-days: 7
+
+  release:
+    needs: [check, browser]
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -74,6 +136,11 @@ jobs:
           extensions: pdo_pgsql
           coverage: none
           tools: composer:v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
 
       - name: Test the deploy script
         run: sh tests/deploy/deploy_test.sh

@@ -11,6 +11,9 @@ out=.scratch/release
 rm -rf "$out"
 mkdir -p "$out"
 
+npm ci --no-audit --no-fund
+npm run build
+
 composer install --no-dev --classmap-authoritative --no-interaction --no-progress --prefer-dist
 
 printf '%s\n' "$sha" >"$out/BUILD_SHA"

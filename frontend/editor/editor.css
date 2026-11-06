@@ -1,0 +1,193 @@
+/* The editor's own look. It is the writing surface, not the public theme (S9). */
+.editor-app {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    font-family: Georgia, serif;
+    background: #fff;
+    color: #1a1a1a;
+}
+
+.editor-bar {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid #ddd;
+    background: #fff;
+    font: 0.9rem system-ui, sans-serif;
+}
+
+.editor-bar-end {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    margin-left: auto;
+}
+
+#save-status {
+    color: #555;
+}
+
+.editor-banner {
+    margin: 0;
+    padding: 0.5rem 1rem;
+    background: #fff4d6;
+    font: 0.9rem system-ui, sans-serif;
+}
+
+.editor-page {
+    flex: 1;
+    width: 100%;
+    max-width: 42rem;
+    margin: 0 auto;
+    padding: 2rem 1rem;
+    box-sizing: border-box;
+}
+
+.editor-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+}
+
+.editor-title,
+.editor-teaser {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    border: 0;
+    padding: 0;
+    outline: none;
+    font-family: inherit;
+    resize: vertical;
+}
+
+.editor-title {
+    font-size: 2.2rem;
+    font-weight: bold;
+}
+
+.editor-teaser {
+    margin: 0.75rem 0 1.5rem;
+    font-size: 1.1rem;
+    font-style: italic;
+}
+
+.editor-body .ProseMirror {
+    min-height: 50vh;
+    outline: none;
+    font-size: 1.1rem;
+    line-height: 1.7;
+}
+
+.editor-body .ProseMirror p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    color: #999;
+    pointer-events: none;
+}
+
+.editor-body blockquote {
+    margin-left: 0;
+    padding-left: 1rem;
+    border-left: 3px solid #ccc;
+}
+
+.editor-body pre {
+    padding: 0.75rem;
+    overflow-x: auto;
+    background: #f4f4f4;
+}
+
+.editor-body table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.editor-body td,
+.editor-body th {
+    border: 1px solid #ccc;
+    padding: 0.25rem 0.5rem;
+    vertical-align: top;
+}
+
+.editor-body .selectedCell {
+    background: #e8f0fe;
+}
+
+.bubble-menu,
+.table-tools,
+.slash-menu {
+    display: flex;
+    gap: 0.125rem;
+    padding: 0.25rem;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    background: #fff;
+    box-shadow: 0 2px 8px rgb(0 0 0 / 15%);
+    font: 0.85rem system-ui, sans-serif;
+}
+
+.table-tools {
+    flex-wrap: wrap;
+    margin-bottom: 0.5rem;
+}
+
+.table-tools[hidden],
+.slash-menu[hidden] {
+    display: none;
+}
+
+.slash-menu {
+    position: absolute;
+    z-index: 10;
+    flex-direction: column;
+    min-width: 11rem;
+}
+
+.slash-menu button {
+    border: 0;
+    padding: 0.35rem 0.5rem;
+    background: none;
+    text-align: left;
+    cursor: pointer;
+}
+
+.slash-menu button[aria-selected='true'] {
+    background: #e8f0fe;
+}
+
+.editor-details {
+    width: 100%;
+    max-width: 42rem;
+    margin: 0 auto;
+    padding: 1rem;
+    box-sizing: border-box;
+    border-top: 1px solid #ddd;
+    font: 0.9rem system-ui, sans-serif;
+}
+
+.editor-details label {
+    display: block;
+    font-weight: 600;
+}
+
+.editor-details input,
+.editor-details select {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.25rem;
+}
+
+.editor-details form {
+    display: inline-block;
+    margin-right: 0.5rem;
+}

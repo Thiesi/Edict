@@ -1,0 +1,96 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}{{ article.workingTitle }} · Edict{% endblock %}
+
+{% block head %}<link rel="stylesheet" href="/assets/build/editor.css?v={{ asset_version }}">{% endblock %}
+
+{% block body %}
+    <div id="editor-app" class="editor-app" data-state="{{ state|json_encode }}">
+        <header class="editor-bar">
+            <a href="/admin/articles?kind={{ article.kind }}">Back</a>
+            <span id="save-status" role="status">Up to date</span>
+            <span class="editor-bar-end">
+                <button type="button" id="fullscreen">Full screen</button>
+                <a id="preview" href="/admin/articles/{{ article.id }}/preview" target="_blank" rel="noopener">Preview</a>
+                {% if article.isPublished and not article.deletedAt %}<a href="/{{ article.slug }}" target="_blank" rel="noopener">View</a>{% endif %}
+                {% if not article.deletedAt %}
+                    <button type="button" id="publish">{{ article.isPublished ? 'Update' : 'Publish' }}</button>
+                {% endif %}
+            </span>
+        </header>
+
+        <p id="restore-banner" class="editor-banner" role="alert" hidden>
+            Text from an earlier session was never saved.
+            <button type="button" id="restore-yes">Restore it</button>
+            <button type="button" id="restore-no">Discard it</button>
+        </p>
+        <p id="editor-errors" class="editor-banner" role="alert" hidden></p>
+        {% if article.deletedAt %}<p class="editor-banner">This is in the trash. Restore it from the list to publish it.</p>{% endif %}
+
+        <main class="editor-page" lang="{{ input.lang in ['de', 'en'] ? input.lang : 'en' }}">
+            <label class="editor-label" for="title">Title</label>
+            <input id="title" class="editor-title" value="{{ input.title }}" placeholder="Title" autocomplete="off">
+            <label class="editor-label" for="teaser">Teaser</label>
+            <textarea id="teaser" class="editor-teaser" rows="2" placeholder="Teaser (optional)">{{ input.teaser }}</textarea>
+
+            <div id="bubble-menu" class="bubble-menu" role="toolbar" aria-label="Text formatting">
+                <button type="button" data-command="bold"><strong>B</strong></button>
+                <button type="button" data-command="italic"><em>I</em></button>
+                <button type="button" data-command="strike"><s>S</s></button>
+                <button type="button" data-command="code">Code</button>
+                <button type="button" data-command="link">Link</button>
+                <button type="button" data-command="h2">H2</button>
+                <button type="button" data-command="h3">H3</button>
+                <button type="button" data-command="quote">Quote</button>
+            </div>
+            <div id="table-tools" class="table-tools" role="toolbar" aria-label="Table" hidden>
+                <button type="button" data-table="addRowAfter">Add row</button>
+                <button type="button" data-table="addColumnAfter">Add column</button>
+                <button type="button" data-table="deleteRow">Delete row</button>
+                <button type="button" data-table="deleteColumn">Delete column</button>
+                <button type="button" data-table="toggleHeaderRow">Header row</button>
+                <button type="button" data-table="deleteTable">Delete table</button>
+            </div>
+            <div id="body" class="editor-body"></div>
+        </main>
+
+        <details class="editor-details">
+            <summary>Details</summary>
+            <p>
+                <label for="slug">Address</label>
+                <input id="slug" value="{{ input.slug }}" maxlength="120" placeholder="{{ article.publishedAt ? article.slug : 'Derived from the title' }}" aria-describedby="slug-help" autocomplete="off">
+                <small id="slug-help">Changing the address of a published article redirects the old one.</small>
+            </p>
+            <p>
+                <label for="lang">Language</label>
+                <select id="lang">
+                    <option value="de"{% if input.lang == 'de' %} selected{% endif %}>German</option>
+                    <option value="en"{% if input.lang == 'en' %} selected{% endif %}>English</option>
+                </select>
+            </p>
+            {% if article.kind == 'article' %}
+                <p>
+                    <label for="tags">Tags</label>
+                    <input id="tags" value="{{ input.tags }}" aria-describedby="tags-help" autocomplete="off">
+                    <small id="tags-help">Separated by commas.</small>
+                </p>
+            {% endif %}
+            <p>
+                Status: <strong>{{ article.status }}</strong>{% if article.hasPendingChanges %}, with changes readers don't see yet{% endif %}.
+            </p>
+            {% if not article.deletedAt %}
+                {% if article.isPublished %}
+                    <form method="post" action="/admin/articles/{{ article.id }}/unpublish">
+                        <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                        <button type="submit">Unpublish</button>
+                    </form>
+                {% endif %}
+                <form method="post" action="/admin/articles/{{ article.id }}/trash">
+                    <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                    <button type="submit">Move to trash</button>
+                </form>
+            {% endif %}
+        </details>
+        <script type="module" src="/assets/build/editor.js?v={{ asset_version }}"></script>
+    </div>
+{% endblock %}

@@ -80,7 +80,7 @@ Browser ──HTTPS──▶ Apache (macro vhost, TLS via acme.sh)
 **Articles**
 - Fields: title, slug (auto-generated, editable), language (`de`/`en`, defaulting to the last one used), teaser, cover image, body, tags, status (draft / published / unpublished).
 - Each article's language sets the page's `lang` attribute, hyphenation, quote style and date format inside the article. The interface around it stays English. Overview pages show a small DE/EN marker.
-- **Autosave** every few seconds, plus a warning before closing the page with unsaved changes. Losing text is unacceptable.
+- **Autosave** every few seconds to a separate draft, so half-finished edits of a published article stay private until you press Update. A warning appears before closing the page with unsaved changes. Text that can't reach the server is kept in the browser and offered again. Losing text is unacceptable.
 - Previews render a draft exactly as the public will see it.
 - Static pages (About, Imprint/Impressum, Privacy) use the same editor but are not listed as articles.
 - Hard delete with confirmation, and a 30-day trash before that.
@@ -190,7 +190,7 @@ Every limit fails loudly, before anything is written.
 
 ## 6. Data model (first cut)
 
-`app_user` (display_name, is_admin, banned_until, deleted_at) · `user_identity` (user_id, provider, provider_user_id, unique on provider + ID) · `admin_credential` (password hash, TOTP secret, last TOTP step) · `passkey` · `session` (token hash, user_id, csrf_token, expires_at) · `article` (status, slug, lang, title, teaser, body_json, published_at, deleted_at; cover_media_id, comments_mode and vote_adjustment arrive with their slices) · `article_revision` · `slug_redirect` · `tag` / `article_tag` · `media` (sha256, mime, bytes, original_name, meta_json) · `media_variant` (media_id, preset, path, bytes) · `article_media` · `job` (type, payload, state, attempts, run_after) · `vote` (article_id, user_id, created_at, unique on both) · `comment` (article_id, user_id, parent_id, path, depth, body, state, created_at) · `ban` · `setting`.
+`app_user` (display_name, is_admin, banned_until, deleted_at) · `user_identity` (user_id, provider, provider_user_id, unique on provider + ID) · `admin_credential` (password hash, TOTP secret, last TOTP step) · `passkey` · `session` (token hash, user_id, csrf_token, expires_at) · `article` (kind, status, slug, lang, title, teaser, body_json, draft, draft_version, published_at, deleted_at; cover_media_id, comments_mode and vote_adjustment arrive with their slices) · `article_revision` · `slug_redirect` · `tag` / `article_tag` · `media` (sha256, mime, bytes, original_name, meta_json) · `media_variant` (media_id, preset, path, bytes) · `article_media` · `job` (type, payload, state, attempts, run_after) · `vote` (article_id, user_id, created_at, unique on both) · `comment` (article_id, user_id, parent_id, path, depth, body, state, created_at) · `ban` · `setting`.
 
 ✅ Comments are fully nested. `path` is a materialised path (e.g. `0007.0012.0003`), so a whole thread loads with a single ordered query, and removing a subtree is a single `DELETE … WHERE path LIKE`.
 
