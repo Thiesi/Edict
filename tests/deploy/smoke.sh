@@ -55,6 +55,7 @@ done
 
 grep -q '"status":"ok"' "$work/health.json" || fail "unhealthy: $(cat "$work/health.json")"
 grep -q '"database":"ok"' "$work/health.json" || fail "no database: $(cat "$work/health.json")"
+grep -q '"templates":"ok"' "$work/health.json" || fail "templates: $(cat "$work/health.json")"
 grep -q '"release":"smoke-release"' "$work/health.json" || fail "wrong release: $(cat "$work/health.json")"
 
 curl -fs "$url/" | grep -q 'Hello, Edict' || fail "home page"

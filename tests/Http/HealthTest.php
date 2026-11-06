@@ -4,7 +4,13 @@ declare(strict_types=1);
 
 namespace Edict\Tests\Http;
 
+use Edict\Config;
+use Edict\Http\HealthAction;
 use PHPUnit\Framework\Attributes\Group;
+use Slim\Psr7\Factory\ResponseFactory;
+use Slim\Psr7\Factory\ServerRequestFactory;
+use Twig\Environment;
+use Twig\Loader\ArrayLoader;
 
 final class HealthTest extends AppTestCase
 {
@@ -15,7 +21,7 @@ final class HealthTest extends AppTestCase
         self::assertSame(200, $response->getStatusCode());
         self::assertSame('no-store', $response->getHeaderLine('Cache-Control'));
         self::assertSame(
-            ['status' => 'ok', 'release' => 'unreleased', 'checks' => ['app' => 'ok', 'database' => 'not configured']],
+            ['status' => 'ok', 'release' => 'unreleased', 'checks' => ['app' => 'ok', 'database' => 'not configured', 'templates' => 'ok']],
             json_decode((string) $response->getBody(), true),
         );
     }
@@ -29,6 +35,20 @@ final class HealthTest extends AppTestCase
         self::assertSame(503, $response->getStatusCode());
         self::assertStringContainsString('"database":"unavailable"', $body);
         self::assertStringNotContainsString('secret', $body);
+    }
+
+    public function testDegradedWhenTemplatesFail(): void
+    {
+        $config = Config::fromEnvironment('/x', ['APP_ENV' => 'test']);
+        $action = new HealthAction($config, new Environment(new ArrayLoader()));
+
+        $response = $action(
+            (new ServerRequestFactory())->createServerRequest('GET', '/healthz'),
+            (new ResponseFactory())->createResponse(),
+        );
+
+        self::assertSame(503, $response->getStatusCode());
+        self::assertStringContainsString('"templates":"unavailable"', (string) $response->getBody());
     }
 
     #[Group('db')]

@@ -47,6 +47,7 @@ Facts below were confirmed by Ops on 2026-11-06.
 | Deploy user | `edictstg-deploy`, `/bin/sh`, member of group `edictstg`. Owns the code, so a compromised worker can't rewrite it |
 | Deploy key | `command="/usr/local/sbin/edict-deploy staging ssh",no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding` in `/usr/pkg/etc/ssh/authorized_keys/edictstg-deploy`. The public key comes from the owner |
 | Script | `deploy/edict-deploy` installed root-owned as `/usr/local/sbin/edict-deploy`. It changes only through Ops |
+| PHP extensions | `mbstring`, `openssl`, `pdo`, `pdo_pgsql` and `iconv`, for both the CLI and the pool |
 | Settings | `/usr/local/etc/edict-deploy.staging.conf`, root-owned |
 | Database | Role `edictstg` owning database `edictstg`, reachable from the pool and the deploy user. It runs its own migrations |
 
@@ -55,18 +56,20 @@ Facts below were confirmed by Ops on 2026-11-06.
 ```sh
 BASE=/usr/local/share/edict-staging
 HEALTH_URL=https://staging.edict.networkxxiii.de/healthz
+PHP=/usr/pkg/bin/php
+export OPENSSL_CONF=/etc/openssl/openssl.cnf
 ```
 
-Optional settings with their defaults: `HEALTH_TIMEOUT=60` (seconds), `KEEP_RELEASES=5`, `MAX_BYTES=268435456`, `PHP=php`.
+Optional settings with their defaults: `HEALTH_TIMEOUT=60` (seconds), `KEEP_RELEASES=5`, `MAX_BYTES=268435456`, `MAX_ENTRIES=50000`. The CLI and the pool must run the same PHP minor version, or `/healthz` reports `"templates":"unavailable"` and the deploy flips back.
 
 Directories:
 
 | Path | Owner:group | Mode | Notes |
 |---|---|---|---|
-| `/usr/local/share/edict-staging` | `edictstg-deploy:edictstg` | 0750 | The lock, upload and `current` link live here |
-| `.../releases` | `edictstg-deploy:edictstg` | 0750 | New files inherit the group on BSD. The script's umask is 027 |
-| `.../shared` | `root:edictstg` | 0750 | |
-| `.../shared/.env` | `root:edictstg` | 0640 | Read by the pool and the deploy user |
+| `/usr/local/share/edict-staging` | `edictstg-deploy:edictstg` | 0755 | The lock, upload and `current` link live here. Apache must be able to traverse it |
+| `.../releases` | `edictstg-deploy:edictstg` | 0755 | The script's umask is 022: code is world-readable, so Apache can serve static files with no group changes |
+| `.../shared` | `root:edictstg` | 0750 | Apache has no access |
+| `.../shared/.env` | `root:edictstg` | 0640 | The only secret. Read by the pool and the deploy user. Not under `/home`, so Borg needs an explicit entry or a deliberate decision to skip it |
 
 Pool settings:
 
@@ -94,6 +97,20 @@ TWITCH_OIDC_CLIENT_SECRET=
 Secrets are put in place directly on the host, never through chats or commits. A provider with empty values just isn't offered, so the provider values can follow later. Changing `APP_SECRET` makes stored authenticator secrets unreadable, so run `admin:reset` afterwards.
 
 The OAuth redirect URLs to register are `https://staging.edict.networkxxiii.de/auth/{google,twitch}/callback`.
+
+**The deploy key is a code-execution credential.** Each tarball's PHP runs as the deploy user, who can read `.env`, so holding the key means access to the staging secrets. Keep one key per instance and keep it off CI unless the owner decides otherwise.
+
+If a machine dies mid-deploy, the lock stays and the forced-command key can't clear it. Ops removes it with `rmdir /usr/local/share/edict-staging/.deploy.lock`, after checking that no deploy is running.
+
+## Checks only Roanoke can answer
+
+Ops runs these before the first deploy, because CI runs on Linux:
+
+1. `sh -c 'trap "echo BAD" EXIT; (:) | cat; x=$(:); exit 0' 2>&1` prints `BAD` exactly once. If it's more, `/bin/sh` runs EXIT traps in subshells, and the script's cleanup needs a guard.
+2. `/bin/tar` can extract a ustar archive holding paths over 100 characters, keeping the full names. The CI bundle is one.
+3. `sshd` lets the new deploy user log in (`AllowUsers`/`AllowGroups`), and that user gets `php` at the configured path.
+4. As the deploy user, an HTTPS request to `HEALTH_URL` verifies its certificate, with the settings file's `OPENSSL_CONF`.
+5. In the pool, not just the CLI: an HTTPS request to `https://oauth2.googleapis.com/token` verifies its certificate. Login needs this, and `/healthz` doesn't cover it.
 
 ## Admin account
 

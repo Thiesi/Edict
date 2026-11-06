@@ -14,7 +14,8 @@ mkdir -p "$out"
 composer install --no-dev --classmap-authoritative --no-interaction --no-progress --prefer-dist
 
 printf '%s\n' "$sha" >"$out/BUILD_SHA"
-tar -czf "$out/edict-$sha.tar.gz" \
+# ustar: every tar reads it, unlike GNU long-name entries. A path that does not fit fails here.
+tar --format=ustar -czf "$out/edict-$sha.tar.gz" \
     -C "$out" BUILD_SHA \
     -C "$PWD" bin/edict composer.json config migrations public src templates vendor
 rm "$out/BUILD_SHA"

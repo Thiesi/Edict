@@ -20,15 +20,17 @@
 # Rollback restores code only. Migrations stay applied, so they must remain
 # compatible with the previous release.
 set -eu
-umask 027
+# Code is world-readable: Apache serves static files itself. Secrets live only in
+# shared/.env, which this script never creates.
+umask 022
 
 die() {
-    echo "edict-deploy: $*" >&2
+    echo "edict-deploy: $*" >&2 || true
     exit 1
 }
 
 say() {
-    echo "edict-deploy: $*"
+    echo "edict-deploy: $*" || true
 }
 
 usage() {
@@ -51,6 +53,7 @@ HEALTH_URL=
 HEALTH_TIMEOUT=60
 KEEP_RELEASES=5
 MAX_BYTES=268435456
+MAX_ENTRIES=50000
 PHP=php
 
 conf=${EDICT_DEPLOY_CONF:-/usr/local/etc/edict-deploy.$env_name.conf}
@@ -68,13 +71,32 @@ lock=$BASE/.deploy.lock
 incoming=
 upload=
 locked=
+discard=
+unverified=
+restore=
+
+# Puts back what was live before the flip. With nothing before it, nothing is live.
+revert() {
+    unverified=
+    if [ -n "$restore" ]; then
+        flip_to "$restore"
+    else
+        rm -f "$link"
+    fi
+}
+
 cleanup() {
+    [ -z "$unverified" ] || revert
+    [ -z "$discard" ] || rm -rf "$discard"
     [ -z "$incoming" ] || rm -rf "$incoming"
     [ -z "$upload" ] || rm -f "$upload"
     [ -z "$locked" ] || rmdir "$lock"
 }
 trap cleanup EXIT
-trap 'exit 1' HUP INT TERM
+# A dropped SSH connection must not stop a deploy halfway: it runs on until the
+# release is verified or flipped back. An explicit stop reverts through cleanup.
+trap '' HUP PIPE
+trap 'exit 1' INT TERM
 
 take_lock() {
     mkdir "$lock" 2>/dev/null || die "another deploy is running (or crashed: rmdir $lock)"
@@ -97,17 +119,27 @@ flip_to() {
 
 # True once the site answers healthy and reports exactly this release. Workers
 # keep the old path until their realpath cache expires, so this gets polled.
+# Prints what it got on stderr when it isn't.
 healthy_release() {
     "$PHP" -r '
         $context = stream_context_create(["http" => ["timeout" => 5, "ignore_errors" => true, "follow_location" => 0]]);
-        $health = json_decode((string) @file_get_contents($argv[1], false, $context), true);
-        exit(is_array($health) && ($health["status"] ?? "") === "ok" && ($health["release"] ?? "") === $argv[2] ? 0 : 1);
+        $body = @file_get_contents($argv[1], false, $context);
+        if ($body === false) {
+            fwrite(STDERR, "healthcheck: " . (error_get_last()["message"] ?? "no response") . "\n");
+            exit(1);
+        }
+        $health = json_decode($body, true);
+        if (is_array($health) && ($health["status"] ?? "") === "ok" && ($health["release"] ?? "") === $argv[2]) {
+            exit(0);
+        }
+        fwrite(STDERR, "healthcheck: " . substr($body, 0, 300) . "\n");
+        exit(1);
     ' -- "$HEALTH_URL" "$1"
 }
 
 wait_for_health() {
     waited=0
-    while ! healthy_release "$1"; do
+    while ! healthy_release "$1" 2>/dev/null; do
         [ "$waited" -lt "$HEALTH_TIMEOUT" ] || return 1
         sleep 2
         waited=$((waited + 2))
@@ -115,6 +147,10 @@ wait_for_health() {
 }
 
 is_release_name() {
+    # grep matches line by line, so anything with a newline must be refused first.
+    case $1 in
+    *[!0-9a-f-]*) return 1 ;;
+    esac
     printf '%s\n' "$1" | grep -Eq '^[0-9]{14}-[0-9a-f]{12}$'
 }
 
@@ -148,7 +184,7 @@ deploy() {
     take_lock
 
     # Left behind if the machine died mid-deploy.
-    rm -rf "$releases"/.incoming-*
+    rm -rf "$releases"/.incoming-* "$BASE"/.upload-*
 
     if [ "$tarball" = - ]; then
         # Kept next to the releases: /tmp is a small RAM disk on this host.
@@ -163,6 +199,7 @@ deploy() {
     if printf '%s\n' "$entries" | grep -Eq '^/|(^|/)\.\.(/|$)'; then
         die "the tarball contains unsafe paths"
     fi
+    [ "$(printf '%s\n' "$entries" | wc -l)" -le "$MAX_ENTRIES" ] || die "the tarball has more than $MAX_ENTRIES entries"
 
     incoming=$releases/.incoming-$$
     mkdir "$incoming"
@@ -185,30 +222,26 @@ deploy() {
 
     mv "$incoming" "$releases/$name"
     incoming=
-    new=$releases/$name
+    discard=$releases/$name
 
-    if ! "$PHP" "$new/bin/edict" migrate; then
-        rm -rf "$new"
-        die "migrations failed; current is untouched, but check the database"
-    fi
+    "$PHP" "$discard/bin/edict" migrate || die "migrations failed; current is untouched, but check the database"
 
-    previous=$(current_release)
+    restore=$(current_release)
+    unverified=1
     flip_to "$name"
 
     if wait_for_health "$name"; then
+        unverified=
+        discard=
         say "$name is live"
         prune
         return 0
     fi
 
+    healthy_release "$name" || true
     say "healthcheck failed for $name, flipping back"
-    if [ -n "$previous" ]; then
-        flip_to "$previous"
-    else
-        rm -f "$link"
-    fi
-    rm -rf "$new"
-    die "deploy failed; ${previous:-nothing} is live. Migrations of $name stay applied"
+    revert
+    die "deploy failed; ${restore:-nothing} is live. Migrations of $name stay applied"
 }
 
 rollback() {
@@ -226,16 +259,20 @@ rollback() {
     is_release_name "$target" && [ -d "$releases/$target" ] || die "no release named $target"
     [ "$target" != "$active" ] || die "$target is already live"
 
+    restore=$active
+    unverified=1
     flip_to "$target"
 
     if wait_for_health "$target"; then
+        unverified=
         say "rolled back to $target. Migrations are not reverted"
         return 0
     fi
 
+    healthy_release "$target" || true
     say "healthcheck failed for $target, flipping back"
-    flip_to "$active"
-    die "rollback failed; $active is live"
+    revert
+    die "rollback failed; ${restore:-nothing} is live"
 }
 
 show_releases() {

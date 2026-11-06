@@ -113,6 +113,21 @@ for mode in boot migrate unhealthy stale; do
     check "$mode: lock released" "$(test -e "$EDICT_BASE/.deploy.lock" && echo held || echo free)" free
 done
 
+echo '--- stopping or losing the connection during the health check'
+for signal in TERM HUP; do
+    next_second
+    tarball=$(build 16 unhealthy)
+    before=$(count)
+    (exec sh "$script" staging deploy "$tarball" >/dev/null 2>&1) &
+    pid=$!
+    sleep 1
+    kill "-$signal" "$pid"
+    wait "$pid" || true
+    check "$signal: live release unchanged" "$(live)" "$second"
+    check "$signal: no leftovers" "$(count)" "$before"
+    check "$signal: lock released" "$(test -e "$EDICT_BASE/.deploy.lock" && echo held || echo free)" free
+done
+
 echo '--- a failed first deploy leaves no current link'
 rm -rf "$EDICT_BASE/current" "$EDICT_BASE/releases"/*
 if deploy deploy "$(build 20 unhealthy)" 2>/dev/null; then r=succeeded; else r=failed; fi
@@ -176,6 +191,17 @@ check 'an oversized file is refused' "$r" refused
 if deploy deploy - <"$work/huge.tar.gz" 2>/dev/null; then r=succeeded; else r=refused; fi
 check 'an oversized upload is refused' "$r" refused
 check 'still live after unsafe tarballs' "$(live)" "$before_ssh"
+
+mkdir -p "$work/multiline"
+tar -xzf "$(build 50)" -C "$work/multiline"
+printf 'aaaaaaaaaaaa\n../../evil\n' >"$work/multiline/BUILD_SHA"
+tar -czf "$work/multiline.tar.gz" -C "$work/multiline" .
+if deploy deploy "$work/multiline.tar.gz" 2>/dev/null; then r=succeeded; else r=refused; fi
+check 'a multi-line revision is refused' "$r" refused
+sed 's/^MAX_BYTES=.*/MAX_ENTRIES=1/' "$EDICT_DEPLOY_CONF" >"$work/few.conf"
+if EDICT_DEPLOY_CONF=$work/few.conf deploy deploy "$(build 51)" 2>/dev/null; then r=succeeded; else r=refused; fi
+check 'too many entries are refused' "$r" refused
+check 'still live after all of them' "$(live)" "$before_ssh"
 
 echo '--- bad arguments'
 if sh "$script" prod releases 2>/dev/null; then r=succeeded; else r=refused; fi
