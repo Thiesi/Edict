@@ -155,6 +155,7 @@ next_second
 before_ssh=$(live)
 SSH_ORIGINAL_COMMAND=deploy sh "$script" staging ssh <"$(build 42)"
 check 'ssh deploy' "$(test "$(live)" != "$before_ssh" && echo yes)" yes
+check 'ssh deploy prunes' "$(count)" 3
 SSH_ORIGINAL_COMMAND=rollback sh "$script" staging ssh
 check 'ssh rollback' "$(live)" "$before_ssh"
 check 'ssh releases' "$(SSH_ORIGINAL_COMMAND=releases sh "$script" staging ssh | grep -c '(live)')" 1

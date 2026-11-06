@@ -254,6 +254,7 @@ from_ssh() {
     set -f
     # shellcheck disable=SC2086
     set -- ${SSH_ORIGINAL_COMMAND:-}
+    set +f # Only for the split above: the actions below need globbing.
     case ${1:-} in
     deploy)
         [ $# -eq 1 ] || die "deploy takes the tarball on stdin"
