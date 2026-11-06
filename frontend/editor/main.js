@@ -47,7 +47,7 @@ const editor = new Editor({
         BubbleMenu.configure({ element: field('bubble-menu') }),
         SlashCommands,
     ],
-    onUpdate: () => changed(),
+    onUpdate: () => bodyUpdated(),
     onSelectionUpdate: () => {
         field('table-tools').hidden = !editor.isActive('table');
     },
@@ -93,6 +93,18 @@ const schedule = (delay) => {
     clearTimeout(timer);
     timer = setTimeout(save, delay);
 };
+
+// TipTap normalises a document as soon as the cursor is placed (a trailing paragraph,
+// say). That isn't an edit: only content differing from what was last seen counts.
+let lastBody = null;
+
+function bodyUpdated() {
+    const body = JSON.stringify(editor.getJSON());
+    if (lastBody !== null && body !== lastBody) {
+        lastBody = body;
+        changed();
+    }
+}
 
 function changed() {
     dirty = true;
@@ -320,3 +332,4 @@ field('publish')?.addEventListener('click', async () => {
 });
 
 editor.commands.focus('end');
+lastBody = JSON.stringify(editor.getJSON());

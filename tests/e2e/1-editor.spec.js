@@ -104,6 +104,27 @@ test('the toolbar formats a selection', async ({ page }) => {
     await expect(page.locator('.ProseMirror em')).toHaveText('Format me');
 });
 
+test('opening an article changes nothing', async ({ page, request }) => {
+    await newItem(page);
+    await page.getByLabel('Title').fill('Just looking');
+    await page.locator('.ProseMirror').click();
+    await page.keyboard.type('## Ends in a heading');
+    await saved(page);
+
+    let saves = 0;
+    page.on('request', (sent) => {
+        if (sent.url().endsWith('/autosave')) {
+            saves += 1;
+        }
+    });
+    await page.reload();
+    await page.locator('.ProseMirror').click();
+    await page.waitForTimeout(4000);
+
+    expect(saves).toBe(0);
+    await expect(page.locator('#save-status')).toHaveText('Up to date');
+});
+
 test('warns before leaving with unsaved text', async ({ page }) => {
     await newItem(page);
     const prevented = () => page.evaluate(() => {
