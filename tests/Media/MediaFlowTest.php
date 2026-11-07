@@ -887,6 +887,43 @@ final class MediaFlowTest extends DbTestCase
         self::assertSame([360, 640], [$media['width'], $media['height']]);
     }
 
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function hdrTransfers(): iterable
+    {
+        yield 'HLG, from iPhones' => ['arib-std-b67'];
+        yield 'PQ, or HDR10' => ['smpte2084'];
+    }
+
+    #[DataProvider('hdrTransfers')]
+    public function testHdrVideoBecomesOrdinaryVideo(string $transfer): void
+    {
+        $this->requireFfmpeg();
+        $this->requireTools();
+        $bytes = $this->ffmpegMakes('hdr.mp4', [
+            '-f', 'lavfi', '-i', 'color=c=0x808080:size=320x240:rate=10:duration=1',
+            '-c:v', 'libx265', '-preset', 'ultrafast', '-x265-params', 'log-level=error', '-pix_fmt', 'yuv420p10le',
+            '-color_primaries', 'bt2020', '-color_trc', $transfer, '-colorspace', 'bt2020nc',
+        ]);
+
+        $media = $this->processedUpload('hdr.mp4', $bytes);
+
+        self::assertSame('ready', $media['status'], (string) json_encode($media['error']));
+        $found = $this->probed($this->variant($media, 'h264'));
+        self::assertIsArray($found['streams']);
+        self::assertIsArray($found['streams'][0]);
+        self::assertSame('h264', $found['streams'][0]['codec_name']);
+        self::assertSame('yuv420p', $found['streams'][0]['pix_fmt']);
+        self::assertSame('bt709', $found['streams'][0]['color_transfer']);
+        self::assertSame('bt709', $found['streams'][0]['color_primaries']);
+
+        // A grey signal stays about the same grey: the conversion didn't crush or wash it out.
+        $poster = $this->variant($media, 'poster');
+        self::assertIsString($poster['path']);
+        self::assertEqualsWithDelta(128.0, (float) shell_exec('vips avg ' . escapeshellarg($poster['path']) . ' 2>&1'), 25.0);
+    }
+
     public function testAVideoWithoutSoundIsFine(): void
     {
         $this->requireFfmpeg();

@@ -32,6 +32,16 @@ final readonly class AvProcessor
     private const SCALE = "scale=w='min(iw,if(gt(iw,ih),1920,1080))':h='min(ih,if(gt(iw,ih),1080,1920))'"
         . ':force_original_aspect_ratio=decrease:force_divisible_by=2';
 
+    /**
+     * HDR footage, the default on recent phones, must become ordinary video, or it looks
+     * washed out. Proper tone mapping needs zscale, which the host's ffmpeg lacks. HLG,
+     * what iPhones record, is designed to look right when treated as ordinary BT.2020,
+     * so this suits it. PQ (HDR10) comes out darker and flatter than it should.
+     */
+    private const HDR_TO_SDR = ',colorspace=iall=bt2020:all=bt709:format=yuv420p';
+    private const HDR_TRANSFERS = ['arib-std-b67', 'smpte2084'];
+    private const SDR_TAGS = ['-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709'];
+
     private const AUDIO_BITRATE = '192k';
     private const VIDEO_AUDIO_BITRATE = '160k';
     private const VIDEO_MAX_BITRATE = '8M';
@@ -47,7 +57,7 @@ final readonly class AvProcessor
 
     private const MAX_AUDIO_BYTES = 500_000_000;
 
-    /** The host has other sites on it, and this runs for hours. */
+    /** The host has other sites on it, and this runs for hours. In practice it takes up to 6 cores. */
     private const THREADS = '4';
     private const PROBE_SECONDS = 120;
     private const TRANSCODE_SECONDS = 6 * 3600;
@@ -110,7 +120,7 @@ final readonly class AvProcessor
     }
 
     /**
-     * @param array{video: bool, audio: int|null, seconds: float, width: int, height: int} $probe
+     * @param array{video: bool, audio: int|null, seconds: float, width: int, height: int, hdr: bool} $probe
      *
      * @return array{variants: list<array{preset: string, format: string, width: int, height: int, bytes: int, file: string}>, width: int, height: int, meta: array<string, mixed>}
      */
@@ -122,7 +132,8 @@ final readonly class AvProcessor
             ...$this->reading($demuxer, $source),
             '-map', '0:V:0', ...($probe['audio'] === null ? [] : ['-map', '0:' . $probe['audio']]),
             '-map_metadata', '-1', '-map_chapters', '-1', '-sn', '-dn',
-            '-vf', self::SCALE,
+            '-vf', self::SCALE . ($probe['hdr'] ? self::HDR_TO_SDR : ''),
+            ...($probe['hdr'] ? self::SDR_TAGS : []),
             '-c:v', 'libx264', '-preset', 'faster', '-crf', '23', '-maxrate', self::VIDEO_MAX_BITRATE, '-bufsize', self::VIDEO_BUFFER,
             '-pix_fmt', 'yuv420p',
             '-c:a', 'aac', '-b:a', self::VIDEO_AUDIO_BITRATE, '-ac', '2',
@@ -284,13 +295,13 @@ final readonly class AvProcessor
     }
 
     /**
-     * @return array{video: bool, audio: int|null, seconds: float, width: int, height: int} audio is the stream to use
+     * @return array{video: bool, audio: int|null, seconds: float, width: int, height: int, hdr: bool} audio is the stream to use
      */
     private function probe(string $file, string $demuxer, string $dir): array
     {
         $output = Command::run([
             $this->config->ffprobeBin, '-v', 'error', '-protocol_whitelist', 'file', '-f', $demuxer,
-            '-show_entries', 'format=duration:stream=index,codec_type,codec_name,width,height:stream_disposition=attached_pic',
+            '-show_entries', 'format=duration:stream=index,codec_type,codec_name,width,height,color_transfer:stream_disposition=attached_pic',
             '-of', 'json', $file,
         ], self::PROBE_SECONDS, $dir);
 
@@ -304,6 +315,7 @@ final readonly class AvProcessor
             'seconds' => is_numeric($format['duration'] ?? null) ? (float) $format['duration'] : 0.0,
             'width' => 0,
             'height' => 0,
+            'hdr' => false,
         ];
         foreach ($streams as $stream) {
             if (!is_array($stream)) {
@@ -322,6 +334,7 @@ final readonly class AvProcessor
                 $result['video'] = true;
                 $result['width'] = is_int($stream['width'] ?? null) ? $stream['width'] : 0;
                 $result['height'] = is_int($stream['height'] ?? null) ? $stream['height'] : 0;
+                $result['hdr'] = in_array($stream['color_transfer'] ?? null, self::HDR_TRANSFERS, true);
             }
         }
 
