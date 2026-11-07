@@ -192,3 +192,44 @@ test('removing an image block only removes the block', async ({ page }) => {
     await expect(page.locator('.editor-media')).toHaveCount(0);
     await saved(page);
 });
+
+test('typing right after inserting an image continues below it, not over it', async ({ page }) => {
+    await newArticle(page);
+    await page.locator('#media-toggle').click();
+    await page.locator('#media-panel button[data-media-id]').first().click();
+    await page.locator('#media-panel').getByRole('button', { name: 'Insert' }).click();
+    await expect(page.locator('.editor-media')).toHaveCount(1);
+
+    await page.keyboard.type('After the picture');
+
+    await expect(page.locator('.editor-media')).toHaveCount(1);
+    await expect(page.locator('.editor-media + p')).toHaveText('After the picture');
+});
+
+test('an upload finishing does not pull the cursor out of the title', async ({ page }, info) => {
+    test.setTimeout(120_000);
+    let release;
+    const held = new Promise((resolve) => {
+        release = resolve;
+    });
+    await page.route('**/*', async (route) => {
+        if (route.request().method() === 'PUT') {
+            await held;
+        }
+        await route.continue();
+    });
+
+    await newArticle(page);
+    const upload = page.waitForRequest((request) => request.method() === 'PUT');
+    await page.locator('#file-input').setInputFiles(generated(info, 'held.jpg', 640, 480));
+    await upload;
+
+    await page.getByLabel('Title').click();
+    await page.keyboard.type('Before');
+    release();
+    await expect(page.locator('.editor-media')).toHaveCount(1, { timeout: 60_000 });
+
+    await page.keyboard.type(' after');
+    await expect(page.getByLabel('Title')).toHaveValue('Before after');
+    await expect(page.locator('.editor-media')).toHaveCount(1);
+});
