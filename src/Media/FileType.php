@@ -74,6 +74,7 @@ final class FileType
         $bitrate = ord($head[2]) >> 4;
         $rate = (ord($head[2]) >> 2) & 0b11;
 
-        return $version !== 1 && $bitrate !== 15 && $rate !== 3 ? ['kind' => 'audio', 'extension' => 'mp3'] : self::NO_TYPE;
+        // Layer I is nearly extinct, and looks the same as UTF-16 text's byte order mark.
+        return $version !== 1 && $layer !== 3 && $bitrate !== 15 && $rate !== 3 ? ['kind' => 'audio', 'extension' => 'mp3'] : self::NO_TYPE;
     }
 }

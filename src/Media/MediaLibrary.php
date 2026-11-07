@@ -251,7 +251,15 @@ final readonly class MediaLibrary
 
     private function retryIfFailed(int $mediaId): void
     {
-        $stmt = $this->pdo->prepare("UPDATE media SET status = 'processing', error = NULL WHERE id = ? AND status = 'failed' RETURNING kind");
+        // Also what's stuck in "processing" with no job left, which a rollback to a release
+        // that doesn't know the job type can cause. Nothing else would ever get it moving.
+        $stmt = $this->pdo->prepare(
+            "UPDATE media SET status = 'processing', error = NULL
+             WHERE id = ? AND (status = 'failed' OR (status = 'processing' AND NOT EXISTS (
+                 SELECT 1 FROM job WHERE state IN ('queued', 'running') AND (payload->>'media_id')::bigint = media.id
+             )))
+             RETURNING kind",
+        );
         $stmt->execute([$mediaId]);
         $kind = $stmt->fetchColumn();
         if ($kind !== false) {
@@ -375,7 +383,8 @@ final readonly class MediaLibrary
      */
     public function publish(int $mediaId, string $sha256, array $made, int $width, int $height, ?string $kind = null, array $meta = []): void
     {
-        $this->assertRoomFor(array_sum(array_column($made, 'bytes')));
+        // The caps only: these files are on this disk already, in the job's directory.
+        $this->assertRoomFor(array_sum(array_column($made, 'bytes')), null, true);
 
         $this->pdo->beginTransaction();
         $installed = [];
@@ -415,10 +424,11 @@ final readonly class MediaLibrary
      * full size, so several at once can't each pass and then overfill the disk.
      *
      * @param string|null $exceptUpload an upload whose own reservation this replaces
+     * @param bool $onDiskAlready skip the free disk check, because nothing new gets written
      *
      * @throws MediaError
      */
-    public function assertRoomFor(int $bytes, ?string $exceptUpload = null): void
+    public function assertRoomFor(int $bytes, ?string $exceptUpload = null, bool $onDiskAlready = false): void
     {
         $stmt = $this->pdo->prepare(
             'SELECT (SELECT coalesce(sum(bytes), 0) FROM media) + (SELECT coalesce(sum(bytes), 0) FROM media_variant) AS used,
@@ -434,7 +444,7 @@ final readonly class MediaLibrary
 
         // Only bytes still to arrive take disk from here on.
         $coming = Row::int($row, 'incoming') + ($exceptUpload === null ? $bytes : 0);
-        if ($this->store->freeBytes() - $coming < $this->config->mediaMinFreeBytes) {
+        if (!$onDiskAlready && $this->store->freeBytes() - $coming < $this->config->mediaMinFreeBytes) {
             throw new MediaError('Not enough free disk space for this file.');
         }
         if (Row::int($row, 'used') + Row::int($row, 'reserved') + $bytes > $this->config->mediaMaxBytes) {

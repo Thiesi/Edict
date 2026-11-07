@@ -113,7 +113,9 @@ const imageElement = () => {
 
 const ownEvents = {
     // The fields are ours. ProseMirror must not treat typing in them as editing the document.
-    stopEvent: (event) => ['INPUT', 'BUTTON', 'VIDEO', 'AUDIO'].includes(event.target.tagName),
+    // Except for dropping a file: without the editor's handling, the browser opens it.
+    stopEvent: (event) => ['INPUT', 'BUTTON', 'VIDEO', 'AUDIO'].includes(event.target.tagName)
+        && !['dragover', 'drop'].includes(event.type),
     ignoreMutation: () => true,
 };
 

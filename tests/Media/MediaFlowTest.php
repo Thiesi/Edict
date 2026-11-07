@@ -291,6 +291,7 @@ final class MediaFlowTest extends DbTestCase
         yield 'raw aac' => ["\xFF\xF1\x50\x80", 'audio', 'aac'];
         yield 'unknown iso brand' => ["\0\0\0\x20ftypzzzz", 'file', 'bin'];
         yield 'not quite mp3' => ["\xFF\xFF\xFF\xFF", 'file', 'bin'];
+        yield 'utf-16 text is not mp3' => ["\xFF\xFEH\x00e\x00", 'file', 'bin'];
         yield 'a playlist ffmpeg would follow' => ["#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:0\n", 'file', 'bin'];
         yield 'a concat list ffmpeg would follow' => ["ffconcat version 1.0\nfile /etc/passwd\n", 'file', 'bin'];
         yield 'svg is not an image' => ['<svg xmlns="x"><script>x</script></svg>', 'file', 'bin'];
@@ -795,8 +796,16 @@ final class MediaFlowTest extends DbTestCase
             '-f', 'lavfi', '-i', "testsrc2=size=$size:rate=10:duration=2",
             '-f', 'lavfi', '-i', 'sine=frequency=440:duration=2',
             '-metadata', 'title=Secret title', '-metadata', 'location=+52.5200+013.4000/',
-            '-c:v', 'mpeg4', '-c:a', 'aac', ...($extra === '' ? [] : explode(' ', $extra)),
+            '-movflags', 'use_metadata_tags', '-c:v', 'mpeg4', '-c:a', 'aac', ...($extra === '' ? [] : explode(' ', $extra)),
         ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function testVideoWithoutTags(string $size): array
+    {
+        return ['-f', 'lavfi', '-i', "testsrc2=size=$size:rate=10:duration=1", '-c:v', 'mpeg4'];
     }
 
     public function testAVideoBecomesAPlayableMp4WithoutItsMetadata(): void
@@ -804,6 +813,7 @@ final class MediaFlowTest extends DbTestCase
         $this->requireFfmpeg();
         $bytes = $this->ffmpegMakes('source.mov', self::testVideo('1280x720'));
         self::assertStringContainsString('Secret title', $bytes, 'proves the check below would notice');
+        self::assertStringContainsString('52.5200', $bytes, 'proves the check below would notice');
 
         $media = $this->processedUpload('holiday.mov', $bytes);
 
@@ -835,8 +845,8 @@ final class MediaFlowTest extends DbTestCase
         self::assertIsString($poster['path']);
         self::assertSame("\xFF\xD8\xFF", substr((string) file_get_contents($poster['path']), 0, 3));
 
-        $original = $this->dataDir . '/private/' . substr(hash('sha256', $bytes), 0, 2);
-        self::assertDirectoryExists($original, 'the original stays private, untouched');
+        $sha256 = hash('sha256', $bytes);
+        self::assertSame($bytes, file_get_contents($this->service(MediaStore::class)->originalPath($sha256)), 'the original stays, untouched');
     }
 
     /**
@@ -892,18 +902,21 @@ final class MediaFlowTest extends DbTestCase
     public function testRecordingsBecomeAacWithPeaks(): void
     {
         $this->requireFfmpeg();
+        // Long enough for the peaks to be read in several pieces: silent, then a tone.
         $bytes = $this->ffmpegMakes('song.flac', [
-            '-f', 'lavfi', '-i', 'sine=frequency=440:duration=3', '-af', 'volume=0.5', '-metadata', 'artist=Secret artist',
+            '-f', 'lavfi', '-i', 'sine=frequency=440:duration=300', '-af', "volume='if(lt(t,150),0,0.5)':eval=frame", '-metadata', 'artist=Secret artist',
         ]);
 
         $media = $this->processedUpload('song.flac', $bytes);
 
         self::assertSame('ready', $media['status'], (string) json_encode($media['error']));
         self::assertSame('audio', $media['kind']);
-        self::assertEqualsWithDelta(3.0, $media['seconds'], 0.5);
+        self::assertEqualsWithDelta(300.0, $media['seconds'], 1.0);
         self::assertIsArray($media['peaks']);
         self::assertCount(200, $media['peaks']);
         self::assertContains(100, $media['peaks'], 'scaled to the loudest part');
+        self::assertLessThan(5, $media['peaks'][50], 'the silent half');
+        self::assertGreaterThan(90, $media['peaks'][150], 'the loud half');
 
         $audio = $this->variant($media, 'aac');
         $found = $this->probed($audio);
@@ -975,7 +988,7 @@ final class MediaFlowTest extends DbTestCase
     public function testATooLongVideoIsRefusedBeforeEncoding(): void
     {
         $this->requireFfmpeg();
-        $this->reboot(['MEDIA_MAX_BYTES' => '60000000']);
+        $this->reboot(['MEDIA_MAX_BYTES' => '40000000']);
         $bytes = $this->ffmpegMakes('long.mkv', ['-f', 'lavfi', '-i', 'color=size=64x64:rate=1:duration=600', '-c:v', 'libx264']);
 
         $media = $this->processedUpload('long.mkv', $bytes);
@@ -1000,6 +1013,87 @@ final class MediaFlowTest extends DbTestCase
         $type = $this->pdo->query('SELECT type FROM job');
         self::assertNotFalse($type);
         self::assertSame('av', $type->fetchColumn());
+    }
+
+    public function testReuploadingRescuesMediaStuckWithoutAJob(): void
+    {
+        $bytes = "\0\0\0\x20ftypisom";
+        $this->upload('a.mp4', $bytes);
+        $this->pdo->exec('DELETE FROM job');
+
+        $this->upload('a.mp4', $bytes);
+        $this->upload('a.mp4', $bytes);
+
+        self::assertSame(1, $this->rows('job'), 'one job, and a job still queued needs no second one');
+    }
+
+    public function testFinishedFilesAreNotCountedAgainstTheFreeDisk(): void
+    {
+        $store = $this->service(MediaStore::class);
+        $this->reboot(['MEDIA_MIN_FREE_BYTES' => (string) ($store->freeBytes() - 1_000_000_000)]);
+        $media = $this->upload('notes.txt', 'just text');
+        $file = $this->dataDir . '/made.mp4';
+        file_put_contents($file, 'not really');
+
+        $this->service(MediaLibrary::class)->publish(self::id($media), str_repeat('ab', 32), [
+            ['preset' => 'h264', 'format' => 'mp4', 'width' => 2, 'height' => 2, 'bytes' => 2_000_000_000, 'file' => $file],
+        ], 2, 2);
+
+        self::assertSame('ready', $this->service(MediaLibrary::class)->find(self::id($media))['status'] ?? null);
+    }
+
+    public function testFfmpegOnlyGetsLocalFilesAndTheChosenDemuxer(): void
+    {
+        $this->requireFfmpeg();
+        $log = $this->dataDir . '/calls.log';
+        $shim = function (string $tool) use ($log): string {
+            $path = $this->dataDir . '/' . $tool . '-shim';
+            file_put_contents($path, "#!/bin/sh\necho \"$tool \$*\" >>" . escapeshellarg($log) . "\nexec $tool \"\$@\"\n");
+            chmod($path, 0o755);
+
+            return $path;
+        };
+        $bytes = $this->ffmpegMakes('source.mkv', self::testVideoWithoutTags('320x240'));
+        $this->reboot(['FFMPEG_BIN' => $shim('ffmpeg'), 'FFPROBE_BIN' => $shim('ffprobe')]);
+
+        $media = $this->processedUpload('source.mkv', $bytes);
+
+        self::assertSame('ready', $media['status'], (string) json_encode($media['error']));
+        $calls = file($log, FILE_IGNORE_NEW_LINES);
+        self::assertIsArray($calls);
+        self::assertGreaterThanOrEqual(4, count($calls));
+        foreach ($calls as $call) {
+            self::assertMatchesRegularExpression('/-protocol_whitelist file\b.*-f (matroska|mov)\b/', $call);
+        }
+        self::assertMatchesRegularExpression('/-threads 4 .*-i .*-threads 4 /', $calls[1], 'decoding is limited as well as encoding');
+    }
+
+    public function testATranscodeThatFailsIsNotRetriedForHours(): void
+    {
+        $this->requireFfmpeg();
+        $bytes = $this->ffmpegMakes('source.mkv', self::testVideoWithoutTags('320x240'));
+        $failing = $this->dataDir . '/failing-ffmpeg';
+        file_put_contents($failing, "#!/bin/sh\necho nope >&2\nexit 1\n");
+        chmod($failing, 0o755);
+        $this->reboot(['FFMPEG_BIN' => $failing]);
+
+        $media = $this->processedUpload('source.mkv', $bytes);
+
+        self::assertSame('failed', $media['status']);
+        self::assertStringContainsString('nope', (string) json_encode($media['error']));
+    }
+
+    public function testAToolThatExitsAsMissingIsNotTheFilesFault(): void
+    {
+        $missing = $this->dataDir . '/missing-tool';
+        file_put_contents($missing, "#!/bin/sh\nexit 127\n");
+        chmod($missing, 0o755);
+        $this->reboot(['FFPROBE_BIN' => $missing]);
+        $media = $this->upload('a.mp4', "\0\0\0\x20ftypisom");
+
+        self::assertTrue($this->service(JobRunner::class)->runNext());
+
+        self::assertSame('processing', $this->service(MediaLibrary::class)->find(self::id($media))['status'] ?? null);
     }
 
     public function testTheSecondWorkerTakesOnlyImages(): void

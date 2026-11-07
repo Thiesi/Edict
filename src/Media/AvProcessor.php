@@ -24,6 +24,8 @@ final readonly class AvProcessor
         'mp3' => 'mp3', 'aac' => 'aac', 'flac' => 'flac', 'wav' => 'wav', 'ogg' => 'ogg',
     ];
 
+    private const UNDECODABLE_AUDIO = ['none', 'unknown', 'apac'];
+
     private const QUIET = ['-nostdin', '-hide_banner', '-loglevel', 'error', '-y'];
 
     /** Portrait or landscape, at most 1080p, never enlarged, even sizes as H.264 needs. */
@@ -34,6 +36,9 @@ final readonly class AvProcessor
     private const VIDEO_AUDIO_BITRATE = '160k';
     private const VIDEO_MAX_BITRATE = '8M';
     private const VIDEO_BUFFER = '16M';
+
+    /** A different codec can need more than the original, but rarely this much more. */
+    private const EXPECTED_GROWTH = 3;
 
     /** The most these settings produce per second, with some room for the container. */
     private const VIDEO_BYTES_PER_SECOND = 1_150_000;
@@ -50,7 +55,7 @@ final readonly class AvProcessor
     private const POSTER_SECONDS = 300;
 
     private const PEAKS = 200;
-    private const PEAK_SAMPLE_RATE = '1000';
+    private const PEAK_SAMPLE_RATE = '4000';
     private const READ_BYTES = 1_048_576;
 
     public function __construct(
@@ -79,17 +84,21 @@ final readonly class AvProcessor
         try {
             // Read in place: copying a 4 GB original first would only cost time and disk.
             $source = $this->store->originalPath($sha256);
-            $probe = $this->probe($source, $demuxer, $dir);
+            try {
+                $probe = $this->probe($source, $demuxer, $dir);
+            } catch (MediaError $e) {
+                throw $e->hopeless || Command::failedToStart($e) ? $e : new MediaError('This file could not be read as audio or video.', true);
+            }
 
             if ($probe['video']) {
                 $kind = 'video';
-                $done = $this->video($source, $demuxer, $dir, $bytes, $probe['seconds']);
-            } elseif ($probe['audio']) {
+                $done = $this->video($source, $demuxer, $dir, $bytes, $probe);
+            } elseif ($probe['audio'] !== null) {
                 if ($bytes > self::MAX_AUDIO_BYTES) {
                     throw new MediaError('Audio files can be up to ' . (self::MAX_AUDIO_BYTES / 1_000_000) . ' MB.', true);
                 }
                 $kind = 'audio';
-                $done = $this->audio($source, $demuxer, $dir, $bytes, $probe['seconds']);
+                $done = $this->audio($source, $demuxer, $dir, $bytes, $probe['audio'], $probe['seconds']);
             } else {
                 throw new MediaError('This file contains neither sound nor a picture.', true);
             }
@@ -101,22 +110,25 @@ final readonly class AvProcessor
     }
 
     /**
+     * @param array{video: bool, audio: int|null, seconds: float, width: int, height: int} $probe
+     *
      * @return array{variants: list<array{preset: string, format: string, width: int, height: int, bytes: int, file: string}>, width: int, height: int, meta: array<string, mixed>}
      */
-    private function video(string $source, string $demuxer, string $dir, int $bytes, float $seconds): array
+    private function video(string $source, string $demuxer, string $dir, int $bytes, array $probe): array
     {
-        $limit = $this->outputLimit($seconds, self::VIDEO_BYTES_PER_SECOND, $bytes);
+        $limit = $this->outputLimit($probe['seconds'], self::VIDEO_BYTES_PER_SECOND, $bytes);
         $output = $dir . '/h264.mp4';
-        Command::run([
+        $this->encode([
             ...$this->reading($demuxer, $source),
-            '-map', '0:V:0', '-map', '0:a:0?', '-map_metadata', '-1', '-map_chapters', '-1', '-sn', '-dn',
+            '-map', '0:V:0', ...($probe['audio'] === null ? [] : ['-map', '0:' . $probe['audio']]),
+            '-map_metadata', '-1', '-map_chapters', '-1', '-sn', '-dn',
             '-vf', self::SCALE,
             '-c:v', 'libx264', '-preset', 'faster', '-crf', '23', '-maxrate', self::VIDEO_MAX_BITRATE, '-bufsize', self::VIDEO_BUFFER,
             '-pix_fmt', 'yuv420p',
             '-c:a', 'aac', '-b:a', self::VIDEO_AUDIO_BITRATE, '-ac', '2',
             '-threads', self::THREADS, '-movflags', '+faststart', '-fs', (string) $limit,
             $output,
-        ], self::TRANSCODE_SECONDS, $dir);
+        ], $dir);
         $size = self::sizeWithin($output, $limit);
 
         $made = $this->probe($output, 'mov', $dir);
@@ -136,17 +148,17 @@ final readonly class AvProcessor
     /**
      * @return array{variants: list<array{preset: string, format: string, width: int, height: int, bytes: int, file: string}>, width: int, height: int, meta: array<string, mixed>}
      */
-    private function audio(string $source, string $demuxer, string $dir, int $bytes, float $seconds): array
+    private function audio(string $source, string $demuxer, string $dir, int $bytes, int $stream, float $seconds): array
     {
         $limit = $this->outputLimit($seconds, self::AUDIO_BYTES_PER_SECOND, $bytes);
         $output = $dir . '/aac.m4a';
-        Command::run([
+        $this->encode([
             ...$this->reading($demuxer, $source),
-            '-map', '0:a:0', '-map_metadata', '-1', '-map_chapters', '-1', '-vn', '-sn', '-dn',
+            '-map', '0:' . $stream, '-map_metadata', '-1', '-map_chapters', '-1', '-vn', '-sn', '-dn',
             '-c:a', 'aac', '-b:a', self::AUDIO_BITRATE, '-ac', '2',
             '-movflags', '+faststart', '-fs', (string) $limit,
             $output,
-        ], self::TRANSCODE_SECONDS, $dir);
+        ], $dir);
         $size = self::sizeWithin($output, $limit);
 
         return [
@@ -158,16 +170,33 @@ final readonly class AvProcessor
     }
 
     /**
-     * The most this output may take, checked before anything is written. ffmpeg stops
-     * there, in case the file lied about its duration.
+     * A failure after hours of work isn't worth two more tries. Uploading the file again
+     * tries again.
+     *
+     * @param list<string> $command
+     */
+    private function encode(array $command, string $dir): void
+    {
+        try {
+            Command::run($command, self::TRANSCODE_SECONDS, $dir);
+        } catch (MediaError $e) {
+            throw $e->hopeless || Command::failedToStart($e) ? $e : new MediaError($e->getMessage(), true);
+        }
+    }
+
+    /**
+     * Where ffmpeg has to stop: what these settings can produce for this length, in
+     * case the file lied about its length, and never into the free disk everyone else
+     * needs. What's checked in advance is what it will likely need, since reserving the
+     * worst case would refuse a long, quiet lecture that needs a fraction of it.
      */
     private function outputLimit(float $seconds, int $bytesPerSecond, int $sourceBytes): int
     {
-        $expected = $seconds > 0 ? (int) ceil($seconds * $bytesPerSecond) : $sourceBytes * 2;
-        $limit = max(self::SMALLEST_OUTPUT_LIMIT, $expected);
-        $this->library->assertRoomFor($limit);
+        $worst = $seconds > 0 ? (int) ceil($seconds * $bytesPerSecond) : $sourceBytes * self::EXPECTED_GROWTH;
+        $worst = max(self::SMALLEST_OUTPUT_LIMIT, $worst);
+        $this->library->assertRoomFor(min($worst, max(self::SMALLEST_OUTPUT_LIMIT, $sourceBytes * self::EXPECTED_GROWTH)));
 
-        return $limit;
+        return min($worst, $this->store->freeBytes() - $this->config->mediaMinFreeBytes);
     }
 
     private static function sizeWithin(string $file, int $limit): int
@@ -178,7 +207,7 @@ final readonly class AvProcessor
         }
         // ffmpeg stops at the limit and calls that a success, with half a video.
         if ($bytes >= $limit) {
-            throw new MediaError('The result grew larger than the file\'s length allows, so it was stopped.', true);
+            throw new MediaError('The result grew larger than its length or the free disk allows, so it was stopped.', true);
         }
 
         return $bytes;
@@ -251,24 +280,19 @@ final readonly class AvProcessor
      */
     private function reading(string $demuxer, string $source): array
     {
-        return [$this->config->ffmpegBin, ...self::QUIET, '-protocol_whitelist', 'file', '-f', $demuxer, '-i', $source];
+        return [$this->config->ffmpegBin, ...self::QUIET, '-threads', self::THREADS, '-protocol_whitelist', 'file', '-f', $demuxer, '-i', $source];
     }
 
     /**
-     * @return array{video: bool, audio: bool, seconds: float, width: int, height: int}
+     * @return array{video: bool, audio: int|null, seconds: float, width: int, height: int} audio is the stream to use
      */
     private function probe(string $file, string $demuxer, string $dir): array
     {
-        try {
-            $output = Command::run([
-                $this->config->ffprobeBin, '-v', 'error', '-protocol_whitelist', 'file', '-f', $demuxer,
-                '-show_entries', 'format=duration:stream=codec_type,width,height:stream_disposition=attached_pic',
-                '-of', 'json', $file,
-            ], self::PROBE_SECONDS, $dir);
-        } catch (MediaError $e) {
-            // A tool that can't start is the host's problem, and worth another try.
-            throw str_starts_with($e->getMessage(), 'Could not start') ? $e : new MediaError('This file could not be read as audio or video.', true);
-        }
+        $output = Command::run([
+            $this->config->ffprobeBin, '-v', 'error', '-protocol_whitelist', 'file', '-f', $demuxer,
+            '-show_entries', 'format=duration:stream=index,codec_type,codec_name,width,height:stream_disposition=attached_pic',
+            '-of', 'json', $file,
+        ], self::PROBE_SECONDS, $dir);
 
         $found = json_decode($output, true);
         $format = is_array($found) && is_array($found['format'] ?? null) ? $found['format'] : [];
@@ -276,7 +300,7 @@ final readonly class AvProcessor
 
         $result = [
             'video' => false,
-            'audio' => false,
+            'audio' => null,
             'seconds' => is_numeric($format['duration'] ?? null) ? (float) $format['duration'] : 0.0,
             'width' => 0,
             'height' => 0,
@@ -289,7 +313,11 @@ final readonly class AvProcessor
             // An album cover counts as a video stream, but it doesn't make a video.
             $cover = is_array($disposition) && ($disposition['attached_pic'] ?? 0) === 1;
             if (($stream['codec_type'] ?? null) === 'audio') {
-                $result['audio'] = true;
+                // The first one that can be decoded: a phone's spatial track may come first.
+                $codec = $stream['codec_name'] ?? null;
+                if ($result['audio'] === null && is_int($stream['index'] ?? null) && is_string($codec) && !in_array($codec, self::UNDECODABLE_AUDIO, true)) {
+                    $result['audio'] = $stream['index'];
+                }
             } elseif (($stream['codec_type'] ?? null) === 'video' && !$cover && !$result['video']) {
                 $result['video'] = true;
                 $result['width'] = is_int($stream['width'] ?? null) ? $stream['width'] : 0;

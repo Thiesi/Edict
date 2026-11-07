@@ -335,17 +335,29 @@ editor.on('transaction', ({ transaction }) => {
 
 const canBeInserted = (media) => ['image', 'audio', 'video'].includes(media?.kind);
 
-// Images chosen together become one image block or a gallery, each recording a player.
+// In the order given. Images next to each other become a gallery, each recording a player.
 const blocksFor = (media) => {
-    const images = media.filter(({ kind }) => kind === 'image').map(({ id }) => id);
-    const players = media.filter(({ kind }) => kind !== 'image').map(({ id }) => ({ type: 'player', attrs: { mediaId: id } }));
-    if (images.length === 1) {
-        return [{ type: 'image', attrs: { mediaId: images[0] } }, ...players];
-    }
+    const blocks = [];
+    let images = [];
+    const endImages = () => {
+        if (images.length === 1) {
+            blocks.push({ type: 'image', attrs: { mediaId: images[0] } });
+        } else if (images.length > 1) {
+            blocks.push({ type: 'gallery', attrs: { items: images.map((mediaId) => ({ mediaId, alt: '' })) } });
+        }
+        images = [];
+    };
+    media.forEach(({ id, kind }) => {
+        if (kind === 'image') {
+            images.push(id);
+        } else {
+            endImages();
+            blocks.push({ type: 'player', attrs: { mediaId: id } });
+        }
+    });
+    endImages();
 
-    return images.length === 0
-        ? players
-        : [{ type: 'gallery', attrs: { items: images.map((mediaId) => ({ mediaId, alt: '' })) } }, ...players];
+    return blocks;
 };
 
 const insertMedia = (media, position) => {
