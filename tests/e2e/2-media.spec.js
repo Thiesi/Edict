@@ -192,3 +192,16 @@ test('removing an image block only removes the block', async ({ page }) => {
     await expect(page.locator('.editor-media')).toHaveCount(0);
     await saved(page);
 });
+
+test('typing right after inserting an image continues below it, not over it', async ({ page }) => {
+    await newArticle(page);
+    await page.locator('#media-toggle').click();
+    await page.locator('#media-panel button[data-media-id]').first().click();
+    await page.locator('#media-panel').getByRole('button', { name: 'Insert' }).click();
+    await expect(page.locator('.editor-media')).toHaveCount(1);
+
+    await page.keyboard.type('After the picture');
+
+    await expect(page.locator('.editor-media')).toHaveCount(1);
+    await expect(page.locator('.editor-media + p')).toHaveText('After the picture');
+});
