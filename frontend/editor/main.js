@@ -9,6 +9,7 @@ import { Editor } from '@tiptap/core';
 import { BubbleMenu } from '@tiptap/extension-bubble-menu';
 import { TableKit } from '@tiptap/extension-table';
 import { Placeholder } from '@tiptap/extensions';
+import { TextSelection } from '@tiptap/pm/state';
 import StarterKit from '@tiptap/starter-kit';
 
 import { MediaGallery, MediaImage, preview } from './media.js';
@@ -335,7 +336,18 @@ const insertImages = (ids, position) => {
     const content = ids.length === 1
         ? { type: 'image', attrs: { mediaId: ids[0] } }
         : { type: 'gallery', attrs: { items: ids.map((mediaId) => ({ mediaId, alt: '' })) } };
+    // Whoever is filling in a title or description while a long upload finishes keeps typing there.
+    if (document.activeElement?.matches('input:not([type="file"]), textarea')) {
+        editor.commands.insertContentAt(position, content, { updateSelection: false });
+
+        return;
+    }
     editor.chain().focus().insertContentAt(position, content).run();
+    // Inserting leaves the block selected, and the next key would replace it.
+    const below = TextSelection.findFrom(editor.state.doc.resolve(editor.state.selection.to), 1, true);
+    if (below) {
+        editor.view.dispatch(editor.state.tr.setSelection(below).scrollIntoView());
+    }
 };
 
 // One image becomes an image block, and several at once become a gallery. One at a
