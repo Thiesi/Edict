@@ -12,7 +12,7 @@ const BLOCKS = [
     { title: 'Code block', run: (chain) => chain.toggleCodeBlock() },
     { title: 'Divider', run: (chain) => chain.setHorizontalRule() },
     { title: 'Table', run: (chain) => chain.insertTable({ rows: 3, cols: 3, withHeaderRow: true }) },
-    { title: 'Image or gallery', action: 'chooseFiles' },
+    { title: 'Image, audio or video', action: 'chooseFiles' },
     { title: 'Media library', action: 'openLibrary' },
 ];
 

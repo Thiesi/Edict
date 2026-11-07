@@ -22,7 +22,7 @@ final class Body
     private const MAX_MEDIA_TEXT = 500;
     private const WRAPPERS = ['paragraph', 'bulletList', 'listItem', 'blockquote', 'table', 'tableRow'];
     private const INLINE = ['text', 'hardBreak'];
-    private const BLOCKS = ['paragraph', 'heading', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'horizontalRule', 'table', 'image', 'gallery'];
+    private const BLOCKS = ['paragraph', 'heading', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'horizontalRule', 'table', 'image', 'gallery', 'player'];
 
     /** What may sit where. The editor can't load a document that breaks these rules. */
     private const ALLOWED_CHILDREN = [
@@ -128,7 +128,7 @@ final class Body
     {
         $attrs = is_array($node['attrs'] ?? null) ? $node['attrs'] : [];
         $ids = [];
-        if (($node['type'] ?? null) === 'image' && is_int($attrs['mediaId'] ?? null)) {
+        if (in_array($node['type'] ?? null, ['image', 'player'], true) && is_int($attrs['mediaId'] ?? null)) {
             $ids[] = $attrs['mediaId'];
         }
         foreach (is_array($attrs['items'] ?? null) ? $attrs['items'] : [] as $item) {
@@ -195,6 +195,9 @@ final class Body
         }
         if ($type === 'gallery') {
             return self::cleanGallery($attrs);
+        }
+        if ($type === 'player') {
+            return self::cleanPlayer($attrs);
         }
         if (!is_string($type)) {
             return null;
@@ -285,6 +288,21 @@ final class Body
         }
 
         return $items === [] ? null : ['type' => 'gallery', 'attrs' => ['items' => $items]];
+    }
+
+    /**
+     * @param array<mixed> $attrs
+     *
+     * @return array<string, mixed>|null
+     */
+    private static function cleanPlayer(array $attrs): ?array
+    {
+        $id = $attrs['mediaId'] ?? null;
+        if (!is_int($id) || $id <= 0) {
+            return null;
+        }
+
+        return ['type' => 'player', 'attrs' => ['mediaId' => $id, 'caption' => self::shortText($attrs['caption'] ?? null)]];
     }
 
     private static function shortText(mixed $value): string
@@ -381,7 +399,7 @@ final class Body
             'text' => self::renderText($node),
             'hardBreak' => '<br>',
             'horizontalRule' => "<hr>\n",
-            'image', 'gallery' => $media === null ? '' : $media($node),
+            'image', 'gallery', 'player' => $media === null ? '' : $media($node),
             'paragraph' => "<p>$inner</p>\n",
             'heading' => self::heading($attrs, $inner),
             'bulletList' => "<ul>\n$inner</ul>\n",

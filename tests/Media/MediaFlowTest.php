@@ -6,15 +6,18 @@ namespace Edict\Tests\Media;
 
 use Edict\Auth\AdminAccount;
 use Edict\Auth\SessionStore;
+use Edict\Cli\WorkerCommand;
 use Edict\Media\FileType;
 use Edict\Media\JobQueue;
 use Edict\Media\JobRunner;
 use Edict\Media\MediaLibrary;
 use Edict\Media\MediaStore;
+use Edict\Services;
 use Edict\Tests\DbTestCase;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Psr\Http\Message\ResponseInterface;
 use Slim\Psr7\Factory\StreamFactory;
+use Symfony\Component\Console\Tester\CommandTester;
 
 final class MediaFlowTest extends DbTestCase
 {
@@ -273,7 +276,23 @@ final class MediaFlowTest extends DbTestCase
         yield 'webp' => ['RIFF0000WEBP', 'image', 'webp'];
         yield 'avif' => ["\0\0\0\x20ftypavif", 'image', 'avif'];
         yield 'heic' => ["\0\0\0\x20ftypheic", 'image', 'heic'];
-        yield 'mp4 is not an image' => ["\0\0\0\x20ftypisom", 'file', 'bin'];
+        yield 'mp4' => ["\0\0\0\x20ftypisom", 'video', 'mp4'];
+        yield 'phone video' => ["\0\0\0\x20ftypmp42", 'video', 'mp4'];
+        yield 'quicktime' => ["\0\0\0\x14ftypqt  ", 'video', 'mov'];
+        yield 'old quicktime' => ["\0\0\0\x20moov", 'video', 'mov'];
+        yield 'matroska and webm' => ["\x1A\x45\xDF\xA3", 'video', 'mkv'];
+        yield 'avi' => ['RIFF0000AVI LIST', 'video', 'avi'];
+        yield 'm4a' => ["\0\0\0\x20ftypM4A ", 'audio', 'm4a'];
+        yield 'wav' => ['RIFF0000WAVEfmt ', 'audio', 'wav'];
+        yield 'flac' => ['fLaC', 'audio', 'flac'];
+        yield 'ogg' => ['OggS', 'audio', 'ogg'];
+        yield 'mp3 with tags' => ['ID3', 'audio', 'mp3'];
+        yield 'mp3 without' => ["\xFF\xFB\x90\x00", 'audio', 'mp3'];
+        yield 'raw aac' => ["\xFF\xF1\x50\x80", 'audio', 'aac'];
+        yield 'unknown iso brand' => ["\0\0\0\x20ftypzzzz", 'file', 'bin'];
+        yield 'not quite mp3' => ["\xFF\xFF\xFF\xFF", 'file', 'bin'];
+        yield 'a playlist ffmpeg would follow' => ["#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:0\n", 'file', 'bin'];
+        yield 'a concat list ffmpeg would follow' => ["ffconcat version 1.0\nfile /etc/passwd\n", 'file', 'bin'];
         yield 'svg is not an image' => ['<svg xmlns="x"><script>x</script></svg>', 'file', 'bin'];
         yield 'html' => ['<html>', 'file', 'bin'];
         yield 'empty' => ['', 'file', 'bin'];
@@ -686,5 +705,359 @@ final class MediaFlowTest extends DbTestCase
 
         self::assertSame(200, $response->getStatusCode());
         self::assertStringStartsWith('image/', $response->getHeaderLine('Content-Type'));
+    }
+
+    private function requireFfmpeg(): void
+    {
+        foreach (['ffmpeg', 'ffprobe'] as $tool) {
+            if (trim((string) shell_exec("command -v $tool 2>/dev/null")) === '') {
+                self::markTestSkipped("$tool is not installed");
+            }
+        }
+    }
+
+    /**
+     * @param list<string> $arguments
+     */
+    private function ffmpegMakes(string $name, array $arguments): string
+    {
+        $path = $this->dataDir . '/' . $name;
+        $command = 'ffmpeg -nostdin -hide_banner -loglevel error -y ' . implode(' ', array_map(escapeshellarg(...), [...$arguments, $path])) . ' 2>&1';
+        $failure = shell_exec($command);
+        self::assertFileExists($path, (string) $failure);
+        $bytes = file_get_contents($path);
+        self::assertIsString($bytes);
+        unlink($path);
+
+        return $bytes;
+    }
+
+    /**
+     * @param array<string, mixed> $media
+     *
+     * @return array<string, mixed> the variant, with where it is on disk
+     */
+    private function variant(array $media, string $preset): array
+    {
+        self::assertIsArray($media['variants']);
+        foreach ($media['variants'] as $variant) {
+            self::assertIsArray($variant);
+            if ($variant['preset'] === $preset) {
+                self::assertIsString($variant['url']);
+                $variant['path'] = $this->dataDir . '/media/' . substr($variant['url'], strlen('/media/'));
+                self::assertFileExists($variant['path']);
+
+                /** @var array<string, mixed> $variant */
+                return $variant;
+            }
+        }
+
+        self::fail("No variant $preset");
+    }
+
+    /**
+     * @param array<string, mixed> $variant
+     *
+     * @return array<mixed>
+     */
+    private function probed(array $variant): array
+    {
+        self::assertIsString($variant['path']);
+        $json = shell_exec('ffprobe -v error -show_format -show_streams -of json ' . escapeshellarg($variant['path']) . ' 2>&1');
+        self::assertIsString($json);
+        $found = json_decode($json, true);
+        self::assertIsArray($found, $json);
+
+        return $found;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function processedUpload(string $name, string $bytes): array
+    {
+        $media = $this->upload($name, $bytes);
+        self::assertSame('processing', $media['status']);
+        self::assertTrue($this->service(JobRunner::class)->runNext());
+        $done = $this->service(MediaLibrary::class)->find(self::id($media));
+        self::assertNotNull($done);
+        self::assertSame([], glob($this->dataDir . '/job-tmp/*'), 'the job dir is removed');
+
+        return $done;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function testVideo(string $size, string $extra = ''): array
+    {
+        return [
+            '-f', 'lavfi', '-i', "testsrc2=size=$size:rate=10:duration=2",
+            '-f', 'lavfi', '-i', 'sine=frequency=440:duration=2',
+            '-metadata', 'title=Secret title', '-metadata', 'location=+52.5200+013.4000/',
+            '-c:v', 'mpeg4', '-c:a', 'aac', ...($extra === '' ? [] : explode(' ', $extra)),
+        ];
+    }
+
+    public function testAVideoBecomesAPlayableMp4WithoutItsMetadata(): void
+    {
+        $this->requireFfmpeg();
+        $bytes = $this->ffmpegMakes('source.mov', self::testVideo('1280x720'));
+        self::assertStringContainsString('Secret title', $bytes, 'proves the check below would notice');
+
+        $media = $this->processedUpload('holiday.mov', $bytes);
+
+        self::assertSame('ready', $media['status'], (string) json_encode($media['error']));
+        self::assertSame('video', $media['kind']);
+        self::assertSame(1280, $media['width']);
+        self::assertSame(720, $media['height']);
+        self::assertEqualsWithDelta(2.0, $media['seconds'], 0.5);
+
+        $video = $this->variant($media, 'h264');
+        $found = $this->probed($video);
+        self::assertIsArray($found['streams']);
+        self::assertSame(['h264', 'aac'], array_column($found['streams'], 'codec_name'));
+
+        self::assertIsString($video['path']);
+        $published = file_get_contents($video['path']);
+        self::assertIsString($published);
+        self::assertStringNotContainsString('Secret title', $published);
+        self::assertStringNotContainsString('52.5200', $published);
+        $moov = strpos($published, 'moov');
+        $mdat = strpos($published, 'mdat');
+        self::assertIsInt($moov);
+        self::assertIsInt($mdat);
+        self::assertLessThan($mdat, $moov, 'faststart: a browser can start before the whole file has arrived');
+
+        $poster = $this->variant($media, 'poster');
+        self::assertSame('jpg', $poster['format']);
+        self::assertSame(1280, $poster['width']);
+        self::assertIsString($poster['path']);
+        self::assertSame("\xFF\xD8\xFF", substr((string) file_get_contents($poster['path']), 0, 3));
+
+        $original = $this->dataDir . '/private/' . substr(hash('sha256', $bytes), 0, 2);
+        self::assertDirectoryExists($original, 'the original stays private, untouched');
+    }
+
+    /**
+     * @return iterable<string, array{string, int, int}>
+     */
+    public static function videoSizes(): iterable
+    {
+        yield 'wider than 1080p' => ['2560x1440', 1920, 1080];
+        yield 'tall phone video' => ['1440x2560', 1080, 1920];
+        yield 'small stays small' => ['320x240', 320, 240];
+        yield 'odd sizes become even' => ['321x241', 320, 240];
+    }
+
+    #[DataProvider('videoSizes')]
+    public function testVideoSizes(string $size, int $width, int $height): void
+    {
+        $this->requireFfmpeg();
+
+        $media = $this->processedUpload('v.mp4', $this->ffmpegMakes('source.mp4', self::testVideo($size)));
+
+        self::assertSame('ready', $media['status'], (string) json_encode($media['error']));
+        self::assertSame([$width, $height], [$media['width'], $media['height']]);
+    }
+
+    public function testAVideoFilmedSidewaysComesOutUpright(): void
+    {
+        $this->requireFfmpeg();
+        $source = $this->ffmpegMakes('flat.mp4', self::testVideo('640x360'));
+        $path = $this->dataDir . '/flat.mp4';
+        file_put_contents($path, $source);
+
+        $rotated = $this->ffmpegMakes('turned.mp4', ['-display_rotation', '90', '-i', $path, '-c', 'copy']);
+        unlink($path);
+
+        $media = $this->processedUpload('turned.mp4', $rotated);
+
+        self::assertSame('ready', $media['status'], (string) json_encode($media['error']));
+        self::assertSame([360, 640], [$media['width'], $media['height']]);
+    }
+
+    public function testAVideoWithoutSoundIsFine(): void
+    {
+        $this->requireFfmpeg();
+
+        $media = $this->processedUpload('silent.mp4', $this->ffmpegMakes('silent.mp4', ['-f', 'lavfi', '-i', 'testsrc2=size=320x240:rate=10:duration=1', '-c:v', 'mpeg4']));
+
+        self::assertSame('ready', $media['status'], (string) json_encode($media['error']));
+        $found = $this->probed($this->variant($media, 'h264'));
+        self::assertIsArray($found['streams']);
+        self::assertSame(['h264'], array_column($found['streams'], 'codec_name'));
+    }
+
+    public function testRecordingsBecomeAacWithPeaks(): void
+    {
+        $this->requireFfmpeg();
+        $bytes = $this->ffmpegMakes('song.flac', [
+            '-f', 'lavfi', '-i', 'sine=frequency=440:duration=3', '-af', 'volume=0.5', '-metadata', 'artist=Secret artist',
+        ]);
+
+        $media = $this->processedUpload('song.flac', $bytes);
+
+        self::assertSame('ready', $media['status'], (string) json_encode($media['error']));
+        self::assertSame('audio', $media['kind']);
+        self::assertEqualsWithDelta(3.0, $media['seconds'], 0.5);
+        self::assertIsArray($media['peaks']);
+        self::assertCount(200, $media['peaks']);
+        self::assertContains(100, $media['peaks'], 'scaled to the loudest part');
+
+        $audio = $this->variant($media, 'aac');
+        $found = $this->probed($audio);
+        self::assertIsArray($found['streams']);
+        self::assertSame(['aac'], array_column($found['streams'], 'codec_name'));
+        self::assertIsString($audio['path']);
+        self::assertStringNotContainsString('Secret artist', (string) file_get_contents($audio['path']));
+    }
+
+    public function testAnMp4WithOnlySoundIsARecording(): void
+    {
+        $this->requireFfmpeg();
+        $bytes = $this->ffmpegMakes('sound.mp4', ['-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-c:a', 'aac']);
+        file_put_contents($this->dataDir . '/sound.mp4', $bytes);
+        self::assertSame('video', FileType::of($this->dataDir . '/sound.mp4')['kind'], 'all the signature can say');
+
+        $media = $this->processedUpload('sound.mp4', $bytes);
+
+        self::assertSame('ready', $media['status'], (string) json_encode($media['error']));
+        self::assertSame('audio', $media['kind']);
+        $this->variant($media, 'aac');
+    }
+
+    public function testACoverPictureDoesNotMakeASongAVideo(): void
+    {
+        $this->requireFfmpeg();
+        $this->requireTools();
+        $cover = $this->dataDir . '/cover.jpg';
+        shell_exec('vips black ' . escapeshellarg($cover) . ' 64 64 2>&1');
+        $bytes = $this->ffmpegMakes('with-cover.mp3', [
+            '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-i', $cover,
+            '-map', '0:a', '-map', '1:v', '-c:v', 'copy', '-disposition:v', 'attached_pic', '-id3v2_version', '3',
+        ]);
+        unlink($cover);
+
+        $media = $this->processedUpload('with-cover.mp3', $bytes);
+
+        self::assertSame('ready', $media['status'], (string) json_encode($media['error']));
+        self::assertSame('audio', $media['kind']);
+    }
+
+    public function testAFileThatOnlyLooksLikeAVideoFailsAtOnce(): void
+    {
+        $this->requireFfmpeg();
+
+        $media = $this->processedUpload('fake.mp4', "\0\0\0\x20ftypisom" . random_bytes(2000));
+
+        self::assertSame('failed', $media['status']);
+        self::assertSame('This file could not be read as audio or video.', $media['error']);
+        self::assertSame([], $media['variants']);
+        $this->clock->advance(3600);
+        self::assertFalse($this->service(JobRunner::class)->runNext(), 'trying again can\'t help');
+    }
+
+    public function testAMissingToolIsWorthRetrying(): void
+    {
+        $this->reboot(['FFPROBE_BIN' => 'no-such-tool-anywhere']);
+        $media = $this->upload('a.mp4', "\0\0\0\x20ftypisom");
+        $runner = $this->service(JobRunner::class);
+
+        self::assertTrue($runner->runNext());
+        $status = $this->service(MediaLibrary::class)->find(self::id($media));
+        self::assertSame('processing', $status['status'] ?? null);
+
+        $this->clock->advance(61);
+        self::assertTrue($runner->runNext(), 'Ops can fix the path in time');
+    }
+
+    public function testATooLongVideoIsRefusedBeforeEncoding(): void
+    {
+        $this->requireFfmpeg();
+        $this->reboot(['MEDIA_MAX_BYTES' => '60000000']);
+        $bytes = $this->ffmpegMakes('long.mkv', ['-f', 'lavfi', '-i', 'color=size=64x64:rate=1:duration=600', '-c:v', 'libx264']);
+
+        $media = $this->processedUpload('long.mkv', $bytes);
+
+        self::assertSame('processing', $media['status'], 'a full disk can change, so this tries again');
+        $job = $this->pdo->query('SELECT error FROM job');
+        self::assertNotFalse($job);
+        self::assertStringContainsString('limit', (string) $job->fetchColumn());
+        self::assertSame([], $media['variants']);
+    }
+
+    public function testRetryingAFailedVideoRunsTheVideoJob(): void
+    {
+        $bytes = "\0\0\0\x20ftypisom";
+        $media = $this->upload('a.mp4', $bytes);
+        $this->pdo->exec('DELETE FROM job');
+        $this->pdo->exec("UPDATE media SET status = 'failed', error = 'x'");
+
+        $again = $this->upload('a.mp4', $bytes);
+
+        self::assertSame(self::id($media), self::id($again));
+        $type = $this->pdo->query('SELECT type FROM job');
+        self::assertNotFalse($type);
+        self::assertSame('av', $type->fetchColumn());
+    }
+
+    public function testTheSecondWorkerTakesOnlyImages(): void
+    {
+        $queue = $this->service(JobQueue::class);
+        $queue->enqueue('av', ['media_id' => 0]);
+        $queue->enqueue('image', ['media_id' => 0]);
+
+        $runner = $this->service(JobRunner::class);
+        self::assertTrue($runner->runNext(true));
+        self::assertFalse($runner->runNext(true), 'the video stays for the first worker');
+
+        $left = $this->pdo->query("SELECT type FROM job WHERE state = 'queued'");
+        self::assertNotFalse($left);
+        self::assertSame('av', $left->fetchColumn());
+        self::assertTrue($runner->runNext());
+    }
+
+    public function testVideoFilesAreServedInDevelopment(): void
+    {
+        $sha = str_repeat('ab', 32);
+        $path = $this->service(MediaStore::class)->variantPath($sha, 'h264', 'mp4');
+        mkdir(dirname($path), 0o755, true);
+        file_put_contents($path, 'not really');
+
+        $response = $this->get('/media/ab/ab/' . $sha . '-h264.mp4');
+
+        self::assertSame(200, $response->getStatusCode());
+        self::assertSame('video/mp4', $response->getHeaderLine('Content-Type'));
+    }
+
+    public function testWhileAVideoRunsTheNextWorkerOnlyDoesImagesAndNoHousekeeping(): void
+    {
+        $url = getenv('TEST_DATABASE_URL');
+        self::assertIsString($url);
+        $firstWorker = self::connectToTestDatabase($url);
+        $firstWorker->query('SELECT pg_advisory_lock(7316001)');
+
+        $queue = $this->service(JobQueue::class);
+        $queue->enqueue('av', ['media_id' => 0]);
+        self::assertNotNull($queue->claim(), 'the video the first worker is busy with');
+        $queue->enqueue('av', ['media_id' => 0]);
+        $queue->enqueue('image', ['media_id' => 0]);
+        $this->clock->advance(7200);
+
+        try {
+            $tester = new CommandTester(new WorkerCommand($this->service(Services::class)));
+            self::assertSame(0, $tester->execute(['--seconds' => '1']));
+        } finally {
+            $this->pdo->query('SELECT pg_advisory_unlock_all()');
+        }
+
+        $states = $this->pdo->query('SELECT type, state FROM job ORDER BY id');
+        self::assertNotFalse($states);
+        self::assertSame([
+            ['type' => 'av', 'state' => 'running'],
+            ['type' => 'av', 'state' => 'queued'],
+            ['type' => 'image', 'state' => 'done'],
+        ], $states->fetchAll(\PDO::FETCH_ASSOC), 'a video running for hours is not a dead worker');
     }
 }

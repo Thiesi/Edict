@@ -233,3 +233,58 @@ test('an upload finishing does not pull the cursor out of the title', async ({ p
     await expect(page.getByLabel('Title')).toHaveValue('Before after');
     await expect(page.locator('.editor-media')).toHaveCount(1);
 });
+
+// Playwright's Chromium has no H.264 or AAC decoder, so these check everything up to the
+// player. Actually playing is for real browsers, and part of the test on staging.
+test('a video uploads, gets processed and appears as a player with a poster', async ({ page, request }, info) => {
+    test.setTimeout(180_000);
+    const path = info.outputPath('clip.mp4');
+    execFileSync('ffmpeg', ['-nostdin', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=size=640x360:rate=10:duration=2',
+        '-f', 'lavfi', '-i', 'sine=frequency=440:duration=2', '-c:v', 'mpeg4', '-c:a', 'aac', path]);
+
+    await newArticle(page);
+    await page.getByLabel('Title').fill('With a clip');
+    await page.locator('#file-input').setInputFiles(path);
+
+    const block = page.locator('.editor-media');
+    await expect(block.getByRole('status')).toContainText('Processing', { timeout: 60_000 });
+    await expect(block.locator('video')).toBeVisible({ timeout: 120_000 });
+    await block.getByLabel(/Caption/).fill('A clip');
+    await saved(page);
+
+    await page.reload();
+    await expect(page.locator('.editor-media').getByLabel(/Caption/)).toHaveValue('A clip');
+
+    await page.locator('#publish').click();
+    await expect(page.getByRole('link', { name: 'View', exact: true })).toBeVisible();
+    await page.waitForLoadState('load');
+
+    await page.goto('/with-a-clip');
+    const video = page.locator('article video');
+    await expect(video).toHaveAttribute('controls', '');
+    await expect(page.locator('figcaption')).toHaveText('A clip');
+
+    const file = await request.get(await video.getAttribute('src'));
+    expect(file.status()).toBe(200);
+    expect(file.headers()['content-type']).toBe('video/mp4');
+    const poster = await request.get(await video.getAttribute('poster'));
+    expect(poster.headers()['content-type']).toBe('image/jpeg');
+});
+
+test('a recording becomes an audio player, and the library offers it', async ({ page }, info) => {
+    test.setTimeout(180_000);
+    const path = info.outputPath('song.wav');
+    execFileSync('ffmpeg', ['-nostdin', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=2', path]);
+
+    await newArticle(page);
+    await page.locator('#file-input').setInputFiles(path);
+    await expect(page.locator('.editor-media audio')).toBeAttached({ timeout: 120_000 });
+
+    await page.locator('.editor-media .media-remove').click();
+    await expect(page.locator('.editor-media')).toHaveCount(0);
+
+    await page.locator('#media-toggle').click();
+    await page.locator('#media-panel button[data-media-id]', { hasText: 'song.wav' }).click();
+    await page.locator('#media-panel').getByRole('button', { name: 'Insert' }).click();
+    await expect(page.locator('.editor-media audio')).toBeAttached();
+});

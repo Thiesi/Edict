@@ -1,4 +1,4 @@
-// The image and gallery blocks. Must match the allow-list in Edict\Content\Body.
+// The image, gallery and player blocks. Must match the allow-list in Edict\Content\Body.
 import { Node } from '@tiptap/core';
 
 const POLL_MS = 2000;
@@ -7,7 +7,8 @@ const POLL_MS = 2000;
 export const preview = (media) => {
     const variants = media.variants ?? [];
 
-    return (variants.find((variant) => variant.preset === 'w960-webp')
+    return (variants.find((variant) => variant.preset === 'poster')
+        ?? variants.find((variant) => variant.preset === 'w960-webp')
         ?? variants.find((variant) => variant.preset === 'w480-webp')
         ?? variants.find((variant) => variant.preset === 'full'))?.url ?? null;
 };
@@ -20,8 +21,8 @@ const attributeSetter = (editor, getPos, getNode) => (attrs) => {
     }
 };
 
-// Shows a stored image, and keeps asking until its processing has finished.
-const showMedia = (id, image, status, isGone) => {
+// Waits for stored media to finish processing, and reports on the way.
+const whenReady = (id, status, noun, waiting, isGone, onReady) => {
     const look = async () => {
         if (isGone()) {
             return;
@@ -30,7 +31,7 @@ const showMedia = (id, image, status, isGone) => {
         try {
             const response = await fetch(`/admin/media/${id}`, { credentials: 'same-origin', redirect: 'manual' });
             if (response.status === 404) {
-                status.textContent = 'This image no longer exists.';
+                status.textContent = `This ${noun} no longer exists.`;
 
                 return;
             }
@@ -40,21 +41,43 @@ const showMedia = (id, image, status, isGone) => {
         }
 
         if (media === null) {
-            status.textContent = 'Could not load this image. Trying again…';
+            status.textContent = `Could not load this ${noun}. Trying again…`;
             setTimeout(look, POLL_MS * 3);
         } else if (media.status === 'processing') {
-            status.textContent = 'Processing…';
+            status.textContent = waiting;
             setTimeout(look, POLL_MS);
         } else if (media.status === 'failed') {
-            status.textContent = `This image could not be processed: ${media.error ?? 'unknown error'}`;
+            status.textContent = `This ${noun} could not be processed: ${media.error ?? 'unknown error'}`;
             status.setAttribute('role', 'alert');
         } else {
             status.textContent = '';
-            image.src = preview(media) ?? '';
-            image.hidden = false;
+            onReady(media);
         }
     };
     look();
+};
+
+const showMedia = (id, image, status, isGone) => whenReady(id, status, 'image', 'Processing…', isGone, (media) => {
+    image.src = preview(media) ?? '';
+    image.hidden = false;
+});
+
+// The real thing, so it can be checked before publishing.
+const playerFor = (media) => {
+    const variant = media.variants.find(({ preset }) => preset === 'h264' || preset === 'aac');
+    if (variant === undefined) {
+        return null;
+    }
+    const player = document.createElement(media.kind === 'video' ? 'video' : 'audio');
+    player.controls = true;
+    player.preload = 'metadata';
+    player.src = variant.url;
+    if (media.kind === 'video') {
+        player.playsInline = true;
+        player.poster = preview(media) ?? '';
+    }
+
+    return player;
 };
 
 const textField = (label, value, onInput) => {
@@ -90,7 +113,7 @@ const imageElement = () => {
 
 const ownEvents = {
     // The fields are ours. ProseMirror must not treat typing in them as editing the document.
-    stopEvent: (event) => ['INPUT', 'BUTTON'].includes(event.target.tagName),
+    stopEvent: (event) => ['INPUT', 'BUTTON', 'VIDEO', 'AUDIO'].includes(event.target.tagName),
     ignoreMutation: () => true,
 };
 
@@ -166,6 +189,94 @@ export const MediaImage = Node.create({
                         shownId = updated.attrs.mediaId;
                         image.hidden = true;
                         showMedia(shownId, image, status, () => gone || shownId !== current.attrs.mediaId);
+                    }
+
+                    return true;
+                },
+                destroy: () => {
+                    gone = true;
+                },
+            };
+        };
+    },
+});
+
+// Audio or video. What the file holds decides which, and only processing finds out.
+export const MediaPlayer = Node.create({
+    name: 'player',
+    group: 'block',
+    atom: true,
+    draggable: true,
+
+    addAttributes() {
+        return { mediaId: { default: null }, caption: { default: '' } };
+    },
+
+    parseHTML() {
+        return [{
+            tag: 'figure[data-player-id]',
+            getAttrs: (element) => {
+                const mediaId = Number(element.dataset.playerId);
+
+                return Number.isInteger(mediaId) && mediaId > 0
+                    ? { mediaId, caption: element.dataset.caption ?? '' }
+                    : false;
+            },
+        }];
+    },
+
+    renderHTML({ node }) {
+        return ['figure', { 'data-player-id': node.attrs.mediaId, 'data-caption': node.attrs.caption }];
+    },
+
+    addNodeView() {
+        return ({ node, getPos, editor }) => {
+            let gone = false;
+            let current = node;
+            const updateAttributes = attributeSetter(editor, getPos, () => current);
+            const dom = document.createElement('figure');
+            dom.className = 'editor-media';
+            const slot = document.createElement('div');
+            const status = document.createElement('p');
+            status.setAttribute('role', 'status');
+            const captionField = textField('Caption (optional)', node.attrs.caption, (caption) => updateAttributes({ caption }));
+            dom.append(
+                removeButton('Remove this player', () => {
+                    const from = getPos();
+                    editor.chain().focus().deleteRange({ from, to: from + 1 }).run();
+                }),
+                slot,
+                status,
+                captionField,
+            );
+
+            let shownId = node.attrs.mediaId;
+            const show = () => whenReady(
+                shownId,
+                status,
+                'file',
+                'Processing… A long video can take a while. You can keep writing, and even publish: it appears on the page once it is ready.',
+                () => gone || shownId !== current.attrs.mediaId,
+                (media) => {
+                    const player = playerFor(media);
+                    slot.replaceChildren(...(player === null ? [] : [player]));
+                },
+            );
+            show();
+
+            return {
+                dom,
+                ...ownEvents,
+                update: (updated) => {
+                    if (updated.type.name !== 'player') {
+                        return false;
+                    }
+                    current = updated;
+                    captionField.querySelector('input').value = updated.attrs.caption;
+                    if (updated.attrs.mediaId !== shownId) {
+                        shownId = updated.attrs.mediaId;
+                        slot.replaceChildren();
+                        show();
                     }
 
                     return true;

@@ -12,7 +12,7 @@ import { Placeholder } from '@tiptap/extensions';
 import { TextSelection } from '@tiptap/pm/state';
 import StarterKit from '@tiptap/starter-kit';
 
-import { MediaGallery, MediaImage, preview } from './media.js';
+import { MediaGallery, MediaImage, MediaPlayer, preview } from './media.js';
 import { SlashCommands } from './slash.js';
 import { Uploader } from './uploads.js';
 
@@ -53,6 +53,7 @@ const editor = new Editor({
         BubbleMenu.configure({ element: field('bubble-menu') }),
         MediaImage,
         MediaGallery,
+        MediaPlayer,
         SlashCommands.configure({
             actions: {
                 chooseFiles: () => field('file-input').click(),
@@ -332,10 +333,23 @@ editor.on('transaction', ({ transaction }) => {
     });
 });
 
-const insertImages = (ids, position) => {
-    const content = ids.length === 1
-        ? { type: 'image', attrs: { mediaId: ids[0] } }
-        : { type: 'gallery', attrs: { items: ids.map((mediaId) => ({ mediaId, alt: '' })) } };
+const canBeInserted = (media) => ['image', 'audio', 'video'].includes(media?.kind);
+
+// Images chosen together become one image block or a gallery, each recording a player.
+const blocksFor = (media) => {
+    const images = media.filter(({ kind }) => kind === 'image').map(({ id }) => id);
+    const players = media.filter(({ kind }) => kind !== 'image').map(({ id }) => ({ type: 'player', attrs: { mediaId: id } }));
+    if (images.length === 1) {
+        return [{ type: 'image', attrs: { mediaId: images[0] } }, ...players];
+    }
+
+    return images.length === 0
+        ? players
+        : [{ type: 'gallery', attrs: { items: images.map((mediaId) => ({ mediaId, alt: '' })) } }, ...players];
+};
+
+const insertMedia = (media, position) => {
+    const content = blocksFor(media);
     // Whoever is filling in a title or description while a long upload finishes keeps typing there.
     if (document.activeElement?.matches('input:not([type="file"]), textarea')) {
         editor.commands.insertContentAt(position, content, { updateSelection: false });
@@ -360,16 +374,16 @@ const uploadAll = async (files, spot) => {
     }
     landingSpots.delete(spot);
 
-    const images = uploaded.filter((media) => media?.kind === 'image');
-    if (images.length < uploaded.filter(Boolean).length) {
+    const usable = uploaded.filter(canBeInserted);
+    if (usable.length < uploaded.filter(Boolean).length) {
         const note = document.createElement('li');
         note.setAttribute('role', 'alert');
-        note.textContent = 'Only images can go into an article so far. The other files were kept in the library.';
+        note.textContent = 'Only images, audio and video can go into an article so far. The other files were kept in the library.';
         field('upload-tray').append(note);
         field('upload-tray').hidden = false;
     }
-    if (images.length > 0) {
-        insertImages(images.map((media) => media.id), spot.position);
+    if (usable.length > 0) {
+        insertMedia(usable, spot.position);
     }
 };
 
@@ -400,7 +414,7 @@ let chosen = [];
 
 const addToLibrary = (media) => {
     const url = preview(media);
-    if (media.kind !== 'image' || media.status !== 'ready' || url === null) {
+    if (!canBeInserted(media) || media.status !== 'ready' || (url === null && media.kind !== 'audio')) {
         return;
     }
     const button = document.createElement('button');
@@ -408,14 +422,21 @@ const addToLibrary = (media) => {
     button.dataset.mediaId = media.id;
     button.title = media.name;
     button.setAttribute('aria-pressed', 'false');
-    const image = document.createElement('img');
-    image.src = url;
-    image.alt = media.name;
-    image.loading = 'lazy';
-    button.append(image);
+    if (url === null) {
+        button.textContent = `♪ ${media.name}`;
+    } else {
+        const image = document.createElement('img');
+        image.src = url;
+        image.alt = media.name;
+        image.loading = 'lazy';
+        button.append(image);
+    }
+    if (media.kind === 'video') {
+        button.classList.add('is-video');
+    }
     button.addEventListener('click', () => {
-        const selected = chosen.includes(media.id);
-        chosen = selected ? chosen.filter((id) => id !== media.id) : [...chosen, media.id];
+        const selected = chosen.includes(media);
+        chosen = selected ? chosen.filter((other) => other !== media) : [...chosen, media];
         button.setAttribute('aria-pressed', String(!selected));
         insertButton.disabled = chosen.length === 0;
     });
@@ -457,7 +478,7 @@ moreButton.addEventListener('click', loadLibrary);
 field('media-upload').addEventListener('click', () => field('file-input').click());
 insertButton.addEventListener('click', () => {
     if (chosen.length > 0) {
-        insertImages(chosen, editor.state.selection.to);
+        insertMedia(chosen, editor.state.selection.to);
     }
     grid.querySelectorAll('[aria-pressed="true"]').forEach((button) => button.setAttribute('aria-pressed', 'false'));
     chosen = [];

@@ -20,7 +20,7 @@ use Slim\Psr7\Stream;
 final readonly class MediaController
 {
     private const PAGE_SIZE = 60;
-    private const CONTENT_TYPES = ['avif' => 'image/avif', 'gif' => 'image/gif', 'jpg' => 'image/jpeg', 'png' => 'image/png', 'webp' => 'image/webp'];
+    private const CONTENT_TYPES = ['avif' => 'image/avif', 'gif' => 'image/gif', 'jpg' => 'image/jpeg', 'm4a' => 'audio/mp4', 'mp4' => 'video/mp4', 'png' => 'image/png', 'webp' => 'image/webp'];
 
     public function __construct(private MediaLibrary $library, private MediaStore $store, private Config $config) {}
 

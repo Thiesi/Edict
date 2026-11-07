@@ -83,42 +83,10 @@ final readonly class ImageProcessor
                 }
             }
 
-            $this->library->assertRoomFor(array_sum(array_column($made, 'bytes')));
-
-            // Everything built, so now it goes public all at once, and the rows always
-            // cover what's there: a crash in between leaves names a retry overwrites.
-            $this->pdo->beginTransaction();
-            $installed = [];
-            try {
-                $this->pdo->prepare('DELETE FROM media_variant WHERE media_id = ?')->execute([$mediaId]);
-                $insert = $this->pdo->prepare(
-                    'INSERT INTO media_variant (media_id, preset, format, width, height, bytes) VALUES (?, ?, ?, ?, ?, ?)',
-                );
-                foreach ($made as $variant) {
-                    $insert->execute([$mediaId, $variant['preset'], $variant['format'], $variant['width'], $variant['height'], $variant['bytes']]);
-                    $target = $this->store->variantPath($sha256, $variant['preset'], $variant['format']);
-                    $this->store->install($variant['file'], $target);
-                    $installed[] = $target;
-                }
-                $this->pdo->prepare("UPDATE media SET status = 'ready', error = NULL, width = ?, height = ? WHERE id = ?")
-                    ->execute([$full['width'], $full['height'], $mediaId]);
-                $this->pdo->commit();
-            } catch (\Throwable $e) {
-                $this->pdo->rollBack();
-                foreach ($installed as $path) {
-                    MediaStore::remove($path);
-                }
-
-                throw $e;
-            }
+            $this->library->publish($mediaId, $sha256, $made, $full['width'], $full['height']);
         } finally {
             MediaStore::remove($dir);
         }
-    }
-
-    public function markFailed(int $mediaId, string $error): void
-    {
-        $this->pdo->prepare("UPDATE media SET status = 'failed', error = ? WHERE id = ?")->execute([mb_substr($error, 0, 500), $mediaId]);
     }
 
     /**

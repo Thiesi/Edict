@@ -188,6 +188,12 @@
     height: auto;
 }
 
+.editor-media video,
+.editor-media audio {
+    display: block;
+    width: 100%;
+}
+
 .editor-media img[hidden],
 .editor-gallery img[hidden] {
     display: none;

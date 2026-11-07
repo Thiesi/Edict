@@ -59,7 +59,7 @@ Adding a block type means changing both the editor (`frontend/editor/`) and the 
 
 ## Media locally
 
-Set `DATA_DIR` in `.env` to a folder outside the repo, and install libvips (`vipsthumbnail`, `vipsheader`). Run `php bin/edict worker` so uploads get processed. Without `DATA_DIR`, uploads fail with a message.
+Set `DATA_DIR` in `.env` to a folder outside the repo, and install libvips (`vipsthumbnail`, `vipsheader`) and ffmpeg (`ffmpeg`, `ffprobe`). Run `php bin/edict worker` so uploads get processed. Without `DATA_DIR`, uploads fail with a message.
 
 ## Admin commands
 

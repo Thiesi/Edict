@@ -42,7 +42,7 @@ final class Command
                     if (microtime(true) > $deadline) {
                         proc_terminate($process, 9);
 
-                        throw new MediaError(basename($command[0]) . ' took too long.');
+                        throw new MediaError(basename($command[0]) . ' took too long.', true);
                     }
                     usleep(20_000);
                 }

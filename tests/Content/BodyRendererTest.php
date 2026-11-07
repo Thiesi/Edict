@@ -116,4 +116,64 @@ final class BodyRendererTest extends DbTestCase
         self::assertStringContainsString('alt="Shown"', $page);
         self::assertStringContainsString('/assets/lightbox.js', $page);
     }
+
+    private function playerRow(string $kind, string $status = 'ready'): int
+    {
+        $stmt = $this->pdo->prepare(
+            "INSERT INTO media (sha256, kind, extension, bytes, original_name, width, height, status, created_at)
+             VALUES (?, ?, 'mp4', 1000, 'x', 1280, 720, ?, now()) RETURNING id",
+        );
+        $stmt->execute([hash('sha256', random_bytes(8)), $kind, $status]);
+        $id = (int) $stmt->fetchColumn();
+
+        $insert = $this->pdo->prepare('INSERT INTO media_variant (media_id, preset, format, width, height, bytes) VALUES (?, ?, ?, ?, ?, 10)');
+        if ($kind === 'video') {
+            $insert->execute([$id, 'h264', 'mp4', 1280, 720]);
+            $insert->execute([$id, 'poster', 'jpg', 1280, 720]);
+        } else {
+            $insert->execute([$id, 'aac', 'm4a', 0, 0]);
+        }
+
+        return $id;
+    }
+
+    public function testVideoBecomesAPlayerWithAPoster(): void
+    {
+        $id = $this->playerRow('video');
+
+        $html = $this->render(['type' => 'player', 'attrs' => ['mediaId' => $id, 'caption' => 'A <clip>']]);
+
+        self::assertMatchesRegularExpression('~<video controls playsinline preload="metadata" src="/media/[^"]+-h264\.mp4" poster="/media/[^"]+-poster\.jpg" width="1280" height="720">~', $html);
+        self::assertStringContainsString('<figcaption>A &lt;clip&gt;</figcaption>', $html);
+        self::assertStringNotContainsString('autoplay', $html);
+    }
+
+    public function testAudioBecomesAPlayer(): void
+    {
+        $html = $this->render(['type' => 'player', 'attrs' => ['mediaId' => $this->playerRow('audio')]]);
+
+        self::assertMatchesRegularExpression('~<audio controls preload="metadata" src="/media/[^"]+-aac\.m4a">~', $html);
+        self::assertStringNotContainsString('figcaption', $html);
+    }
+
+    public function testPlayersWaitUntilTheyAreReady(): void
+    {
+        self::assertSame('', trim($this->render(['type' => 'player', 'attrs' => ['mediaId' => $this->playerRow('video', 'processing')]])));
+    }
+
+    public function testAPlayerPointedAtAnImageShowsNothing(): void
+    {
+        self::assertSame('', trim($this->render(['type' => 'player', 'attrs' => ['mediaId' => $this->mediaRow()]])));
+    }
+
+    public function testPlayerAttributesAreCleaned(): void
+    {
+        $clean = Body::clean(['type' => 'doc', 'content' => [
+            ['type' => 'player', 'attrs' => ['mediaId' => 7, 'caption' => 'ok', 'onclick' => 'x']],
+            ['type' => 'player', 'attrs' => ['mediaId' => 'nope']],
+        ]]);
+
+        self::assertSame([['type' => 'player', 'attrs' => ['mediaId' => 7, 'caption' => 'ok']]], $clean['content']);
+        self::assertSame([7], Body::mediaIds($clean));
+    }
 }

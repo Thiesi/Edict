@@ -26,6 +26,8 @@ final readonly class Config
         public int $mediaMinFreeBytes = 5_000_000_000,
         public string $vipsthumbnailBin = 'vipsthumbnail',
         public string $vipsheaderBin = 'vipsheader',
+        public string $ffmpegBin = 'ffmpeg',
+        public string $ffprobeBin = 'ffprobe',
     ) {}
 
     /**
@@ -62,6 +64,8 @@ final readonly class Config
             mediaMinFreeBytes: self::int($env, 'MEDIA_MIN_FREE_BYTES', 5_000_000_000),
             vipsthumbnailBin: self::str($env, 'VIPSTHUMBNAIL_BIN') ?? 'vipsthumbnail',
             vipsheaderBin: self::str($env, 'VIPSHEADER_BIN') ?? 'vipsheader',
+            ffmpegBin: self::str($env, 'FFMPEG_BIN') ?? 'ffmpeg',
+            ffprobeBin: self::str($env, 'FFPROBE_BIN') ?? 'ffprobe',
         );
     }
 

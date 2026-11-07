@@ -7,8 +7,8 @@ namespace Edict\Content;
 use Edict\Media\MediaLibrary;
 
 /**
- * An article body as HTML, with its images. Images that aren't ready yet are simply
- * left out, and appear once they are.
+ * An article body as HTML, with its media. Media that isn't ready yet is simply left
+ * out, and appears once it is.
  */
 final readonly class BodyRenderer
 {
@@ -19,25 +19,72 @@ final readonly class BodyRenderer
 
     public function html(string $json): string
     {
-        $media = $this->library->readyImages(Body::mediaIds(Body::decode($json)));
+        $media = $this->library->ready(Body::mediaIds(Body::decode($json)));
 
         return Body::toHtml($json, function (array $node) use ($media): string {
             $attrs = is_array($node['attrs'] ?? null) ? $node['attrs'] : [];
             if (($node['type'] ?? null) === 'gallery') {
                 return $this->gallery($attrs, $media);
             }
+            if (($node['type'] ?? null) === 'player') {
+                return self::player($attrs, $media);
+            }
 
             $image = self::lookUp($attrs, $media);
             if ($image === null) {
                 return '';
             }
-            $caption = is_string($attrs['caption'] ?? null) ? $attrs['caption'] : '';
 
             return "<figure class=\"media-image\">\n"
                 . self::picture($image, self::text($attrs, 'alt'), self::COLUMN_SIZES)
-                . ($caption === '' ? '' : '<figcaption>' . Body::escape($caption) . "</figcaption>\n")
+                . self::caption($attrs)
                 . "</figure>\n";
         });
+    }
+
+    /**
+     * Native players: Apache answers their range requests, so seeking is instant. The
+     * link inside is for browsers that can't play it.
+     *
+     * @param array<mixed> $attrs
+     * @param array<int, array<string, mixed>> $media
+     */
+    private static function player(array $attrs, array $media): string
+    {
+        $found = self::lookUp($attrs, $media);
+        /** @var array<string, array{preset: string, format: string, width: int, height: int, url: string}> $variants */
+        $variants = array_column(is_array($found['variants'] ?? null) ? $found['variants'] : [], null, 'preset');
+
+        if (($found['kind'] ?? null) === 'video' && isset($variants['h264'], $variants['poster'])) {
+            $file = Body::escape($variants['h264']['url']);
+
+            return "<figure class=\"media-video\">\n"
+                . '<video controls playsinline preload="metadata" src="' . $file . '" poster="' . Body::escape($variants['poster']['url']) . '"'
+                . ' width="' . $variants['h264']['width'] . '" height="' . $variants['h264']['height'] . '"><a href="' . $file . "\">Download this video</a></video>\n"
+                . self::caption($attrs)
+                . "</figure>\n";
+        }
+
+        if (($found['kind'] ?? null) === 'audio' && isset($variants['aac'])) {
+            $file = Body::escape($variants['aac']['url']);
+
+            return "<figure class=\"media-audio\">\n"
+                . '<audio controls preload="metadata" src="' . $file . '"><a href="' . $file . "\">Download this recording</a></audio>\n"
+                . self::caption($attrs)
+                . "</figure>\n";
+        }
+
+        return '';
+    }
+
+    /**
+     * @param array<mixed> $attrs
+     */
+    private static function caption(array $attrs): string
+    {
+        $caption = self::text($attrs, 'caption');
+
+        return $caption === '' ? '' : '<figcaption>' . Body::escape($caption) . "</figcaption>\n";
     }
 
     /**
