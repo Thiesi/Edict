@@ -46,7 +46,7 @@ jobs:
           key: composer-${{ hashFiles('composer.lock') }}
 
       - name: Install the media tools
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libvips-tools libimage-exiftool-perl
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libvips-tools libimage-exiftool-perl ffmpeg
 
       - run: composer validate --strict
       - run: composer install --no-interaction --no-progress --prefer-dist
@@ -99,7 +99,7 @@ jobs:
       - run: npx playwright install --with-deps chromium
 
       - name: Install the media tools
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libvips-tools
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libvips-tools ffmpeg
 
       - name: Create the database and the admin
         env:

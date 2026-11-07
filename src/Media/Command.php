@@ -10,6 +10,15 @@ namespace Edict\Media;
 final class Command
 {
     private const MAX_OUTPUT_BYTES = 65536;
+    private const COULD_NOT_START = 'Could not start ';
+
+    /**
+     * The host's problem rather than the file's, so worth trying again.
+     */
+    public static function failedToStart(MediaError $error): bool
+    {
+        return str_starts_with($error->getMessage(), self::COULD_NOT_START);
+    }
 
     /**
      * @param list<string> $command
@@ -24,7 +33,7 @@ final class Command
     {
         $process = @proc_open($command, [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, null, ['TMPDIR' => $tempDir] + getenv());
         if (!is_resource($process)) {
-            throw new MediaError('Could not start ' . basename($command[0]) . '.');
+            throw new MediaError(self::COULD_NOT_START . basename($command[0]) . '.');
         }
 
         stream_set_blocking($pipes[1], false);
@@ -42,7 +51,7 @@ final class Command
                     if (microtime(true) > $deadline) {
                         proc_terminate($process, 9);
 
-                        throw new MediaError(basename($command[0]) . ' took too long.');
+                        throw new MediaError(basename($command[0]) . ' took too long.', true);
                     }
                     usleep(20_000);
                 }
@@ -56,6 +65,10 @@ final class Command
             proc_close($process);
         }
 
+        // Where PHP forks instead of spawning, a missing tool looks like a tool failing.
+        if (in_array($status['exitcode'], [126, 127], true)) {
+            throw new MediaError(self::COULD_NOT_START . basename($command[0]) . '.');
+        }
         if ($status['exitcode'] !== 0) {
             throw new MediaError(basename($command[0]) . ' failed: ' . mb_substr(trim($errors), 0, 500));
         }

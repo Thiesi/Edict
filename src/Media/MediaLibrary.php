@@ -17,11 +17,12 @@ final readonly class MediaLibrary
     public const CHUNK_BYTES = 8_388_608;
 
     private const MAX_IMAGE_BYTES = 50_000_000;
+    private const MAX_AUDIO_BYTES = 500_000_000;
     private const MAX_UPLOAD_BYTES = 4_000_000_000;
     private const MAX_NAME_LENGTH = 200;
     private const MAX_OPEN_UPLOADS = 20;
 
-    private const COLUMNS = 'id, sha256, kind, extension, bytes, original_name, width, height, status, error';
+    private const COLUMNS = 'id, sha256, kind, extension, bytes, original_name, width, height, status, error, meta::text AS meta';
 
     public function __construct(
         private \PDO $pdo,
@@ -199,6 +200,9 @@ final readonly class MediaLibrary
         if ($type['kind'] === 'image' && $bytes > self::MAX_IMAGE_BYTES) {
             throw new MediaError('Images can be up to ' . self::human(self::MAX_IMAGE_BYTES) . '.');
         }
+        if ($type['kind'] === 'audio' && $bytes > self::MAX_AUDIO_BYTES) {
+            throw new MediaError('Audio files can be up to ' . self::human(self::MAX_AUDIO_BYTES) . '.');
+        }
         $this->assertRoomFor($bytes, $id);
 
         // ON CONFLICT: the same file finishing at the same moment in another upload.
@@ -212,7 +216,7 @@ final readonly class MediaLibrary
             $type['extension'],
             $bytes,
             Row::str($upload, 'original_name'),
-            $type['kind'] === 'image' ? 'processing' : 'ready',
+            $type['kind'] === 'file' ? 'ready' : 'processing',
             $this->clock->now(),
         ]);
         $inserted = $stmt->fetchColumn();
@@ -229,8 +233,8 @@ final readonly class MediaLibrary
         $mediaId = Row::int(['id' => $inserted], 'id');
         $original = $this->store->originalPath($sha256);
         $this->store->install($path, $original);
-        if ($type['kind'] === 'image') {
-            $this->jobs->enqueue(ImageProcessor::JOB, ['media_id' => $mediaId]);
+        if ($type['kind'] !== 'file') {
+            $this->jobs->enqueue($type['kind'] === 'image' ? ImageProcessor::JOB : AvProcessor::JOB, ['media_id' => $mediaId]);
         }
 
         return [$mediaId, $original];
@@ -247,10 +251,19 @@ final readonly class MediaLibrary
 
     private function retryIfFailed(int $mediaId): void
     {
-        $stmt = $this->pdo->prepare("UPDATE media SET status = 'processing', error = NULL WHERE id = ? AND status = 'failed' RETURNING id");
+        // Also what's stuck in "processing" with no job left, which a rollback to a release
+        // that doesn't know the job type can cause. Nothing else would ever get it moving.
+        $stmt = $this->pdo->prepare(
+            "UPDATE media SET status = 'processing', error = NULL
+             WHERE id = ? AND (status = 'failed' OR (status = 'processing' AND NOT EXISTS (
+                 SELECT 1 FROM job WHERE state IN ('queued', 'running') AND (payload->>'media_id')::bigint = media.id
+             )))
+             RETURNING kind",
+        );
         $stmt->execute([$mediaId]);
-        if ($stmt->fetchColumn() !== false) {
-            $this->jobs->enqueue(ImageProcessor::JOB, ['media_id' => $mediaId]);
+        $kind = $stmt->fetchColumn();
+        if ($kind !== false) {
+            $this->jobs->enqueue($kind === 'image' ? ImageProcessor::JOB : AvProcessor::JOB, ['media_id' => $mediaId]);
         }
     }
 
@@ -295,14 +308,14 @@ final readonly class MediaLibrary
      *
      * @return array<int, array<string, mixed>> by ID
      */
-    public function readyImages(array $ids): array
+    public function ready(array $ids): array
     {
         if ($ids === []) {
             return [];
         }
 
         $stmt = $this->pdo->prepare(
-            'SELECT ' . self::COLUMNS . " FROM media WHERE kind = 'image' AND status = 'ready' AND id = ANY(?::bigint[])",
+            'SELECT ' . self::COLUMNS . " FROM media WHERE status = 'ready' AND id = ANY(?::bigint[])",
         );
         $stmt->execute(['{' . implode(',', $ids) . '}']);
 
@@ -361,15 +374,61 @@ final readonly class MediaLibrary
     }
 
     /**
+     * Makes finished versions public, all at once. The rows always cover what's there:
+     * a crash in between leaves names a retry overwrites.
+     *
+     * @param list<array{preset: string, format: string, width: int, height: int, bytes: int, file: string}> $made
+     * @param string|null $kind what the job found inside, where the upload could only guess
+     * @param array<string, mixed> $meta
+     */
+    public function publish(int $mediaId, string $sha256, array $made, int $width, int $height, ?string $kind = null, array $meta = []): void
+    {
+        // The caps only: these files are on this disk already, in the job's directory.
+        $this->assertRoomFor(array_sum(array_column($made, 'bytes')), null, true);
+
+        $this->pdo->beginTransaction();
+        $installed = [];
+        try {
+            $this->pdo->prepare('DELETE FROM media_variant WHERE media_id = ?')->execute([$mediaId]);
+            $insert = $this->pdo->prepare(
+                'INSERT INTO media_variant (media_id, preset, format, width, height, bytes) VALUES (?, ?, ?, ?, ?, ?)',
+            );
+            foreach ($made as $variant) {
+                $insert->execute([$mediaId, $variant['preset'], $variant['format'], $variant['width'], $variant['height'], $variant['bytes']]);
+                $target = $this->store->variantPath($sha256, $variant['preset'], $variant['format']);
+                $this->store->install($variant['file'], $target);
+                $installed[] = $target;
+            }
+            $this->pdo->prepare(
+                "UPDATE media SET status = 'ready', error = NULL, width = ?, height = ?, kind = coalesce(?, kind), meta = ?::jsonb WHERE id = ?",
+            )->execute([$width, $height, $kind, json_encode((object) $meta, JSON_THROW_ON_ERROR), $mediaId]);
+            $this->pdo->commit();
+        } catch (\Throwable $e) {
+            $this->pdo->rollBack();
+            foreach ($installed as $path) {
+                MediaStore::remove($path);
+            }
+
+            throw $e;
+        }
+    }
+
+    public function markFailed(int $mediaId, string $error): void
+    {
+        $this->pdo->prepare("UPDATE media SET status = 'failed', error = ? WHERE id = ?")->execute([mb_substr($error, 0, 500), $mediaId]);
+    }
+
+    /**
      * Fails loudly before anything is written: over the cap, too many files, or too
      * little free disk for what else lives on it. Unfinished uploads count for their
      * full size, so several at once can't each pass and then overfill the disk.
      *
      * @param string|null $exceptUpload an upload whose own reservation this replaces
+     * @param bool $onDiskAlready skip the free disk check, because nothing new gets written
      *
      * @throws MediaError
      */
-    public function assertRoomFor(int $bytes, ?string $exceptUpload = null): void
+    public function assertRoomFor(int $bytes, ?string $exceptUpload = null, bool $onDiskAlready = false): void
     {
         $stmt = $this->pdo->prepare(
             'SELECT (SELECT coalesce(sum(bytes), 0) FROM media) + (SELECT coalesce(sum(bytes), 0) FROM media_variant) AS used,
@@ -385,7 +444,7 @@ final readonly class MediaLibrary
 
         // Only bytes still to arrive take disk from here on.
         $coming = Row::int($row, 'incoming') + ($exceptUpload === null ? $bytes : 0);
-        if ($this->store->freeBytes() - $coming < $this->config->mediaMinFreeBytes) {
+        if (!$onDiskAlready && $this->store->freeBytes() - $coming < $this->config->mediaMinFreeBytes) {
             throw new MediaError('Not enough free disk space for this file.');
         }
         if (Row::int($row, 'used') + Row::int($row, 'reserved') + $bytes > $this->config->mediaMaxBytes) {
@@ -438,6 +497,8 @@ final readonly class MediaLibrary
     {
         $id = Row::int($row, 'id');
         $sha256 = Row::str($row, 'sha256');
+        $meta = json_decode(is_string($row['meta'] ?? null) ? $row['meta'] : '{}', true);
+        $meta = is_array($meta) ? $meta : [];
 
         return [
             'id' => $id,
@@ -449,6 +510,8 @@ final readonly class MediaLibrary
             'status' => Row::str($row, 'status'),
             'error' => is_string($row['error'] ?? null) ? $row['error'] : null,
             'variants' => $this->variants($id, $sha256),
+            'seconds' => is_numeric($meta['seconds'] ?? null) ? (float) $meta['seconds'] : null,
+            'peaks' => is_array($meta['peaks'] ?? null) ? $meta['peaks'] : [],
         ];
     }
 

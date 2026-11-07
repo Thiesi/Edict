@@ -101,6 +101,9 @@ GOOGLE_OIDC_CLIENT_ID=
 GOOGLE_OIDC_CLIENT_SECRET=
 TWITCH_OIDC_CLIENT_ID=
 TWITCH_OIDC_CLIENT_SECRET=
+DATA_DIR=/home/edictstg/data
+FFMPEG_BIN=/usr/pkg/bin/ffmpeg8   # pkgsrc installs them under versioned names
+FFPROBE_BIN=/usr/pkg/bin/ffprobe8
 ```
 
 Secrets are put in place directly on the host, never through chats or commits. A provider with empty values just isn't offered, so the provider values can follow later. Changing `APP_SECRET` makes stored authenticator secrets unreadable, so run `admin:reset` afterwards.

@@ -35,6 +35,22 @@ figure.media-image img,
     height: auto;
 }
 
+figure.media-video,
+figure.media-audio {
+    margin: 1.5rem 0;
+}
+
+figure.media-video video {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+figure.media-audio audio {
+    display: block;
+    width: 100%;
+}
+
 figcaption {
     font-size: 0.9em;
     font-style: italic;

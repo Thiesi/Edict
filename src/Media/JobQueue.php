@@ -31,20 +31,22 @@ final readonly class JobQueue
     }
 
     /**
+     * @param string|null $onlyType leave all other jobs for another worker
+     *
      * @return array{id: int, type: string, payload: array<mixed>, attempts: int}|null
      */
-    public function claim(): ?array
+    public function claim(?string $onlyType = null): ?array
     {
         $now = $this->clock->now();
         $stmt = $this->pdo->prepare(
             "UPDATE job SET state = 'running', attempts = attempts + 1, locked_at = to_timestamp(?)
              WHERE id = (
-                 SELECT id FROM job WHERE state = 'queued' AND run_after <= to_timestamp(?)
+                 SELECT id FROM job WHERE state = 'queued' AND run_after <= to_timestamp(?) AND (?::text IS NULL OR type = ?)
                  ORDER BY run_after, id FOR UPDATE SKIP LOCKED LIMIT 1
              )
              RETURNING id, type, payload::text AS payload, attempts",
         );
-        $stmt->execute([$now, $now]);
+        $stmt->execute([$now, $now, $onlyType, $onlyType]);
         $row = $stmt->fetch();
         if (!is_array($row)) {
             return null;
@@ -66,16 +68,18 @@ final readonly class JobQueue
     }
 
     /**
+     * @param bool $hopeless don't try again
+     *
      * @return bool true if the job will run again, false if it has failed for good
      */
-    public function fail(int $id, string $error): bool
+    public function fail(int $id, string $error, bool $hopeless = false): bool
     {
         $stmt = $this->pdo->prepare(
-            "UPDATE job SET state = CASE WHEN attempts < ? THEN 'queued' ELSE 'failed' END,
+            "UPDATE job SET state = CASE WHEN attempts < ? AND NOT ?::boolean THEN 'queued' ELSE 'failed' END,
                     run_after = to_timestamp(?), locked_at = NULL, error = ?
              WHERE id = ? RETURNING state",
         );
-        $stmt->execute([self::MAX_ATTEMPTS, $this->clock->now() + self::RETRY_DELAY, mb_substr($error, 0, 2000), $id]);
+        $stmt->execute([self::MAX_ATTEMPTS, $hopeless ? 'true' : 'false', $this->clock->now() + self::RETRY_DELAY, mb_substr($error, 0, 2000), $id]);
 
         return $stmt->fetchColumn() === 'queued';
     }
