@@ -903,9 +903,17 @@ final class MediaFlowTest extends DbTestCase
         $this->requireTools();
         $bytes = $this->ffmpegMakes('hdr.mp4', [
             '-f', 'lavfi', '-i', 'color=c=0x808080:size=320x240:rate=10:duration=1',
-            '-c:v', 'libx265', '-preset', 'ultrafast', '-x265-params', 'log-level=error', '-pix_fmt', 'yuv420p10le',
-            '-color_primaries', 'bt2020', '-color_trc', $transfer, '-colorspace', 'bt2020nc',
+            '-c:v', 'libx265', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p10le',
+            '-x265-params', "log-level=error:colorprim=bt2020:transfer=$transfer:colormatrix=bt2020nc",
         ]);
+        $source = $this->dataDir . '/hdr-source.mp4';
+        file_put_contents($source, $bytes);
+        $sourceStreams = $this->probed(['path' => $source])['streams'] ?? null;
+        unlink($source);
+        self::assertIsArray($sourceStreams);
+        self::assertIsArray($sourceStreams[0]);
+        self::assertSame($transfer, $sourceStreams[0]['color_transfer'] ?? null, 'proves this source is HDR');
+        self::assertSame('yuv420p10le', $sourceStreams[0]['pix_fmt'] ?? null);
 
         $media = $this->processedUpload('hdr.mp4', $bytes);
 
@@ -915,8 +923,8 @@ final class MediaFlowTest extends DbTestCase
         self::assertIsArray($found['streams'][0]);
         self::assertSame('h264', $found['streams'][0]['codec_name']);
         self::assertSame('yuv420p', $found['streams'][0]['pix_fmt']);
-        self::assertSame('bt709', $found['streams'][0]['color_transfer']);
-        self::assertSame('bt709', $found['streams'][0]['color_primaries']);
+        self::assertSame('bt709', $found['streams'][0]['color_transfer'] ?? null);
+        self::assertSame('bt709', $found['streams'][0]['color_primaries'] ?? null);
 
         // A grey signal stays about the same grey: the conversion didn't crush or wash it out.
         $poster = $this->variant($media, 'poster');
