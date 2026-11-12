@@ -281,6 +281,20 @@
     border-color: #1a56db;
 }
 
+.media-grid button.is-processing {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.25rem;
+    min-height: 6rem;
+    padding: 0.25rem;
+    border: 1px dashed #999;
+    overflow-wrap: anywhere;
+    color: #555;
+    font-size: 0.75rem;
+    cursor: progress;
+}
+
 .media-grid img {
     display: block;
     width: 100%;
