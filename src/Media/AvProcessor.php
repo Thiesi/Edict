@@ -39,6 +39,8 @@ final readonly class AvProcessor
      */
     private const TONE_MAP = ',scale=in_color_matrix=bt2020,format=gbrp16le,lut3d=file=%s:interp=tetrahedral'
         . ',scale=out_color_matrix=bt709:out_range=tv,format=yuv420p'
+        // The frames would still claim the source's HDR transfer and BT.2020, and those win over -color_trc.
+        . ',setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv'
         . ',sidedata=mode=delete:type=MASTERING_DISPLAY_METADATA,sidedata=mode=delete:type=CONTENT_LIGHT_LEVEL'
         . ',sidedata=mode=delete:type=DYNAMIC_HDR_PLUS,sidedata=mode=delete:type=DOVI_RPU_BUFFER,sidedata=mode=delete:type=DOVI_METADATA';
     private const SDR_TAGS = [
