@@ -12,6 +12,7 @@ use Edict\Media\JobQueue;
 use Edict\Media\JobRunner;
 use Edict\Media\MediaLibrary;
 use Edict\Media\MediaStore;
+use Edict\Media\ToneMap;
 use Edict\Services;
 use Edict\Tests\DbTestCase;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -756,6 +757,15 @@ final class MediaFlowTest extends DbTestCase
         self::fail("No variant $preset");
     }
 
+    private function sideData(string $path): string
+    {
+        $json = shell_exec('ffprobe -v error -select_streams v:0 -read_intervals %+#1 -show_streams -show_frames -of json ' . escapeshellarg($path) . ' 2>&1');
+        self::assertIsString($json);
+        self::assertStringContainsString('"frames"', $json, $json);
+
+        return $json;
+    }
+
     /**
      * @param array<string, mixed> $variant
      *
@@ -904,12 +914,17 @@ final class MediaFlowTest extends DbTestCase
         $bytes = $this->ffmpegMakes('hdr.mp4', [
             '-f', 'lavfi', '-i', 'color=c=0x808080:size=320x240:rate=10:duration=1',
             '-c:v', 'libx265', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p10le',
-            '-x265-params', "log-level=error:colorprim=bt2020:transfer=$transfer:colormatrix=bt2020nc",
+            // What phones add: the mastering display and light levels.
+            '-x265-params', "log-level=error:colorprim=bt2020:transfer=$transfer:colormatrix=bt2020nc"
+                . ':master-display=G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,50):max-cll=1000,400',
         ]);
         $source = $this->dataDir . '/hdr-source.mp4';
         file_put_contents($source, $bytes);
         $sourceStreams = $this->probed(['path' => $source])['streams'] ?? null;
+        $sourceSideData = $this->sideData($source);
         unlink($source);
+        self::assertStringContainsString('Mastering display', $sourceSideData, 'proves the source carries HDR side data');
+        self::assertStringContainsString('Content light level', $sourceSideData);
         self::assertIsArray($sourceStreams);
         self::assertIsArray($sourceStreams[0]);
         self::assertSame($transfer, $sourceStreams[0]['color_transfer'] ?? null, 'proves this source is HDR');
@@ -925,11 +940,17 @@ final class MediaFlowTest extends DbTestCase
         self::assertSame('yuv420p', $found['streams'][0]['pix_fmt']);
         self::assertSame('bt709', $found['streams'][0]['color_transfer'] ?? null);
         self::assertSame('bt709', $found['streams'][0]['color_primaries'] ?? null);
+        $video = $this->variant($media, 'h264');
+        self::assertIsString($video['path']);
+        $sideData = $this->sideData($video['path']);
+        self::assertStringNotContainsString('Mastering display', $sideData, 'an ordinary video must not claim to be HDR');
+        self::assertStringNotContainsString('Content light level', $sideData);
 
-        // A grey signal stays about the same grey: the conversion didn't crush or wash it out.
+        // The grey comes out where the table puts it, so ffmpeg really applied it.
         $poster = $this->variant($media, 'poster');
         self::assertIsString($poster['path']);
-        self::assertEqualsWithDelta(128.0, (float) shell_exec('vips avg ' . escapeshellarg($poster['path']) . ' 2>&1'), 25.0);
+        $expected = 255 * ToneMap::map($transfer, 0.5, 0.5, 0.5)[1];
+        self::assertEqualsWithDelta($expected, (float) shell_exec('vips avg ' . escapeshellarg($poster['path']) . ' 2>&1'), 10.0);
     }
 
     public function testAVideoWithoutSoundIsFine(): void
