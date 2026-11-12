@@ -34,13 +34,20 @@ final readonly class AvProcessor
 
     /**
      * HDR footage, the default on recent phones, must become ordinary video, or it looks
-     * washed out. Proper tone mapping needs zscale, which the host's ffmpeg lacks. HLG,
-     * what iPhones record, is designed to look right when treated as ordinary BT.2020,
-     * so this suits it. PQ (HDR10) comes out darker and flatter than it should.
+     * flat or glaring. ToneMap's table does the work, in 16-bit RGB. The HDR side data goes
+     * too: left on an ordinary stream, it can make players treat it as HDR.
      */
-    private const HDR_TO_SDR = ',colorspace=iall=bt2020:all=bt709:format=yuv420p';
-    private const HDR_TRANSFERS = ['arib-std-b67', 'smpte2084'];
-    private const SDR_TAGS = ['-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709'];
+    private const TONE_MAP = ',scale=in_color_matrix=bt2020,format=gbrp16le,lut3d=file=%s:interp=tetrahedral'
+        . ',scale=out_color_matrix=bt709:out_range=tv,format=yuv420p'
+        // The frames would still claim the source's HDR transfer and BT.2020, and those win over -color_trc.
+        . ',setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv'
+        . ',sidedata=mode=delete:type=MASTERING_DISPLAY_METADATA,sidedata=mode=delete:type=CONTENT_LIGHT_LEVEL'
+        . ',sidedata=mode=delete:type=DYNAMIC_HDR_PLUS,sidedata=mode=delete:type=DOVI_RPU_BUFFER,sidedata=mode=delete:type=DOVI_METADATA';
+    private const SDR_TAGS = [
+        '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-color_range', 'tv',
+        // Drops SEI messages, where H.264 would carry mastering display and light levels.
+        '-bsf:v', 'filter_units=remove_types=6',
+    ];
 
     private const AUDIO_BITRATE = '192k';
     private const VIDEO_AUDIO_BITRATE = '160k';
@@ -120,7 +127,7 @@ final readonly class AvProcessor
     }
 
     /**
-     * @param array{video: bool, audio: int|null, seconds: float, width: int, height: int, hdr: bool} $probe
+     * @param array{video: bool, audio: int|null, seconds: float, width: int, height: int, hdr: string|null} $probe
      *
      * @return array{variants: list<array{preset: string, format: string, width: int, height: int, bytes: int, file: string}>, width: int, height: int, meta: array<string, mixed>}
      */
@@ -132,8 +139,8 @@ final readonly class AvProcessor
             ...$this->reading($demuxer, $source),
             '-map', '0:V:0', ...($probe['audio'] === null ? [] : ['-map', '0:' . $probe['audio']]),
             '-map_metadata', '-1', '-map_chapters', '-1', '-sn', '-dn',
-            '-vf', self::SCALE . ($probe['hdr'] ? self::HDR_TO_SDR : ''),
-            ...($probe['hdr'] ? self::SDR_TAGS : []),
+            '-vf', self::SCALE . ($probe['hdr'] === null ? '' : $this->toneMap($probe['hdr'], $dir)),
+            ...($probe['hdr'] === null ? [] : self::SDR_TAGS),
             '-c:v', 'libx264', '-preset', 'faster', '-crf', '23', '-maxrate', self::VIDEO_MAX_BITRATE, '-bufsize', self::VIDEO_BUFFER,
             '-pix_fmt', 'yuv420p',
             '-c:a', 'aac', '-b:a', self::VIDEO_AUDIO_BITRATE, '-ac', '2',
@@ -154,6 +161,23 @@ final readonly class AvProcessor
             'height' => $made['height'],
             'meta' => ['seconds' => round($made['seconds'], 2)],
         ];
+    }
+
+    /**
+     * The filters that make HDR ordinary, with the table written into the job dir.
+     */
+    private function toneMap(string $transfer, string $dir): string
+    {
+        $table = str_replace('\\', '/', $dir) . '/tonemap.cube';
+        // Inside a filter graph these would need escaping twice over; job dirs never have them.
+        if (preg_match('#^[A-Za-z0-9_./-]+$#', $table) !== 1) {
+            throw new MediaError('The job folder has characters ffmpeg filters cannot take: ' . $table);
+        }
+        if (file_put_contents($table, ToneMap::cube($transfer)) === false) {
+            throw new MediaError('Could not write the colour table.');
+        }
+
+        return sprintf(self::TONE_MAP, $table);
     }
 
     /**
@@ -295,7 +319,7 @@ final readonly class AvProcessor
     }
 
     /**
-     * @return array{video: bool, audio: int|null, seconds: float, width: int, height: int, hdr: bool} audio is the stream to use
+     * @return array{video: bool, audio: int|null, seconds: float, width: int, height: int, hdr: string|null} audio is the stream to use
      */
     private function probe(string $file, string $demuxer, string $dir): array
     {
@@ -315,7 +339,7 @@ final readonly class AvProcessor
             'seconds' => is_numeric($format['duration'] ?? null) ? (float) $format['duration'] : 0.0,
             'width' => 0,
             'height' => 0,
-            'hdr' => false,
+            'hdr' => null,
         ];
         foreach ($streams as $stream) {
             if (!is_array($stream)) {
@@ -334,7 +358,8 @@ final readonly class AvProcessor
                 $result['video'] = true;
                 $result['width'] = is_int($stream['width'] ?? null) ? $stream['width'] : 0;
                 $result['height'] = is_int($stream['height'] ?? null) ? $stream['height'] : 0;
-                $result['hdr'] = in_array($stream['color_transfer'] ?? null, self::HDR_TRANSFERS, true);
+                $transfer = $stream['color_transfer'] ?? null;
+                $result['hdr'] = is_string($transfer) && ToneMap::isHdr($transfer) ? $transfer : null;
             }
         }
 
