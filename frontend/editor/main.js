@@ -12,7 +12,7 @@ import { Placeholder } from '@tiptap/extensions';
 import { TextSelection } from '@tiptap/pm/state';
 import StarterKit from '@tiptap/starter-kit';
 
-import { MediaGallery, MediaImage, MediaPlayer, preview } from './media.js';
+import { MediaGallery, MediaImage, MediaPlayer, preview, whenReady } from './media.js';
 import { SlashCommands } from './slash.js';
 import { Uploader } from './uploads.js';
 
@@ -382,7 +382,11 @@ const uploadAll = async (files, spot) => {
     landingSpots.add(spot);
     const uploaded = [];
     for (const file of files) {
-        uploaded.push(await uploader.upload(file));
+        const media = await uploader.upload(file);
+        uploaded.push(media);
+        if (media !== null && !panel.hidden) {
+            addToLibrary(media, { first: true });
+        }
     }
     landingSpots.delete(spot);
 
@@ -424,9 +428,46 @@ const moreButton = field('media-more');
 let libraryPage = 1;
 let chosen = [];
 
-const addToLibrary = (media) => {
+// Placed where the newest belong, unless the library already shows it.
+const placeTile = (tile, first) => {
+    if (first) {
+        grid.prepend(tile);
+    } else {
+        grid.append(tile);
+    }
+};
+
+// Still being processed: shown so it isn't missing, and swapped for the real tile once ready.
+const waitingTile = (media, first) => {
+    const tile = document.createElement('button');
+    tile.type = 'button';
+    tile.disabled = true;
+    tile.dataset.waitingId = media.id;
+    tile.title = media.name;
+    tile.classList.add('is-processing');
+    const status = document.createElement('span');
+    const name = document.createElement('span');
+    name.textContent = media.name;
+    tile.append(status, name);
+    placeTile(tile, first);
+    whenReady(media.id, status, media.kind, 'Processing…', () => !tile.isConnected, (ready) => {
+        const before = tile.nextSibling;
+        tile.remove();
+        addToLibrary(ready, { first, before });
+    });
+};
+
+const addToLibrary = (media, { first = false, before = undefined } = {}) => {
+    if (!canBeInserted(media) || grid.querySelector(`[data-media-id="${media.id}"], [data-waiting-id="${media.id}"]`) !== null) {
+        return;
+    }
+    if (media.status === 'processing') {
+        waitingTile(media, first);
+
+        return;
+    }
     const url = preview(media);
-    if (!canBeInserted(media) || media.status !== 'ready' || (url === null && media.kind !== 'audio')) {
+    if (media.status !== 'ready' || (url === null && media.kind !== 'audio')) {
         return;
     }
     const button = document.createElement('button');
@@ -452,7 +493,11 @@ const addToLibrary = (media) => {
         button.setAttribute('aria-pressed', String(!selected));
         insertButton.disabled = chosen.length === 0;
     });
-    grid.append(button);
+    if (before !== undefined) {
+        grid.insertBefore(button, before);
+    } else {
+        placeTile(button, first);
+    }
 };
 
 const loadLibrary = async () => {
@@ -463,7 +508,7 @@ const loadLibrary = async () => {
         return;
     }
     const { media } = await response.json();
-    media.forEach(addToLibrary);
+    media.forEach((item) => addToLibrary(item));
     moreButton.hidden = media.length === 0;
     libraryPage += 1;
 };
@@ -478,12 +523,21 @@ function openLibrary() {
     loadLibrary();
 }
 
+function closeLibrary() {
+    panel.hidden = true;
+    toggle.setAttribute('aria-expanded', 'false');
+    // Ends the waiting tiles' polling, which stops once a tile is gone.
+    grid.replaceChildren();
+}
+
+// Matches the width at which the panel makes room instead of covering the article.
+const sideBySide = window.matchMedia('(min-width: 50rem)');
+
 toggle.addEventListener('click', () => {
     if (panel.hidden) {
         openLibrary();
     } else {
-        panel.hidden = true;
-        toggle.setAttribute('aria-expanded', 'false');
+        closeLibrary();
     }
 });
 moreButton.addEventListener('click', loadLibrary);
@@ -495,6 +549,10 @@ insertButton.addEventListener('click', () => {
     grid.querySelectorAll('[aria-pressed="true"]').forEach((button) => button.setAttribute('aria-pressed', 'false'));
     chosen = [];
     insertButton.disabled = true;
+    // On a narrow screen the panel covers the article, so it gets out of the way to show what went in.
+    if (!sideBySide.matches) {
+        closeLibrary();
+    }
 });
 
 /* Toolbar */

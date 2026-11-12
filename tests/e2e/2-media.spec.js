@@ -288,3 +288,29 @@ test('a recording becomes an audio player, and the library offers it', async ({ 
     await page.locator('#media-panel').getByRole('button', { name: 'Insert' }).click();
     await expect(page.locator('.editor-media audio')).toBeAttached();
 });
+
+test('an upload shows up in the open library without reopening it', async ({ page }, info) => {
+    test.setTimeout(180_000);
+    await newArticle(page);
+    await page.locator('#media-toggle').click();
+    await expect(page.locator('#media-panel button[data-media-id]').first()).toBeVisible();
+
+    await page.locator('#file-input').setInputFiles(generated(info, 'arrives-live.jpg', 640, 480));
+
+    const tile = page.locator('#media-panel button[data-media-id][title="arrives-live.jpg"]');
+    await expect(tile.locator('img')).toBeVisible({ timeout: 120_000 });
+    await expect(page.locator('#media-panel button[data-waiting-id]')).toHaveCount(0);
+    await expect(page.locator('#media-panel button[title="arrives-live.jpg"]')).toHaveCount(1);
+});
+
+test('on a phone the library steps aside after inserting', async ({ page }) => {
+    await page.setViewportSize({ width: 400, height: 800 });
+    await newArticle(page);
+    await page.locator('#media-toggle').click();
+    await page.locator('#media-panel button[data-media-id]').first().click();
+    await page.locator('#media-panel').getByRole('button', { name: 'Insert' }).click();
+
+    await expect(page.locator('#media-panel')).toBeHidden();
+    await expect(page.locator('#media-toggle')).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.locator('.editor-media')).toBeVisible();
+});

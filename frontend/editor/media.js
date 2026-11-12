@@ -22,7 +22,7 @@ const attributeSetter = (editor, getPos, getNode) => (attrs) => {
 };
 
 // Waits for stored media to finish processing, and reports on the way.
-const whenReady = (id, status, noun, waiting, isGone, onReady) => {
+export const whenReady = (id, status, noun, waiting, isGone, onReady) => {
     const look = async () => {
         if (isGone()) {
             return;
