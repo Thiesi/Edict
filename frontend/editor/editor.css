@@ -437,3 +437,20 @@
     display: inline-block;
     margin-right: 0.5rem;
 }
+
+.poster-chooser {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+    font-size: 0.875rem;
+}
+
+.poster-chooser img {
+    width: 4.5rem;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    border-radius: 3px;
+    background: #000;
+}

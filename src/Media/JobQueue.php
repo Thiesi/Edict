@@ -31,22 +31,23 @@ final readonly class JobQueue
     }
 
     /**
-     * @param string|null $onlyType leave all other jobs for another worker
+     * @param list<string>|null $onlyTypes leave all other jobs for another worker
      *
      * @return array{id: int, type: string, payload: array<mixed>, attempts: int}|null
      */
-    public function claim(?string $onlyType = null): ?array
+    public function claim(?array $onlyTypes = null): ?array
     {
         $now = $this->clock->now();
         $stmt = $this->pdo->prepare(
             "UPDATE job SET state = 'running', attempts = attempts + 1, locked_at = to_timestamp(?)
              WHERE id = (
-                 SELECT id FROM job WHERE state = 'queued' AND run_after <= to_timestamp(?) AND (?::text IS NULL OR type = ?)
+                 SELECT id FROM job WHERE state = 'queued' AND run_after <= to_timestamp(?) AND (?::text[] IS NULL OR type = ANY(?::text[]))
                  ORDER BY run_after, id FOR UPDATE SKIP LOCKED LIMIT 1
              )
              RETURNING id, type, payload::text AS payload, attempts",
         );
-        $stmt->execute([$now, $now, $onlyType, $onlyType]);
+        $types = $onlyTypes === null ? null : '{' . implode(',', $onlyTypes) . '}';
+        $stmt->execute([$now, $now, $types, $types]);
         $row = $stmt->fetch();
         if (!is_array($row)) {
             return null;

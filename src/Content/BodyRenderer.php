@@ -55,11 +55,12 @@ final readonly class BodyRenderer
         /** @var array<string, array{preset: string, format: string, width: int, height: int, url: string}> $variants */
         $variants = array_column(is_array($found['variants'] ?? null) ? $found['variants'] : [], null, 'preset');
 
-        if (($found['kind'] ?? null) === 'video' && isset($variants['h264'], $variants['poster'])) {
+        $poster = array_values(array_filter($variants, static fn(array $variant): bool => MediaLibrary::isPoster($variant['preset'])))[0] ?? null;
+        if (($found['kind'] ?? null) === 'video' && isset($variants['h264']) && $poster !== null) {
             $file = Body::escape($variants['h264']['url']);
 
             return "<figure class=\"media-video\">\n"
-                . '<video controls playsinline preload="metadata" src="' . $file . '" poster="' . Body::escape($variants['poster']['url']) . '"'
+                . '<video controls playsinline preload="metadata" src="' . $file . '" poster="' . Body::escape($poster['url']) . '"'
                 . ' width="' . $variants['h264']['width'] . '" height="' . $variants['h264']['height'] . '"><a href="' . $file . "\">Download this video</a></video>\n"
                 . self::caption($attrs)
                 . "</figure>\n";

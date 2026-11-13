@@ -251,6 +251,15 @@ test('a video uploads, gets processed and appears as a player with a poster', as
     const block = page.locator('.editor-media');
     await expect(block.getByRole('status')).toContainText('Processing', { timeout: 60_000 });
     await expect(block.locator('video')).toBeVisible({ timeout: 120_000 });
+
+    // Without a decoder the player stays at the start, which is a frame like any other.
+    const thumbnail = block.getByRole('img', { name: 'Current poster' });
+    await expect(thumbnail).toHaveAttribute('src', /-poster\.jpg$/);
+    await block.getByRole('button', { name: 'Use this frame as poster' }).click();
+    await expect(block.getByText('Poster changed.')).toBeVisible({ timeout: 60_000 });
+    await expect(thumbnail).toHaveAttribute('src', /-poster-0\.jpg$/);
+    await expect(block.locator('video')).toHaveAttribute('poster', /-poster-0\.jpg$/);
+
     await block.getByLabel(/Caption/).fill('A clip');
     await saved(page);
 
@@ -269,6 +278,7 @@ test('a video uploads, gets processed and appears as a player with a poster', as
     const file = await request.get(await video.getAttribute('src'));
     expect(file.status()).toBe(200);
     expect(file.headers()['content-type']).toBe('video/mp4');
+    await expect(video).toHaveAttribute('poster', /-poster-0\.jpg$/);
     const poster = await request.get(await video.getAttribute('poster'));
     expect(poster.headers()['content-type']).toBe('image/jpeg');
 });

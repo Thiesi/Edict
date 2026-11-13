@@ -53,7 +53,7 @@ const editor = new Editor({
         BubbleMenu.configure({ element: field('bubble-menu') }),
         MediaImage,
         MediaGallery,
-        MediaPlayer,
+        MediaPlayer.configure({ csrf: () => state.csrf, refreshCsrf: () => refreshToken() }),
         SlashCommands.configure({
             actions: {
                 chooseFiles: () => field('file-input').click(),

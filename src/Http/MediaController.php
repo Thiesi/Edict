@@ -103,6 +103,20 @@ final readonly class MediaController
     }
 
     /**
+     * @param array<string, string> $args
+     */
+    public function poster(ServerRequestInterface $request, ResponseInterface $response, array $args): ResponseInterface
+    {
+        $body = $request->getParsedBody();
+        $seconds = is_array($body) ? ($body['seconds'] ?? null) : null;
+        if (!is_int($seconds) && !is_float($seconds)) {
+            return self::json($response->withStatus(400), ['error' => 'The poster request was malformed.']);
+        }
+
+        return self::guarded($response, fn(): array => ['preset' => $this->library->choosePoster((int) ($args['id'] ?? 0), (float) $seconds)]);
+    }
+
+    /**
      * Local development only. Everywhere else Apache serves /media/ directly, and
      * this route is never reached.
      *

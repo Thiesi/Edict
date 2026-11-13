@@ -7,6 +7,8 @@ namespace Edict\Tests\Media;
 use Edict\Auth\AdminAccount;
 use Edict\Auth\SessionStore;
 use Edict\Cli\WorkerCommand;
+use Edict\Content\Body;
+use Edict\Content\BodyRenderer;
 use Edict\Media\FileType;
 use Edict\Media\JobQueue;
 use Edict\Media\JobRunner;
@@ -460,6 +462,8 @@ final class MediaFlowTest extends DbTestCase
         self::assertSame(303, $this->get('/admin/media')->getStatusCode());
         self::assertSame(403, $this->post('/admin/uploads', ['name' => 'a', 'size' => 1], $this->admin)->getStatusCode());
         self::assertSame(403, $this->raw('PUT', "/admin/uploads/$id?offset=0", (new StreamFactory())->createStream('abc'), $this->admin, [])->getStatusCode());
+        self::assertSame(303, $this->post('/admin/media/1/poster', ['seconds' => 1])->getStatusCode());
+        self::assertSame(403, $this->post('/admin/media/1/poster', ['seconds' => 1], $this->admin)->getStatusCode());
     }
 
     public function testLibraryListsNewestFirst(): void
@@ -1189,6 +1193,94 @@ final class MediaFlowTest extends DbTestCase
 
         self::assertSame(200, $response->getStatusCode());
         self::assertSame('video/mp4', $response->getHeaderLine('Content-Type'));
+    }
+
+    private function choosePoster(int $id, mixed $seconds): ResponseInterface
+    {
+        return $this->post("/admin/media/$id/poster", ['seconds' => $seconds], $this->admin, $this->csrf);
+    }
+
+    public function testAChosenFrameBecomesThePoster(): void
+    {
+        $this->requireFfmpeg();
+        $media = $this->processedUpload('clip.mov', $this->ffmpegMakes('clip.mov', self::testVideo('320x240')));
+        $first = $this->variant($media, 'poster');
+
+        $response = $this->choosePoster(self::id($media), 1.5);
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
+        self::assertSame(['preset' => 'poster-1500'], self::data($response));
+        // The worker that keeps images moving during a long video does posters too.
+        self::assertTrue($this->service(JobRunner::class)->runNext(true));
+
+        $done = $this->service(MediaLibrary::class)->find(self::id($media));
+        self::assertNotNull($done);
+        self::assertSame('ready', $done['status']);
+        $chosen = $this->variant($done, 'poster-1500');
+        self::assertSame(320, $chosen['width']);
+        self::assertIsString($chosen['path']);
+        self::assertIsString($first['path']);
+        self::assertFileDoesNotExist($first['path'], 'the old poster goes');
+        $posters = $this->pdo->query("SELECT count(*) FROM media_variant WHERE preset LIKE 'poster%'");
+        self::assertNotFalse($posters);
+        self::assertSame(1, (int) $posters->fetchColumn());
+        self::assertSame([], glob($this->dataDir . '/job-tmp/*'), 'the job dir is removed');
+
+        $html = $this->service(BodyRenderer::class)->html(Body::encode(['type' => 'doc', 'content' => [
+            ['type' => 'player', 'attrs' => ['mediaId' => self::id($media)]],
+        ]]));
+        self::assertStringContainsString('-poster-1500.jpg"', $html);
+    }
+
+    public function testThePosterFromTheVeryEndIsTheLastFrame(): void
+    {
+        $this->requireFfmpeg();
+        $media = $this->processedUpload('clip.mov', $this->ffmpegMakes('clip.mov', self::testVideo('320x240')));
+
+        // Past the end is the end: the editor's player reports its full length there.
+        self::assertSame(200, $this->choosePoster(self::id($media), 99)->getStatusCode());
+        $this->service(JobRunner::class)->runNext();
+
+        $done = $this->service(MediaLibrary::class)->find(self::id($media));
+        self::assertNotNull($done);
+        self::assertIsFloat($done['seconds']);
+        $this->variant($done, MediaLibrary::posterPreset($done['seconds']));
+        self::assertNull($done['posterError']);
+    }
+
+    public function testOnlyAFinishedVideoGetsAPoster(): void
+    {
+        $image = $this->upload('a.png', self::PNG . 'rest');
+
+        self::assertSame(422, $this->choosePoster(self::id($image), 1)->getStatusCode());
+        self::assertSame(422, $this->choosePoster(999_999, 1)->getStatusCode());
+        self::assertSame(400, $this->choosePoster(self::id($image), 'soon')->getStatusCode());
+        self::assertSame(1, $this->rows('job'), 'only the image job is queued');
+    }
+
+    public function testAPosterThatCannotBeMadeSaysSoAndLeavesTheVideo(): void
+    {
+        $this->requireFfmpeg();
+        $media = $this->processedUpload('clip.mov', $this->ffmpegMakes('clip.mov', self::testVideo('320x240')));
+        $video = $this->variant($media, 'h264');
+        self::assertIsString($video['path']);
+        file_put_contents($video['path'], 'no longer a video');
+
+        self::assertSame(200, $this->choosePoster(self::id($media), 1)->getStatusCode());
+        $runner = $this->service(JobRunner::class);
+        for ($i = 0; $i < 3; ++$i) {
+            $this->clock->advance(61);
+            self::assertTrue($runner->runNext());
+        }
+
+        $done = $this->service(MediaLibrary::class)->find(self::id($media));
+        self::assertNotNull($done);
+        self::assertSame('ready', $done['status'], 'the video stays');
+        self::assertIsString($done['posterError']);
+        $this->variant($done, 'poster');
+
+        // Asking again starts afresh.
+        $this->choosePoster(self::id($media), 1);
+        self::assertNull($this->service(MediaLibrary::class)->find(self::id($media))['posterError'] ?? null);
     }
 
     public function testWhileAVideoRunsTheNextWorkerOnlyDoesImagesAndNoHousekeeping(): void
