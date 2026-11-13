@@ -49,11 +49,9 @@ final class Settings
     /**
      * This request only, and only for the admin: see SitePreviewMiddleware.
      */
-    public function preview(string $theme): void
+    public function preview(?string $theme): void
     {
-        if (Themes::exists($theme)) {
-            $this->preview = $theme;
-        }
+        $this->preview = $theme !== null && Themes::exists($theme) ? $theme : null;
     }
 
     public function applyTheme(string $theme): bool

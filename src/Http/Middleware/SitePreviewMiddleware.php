@@ -24,10 +24,18 @@ final readonly class SitePreviewMiddleware implements MiddlewareInterface
     {
         $theme = $request->getQueryParams()['theme'] ?? null;
         $session = $request->getAttribute(SessionMiddleware::ATTRIBUTE);
-        if (is_string($theme) && $session instanceof Session && $session->isAdmin) {
-            $this->services->get(Settings::class)->preview($theme);
+        if (!is_string($theme) || !$session instanceof Session || !$session->isAdmin) {
+            // Without a preview the settings aren't needed here, nor a database connection.
+            return $handler->handle($request);
         }
 
-        return $handler->handle($request);
+        $settings = $this->services->get(Settings::class);
+        $settings->preview($theme);
+        try {
+            return $handler->handle($request);
+        } finally {
+            // A preview never outlives the page it was asked for.
+            $settings->preview(null);
+        }
     }
 }
