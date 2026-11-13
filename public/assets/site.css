@@ -242,3 +242,54 @@ figure.article-cover img,
 .articles > li {
     display: flow-root;
 }
+
+figure.media-file {
+    margin: 1.5rem 0;
+}
+
+.file-card {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    column-gap: 0.75rem;
+    align-items: center;
+    max-width: 28rem;
+    padding: 0.75rem;
+    border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+    border-radius: 6px;
+    color: inherit;
+    text-decoration: none;
+}
+
+.file-card:hover,
+.file-card:focus-visible {
+    border-color: var(--accent, #1a56db);
+}
+
+.file-card img,
+.file-card .file-icon {
+    grid-row: span 2;
+    width: 4rem;
+    height: auto;
+}
+
+.file-card .file-icon {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+}
+
+.file-name {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.file-about {
+    font-size: 0.875rem;
+    opacity: 0.75;
+}
+
+.file-download {
+    display: inline-block;
+    margin-top: 0.35rem;
+    font-size: 0.875rem;
+}

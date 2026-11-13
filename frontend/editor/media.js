@@ -10,7 +10,7 @@ const isPoster = (preset) => /^poster(-\d+)?$/.test(preset);
 export const preview = (media) => {
     const variants = media.variants ?? [];
 
-    return (variants.find((variant) => isPoster(variant.preset))
+    return (variants.find((variant) => isPoster(variant.preset) || variant.preset === 'preview')
         ?? variants.find((variant) => variant.preset === 'w960-webp')
         ?? variants.find((variant) => variant.preset === 'w480-webp')
         ?? variants.find((variant) => variant.preset === 'full'))?.url ?? null;
@@ -154,6 +154,54 @@ const posterChooser = (media, video, csrf, refreshCsrf) => {
     });
 
     return wrapper;
+};
+
+// "PDF · 1.2 MB", as the page's card says it.
+export const aboutFile = (media) => {
+    const format = media.variants?.find((variant) => variant.preset === 'file')?.format ?? 'bin';
+    const units = [['GB', 1e9], ['MB', 1e6], ['KB', 1e3]];
+    const [unit, factor] = units.find(([, size]) => media.bytes >= size) ?? ['bytes', 1];
+    const size = factor === 1 ? String(media.bytes) : String(Math.round((media.bytes / factor) * 10) / 10);
+
+    return `${format === 'bin' ? 'File' : format.toUpperCase()} · ${size} ${unit}`;
+};
+
+export const documentIcon = () => {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.classList.add('tile-icon');
+    for (const d of ['M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z', 'M14 2v6h6']) {
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', d);
+        svg.append(path);
+    }
+
+    return svg;
+};
+
+// What the reader's card will show: the first page or an icon, the name, type and size.
+const fileCard = (media) => {
+    const card = document.createElement('div');
+    card.className = 'editor-file';
+    const url = preview(media);
+    if (url === null) {
+        card.append(documentIcon());
+    } else {
+        const image = document.createElement('img');
+        image.src = url;
+        image.alt = '';
+        card.append(image);
+    }
+    const name = document.createElement('strong');
+    name.textContent = media.name;
+    const about = document.createElement('span');
+    about.textContent = aboutFile(media);
+    const note = document.createElement('small');
+    note.textContent = 'Published exactly as uploaded, including what the file itself records, such as author names.';
+    card.append(name, about, note);
+
+    return card;
 };
 
 const textField = (label, value, onInput) => {
@@ -464,6 +512,86 @@ export const MediaGallery = Node.create({
                     if (JSON.stringify(updated.attrs.items) !== JSON.stringify(items)) {
                         items = updated.attrs.items;
                         draw();
+                    }
+
+                    return true;
+                },
+                destroy: () => {
+                    gone = true;
+                },
+            };
+        };
+    },
+});
+
+// A file to download, or a PDF to open. Any file that isn't a picture or a recording.
+export const MediaFile = Node.create({
+    name: 'file',
+    group: 'block',
+    atom: true,
+    draggable: true,
+
+    addAttributes() {
+        return { mediaId: { default: null }, caption: { default: '' } };
+    },
+
+    parseHTML() {
+        return [{
+            tag: 'figure[data-file-id]',
+            getAttrs: (element) => {
+                const mediaId = Number(element.dataset.fileId);
+
+                return Number.isInteger(mediaId) && mediaId > 0
+                    ? { mediaId, caption: element.dataset.caption ?? '' }
+                    : false;
+            },
+        }];
+    },
+
+    renderHTML({ node }) {
+        return ['figure', { 'data-file-id': node.attrs.mediaId, 'data-caption': node.attrs.caption }];
+    },
+
+    addNodeView() {
+        return ({ node, getPos, editor }) => {
+            let gone = false;
+            let current = node;
+            const updateAttributes = attributeSetter(editor, getPos, () => current);
+            const dom = document.createElement('figure');
+            dom.className = 'editor-media';
+            const slot = document.createElement('div');
+            const status = document.createElement('p');
+            status.setAttribute('role', 'status');
+            const captionField = textField('Caption (optional)', node.attrs.caption, (caption) => updateAttributes({ caption }));
+            dom.append(
+                removeButton('Remove this file', () => {
+                    const from = getPos();
+                    editor.chain().focus().deleteRange({ from, to: from + 1 }).run();
+                }),
+                slot,
+                status,
+                captionField,
+            );
+
+            let shownId = node.attrs.mediaId;
+            const show = () => whenReady(shownId, status, 'file', 'Processing…', () => gone || shownId !== current.attrs.mediaId, (media) => {
+                slot.replaceChildren(fileCard(media));
+            });
+            show();
+
+            return {
+                dom,
+                ...ownEvents,
+                update: (updated) => {
+                    if (updated.type.name !== 'file') {
+                        return false;
+                    }
+                    current = updated;
+                    captionField.querySelector('input').value = updated.attrs.caption;
+                    if (updated.attrs.mediaId !== shownId) {
+                        shownId = updated.attrs.mediaId;
+                        slot.replaceChildren();
+                        show();
                     }
 
                     return true;

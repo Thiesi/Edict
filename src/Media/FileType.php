@@ -13,6 +13,13 @@ final class FileType
 {
     private const NO_TYPE = ['kind' => 'file', 'extension' => 'bin'];
 
+    /** Kept from the uploaded name. A PDF is recognised by its content instead. */
+    private const HARMLESS = [
+        'zip', '7z', 'gz', 'tgz', 'bz2', 'xz', 'tar',
+        'txt', 'csv', 'tsv', 'md', 'json', 'rtf', 'ics',
+        'docx', 'xlsx', 'pptx', 'odt', 'ods', 'odp', 'epub',
+    ];
+
     /**
      * @return array{kind: 'image'|'audio'|'video'|'file', extension: string}
      */
@@ -35,8 +42,24 @@ final class FileType
             str_starts_with($head, 'fLaC') => ['kind' => 'audio', 'extension' => 'flac'],
             str_starts_with($head, 'OggS') => ['kind' => 'audio', 'extension' => 'ogg'],
             str_starts_with($head, 'ID3') => ['kind' => 'audio', 'extension' => 'mp3'],
+            str_starts_with($head, '%PDF-') => ['kind' => 'file', 'extension' => 'pdf'],
             default => self::mpegAudio($head),
         };
+    }
+
+    /**
+     * The extension a published file gets. The server picks the type it sends from it,
+     * so only types no browser runs as a page or a script are kept, and everything else
+     * becomes a plain download. HTML, SVG and XML in particular never pass.
+     */
+    public static function publicExtension(string $detected, string $originalName): string
+    {
+        if ($detected !== 'bin') {
+            return $detected;
+        }
+        $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+
+        return in_array($extension, self::HARMLESS, true) ? $extension : 'bin';
     }
 
     /**

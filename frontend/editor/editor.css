@@ -285,7 +285,8 @@
     position: relative;
 }
 
-.media-grid button.is-audio {
+.media-grid button.is-audio,
+.media-grid button.is-file {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -482,4 +483,23 @@
     flex-direction: column;
     flex: 1 1 100%;
     gap: 0.25rem;
+}
+
+.editor-file {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    column-gap: 0.75rem;
+    align-items: center;
+}
+
+.editor-file img,
+.editor-file svg {
+    grid-row: span 3;
+    width: 4.5rem;
+    max-height: 6rem;
+    object-fit: contain;
+}
+
+.editor-file small {
+    opacity: 0.75;
 }

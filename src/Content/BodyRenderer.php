@@ -30,6 +30,9 @@ final readonly class BodyRenderer
             if (($node['type'] ?? null) === 'player') {
                 return self::player($attrs, $media);
             }
+            if (($node['type'] ?? null) === 'file') {
+                return self::file($attrs, $media);
+            }
 
             $image = self::lookUp($attrs, $media);
             if ($image === null) {
@@ -96,6 +99,51 @@ final readonly class BodyRenderer
         }
 
         return '';
+    }
+
+    /**
+     * A card to download the file, under its own name. A PDF opens in the browser
+     * instead, with its first page on the card and a separate download link.
+     *
+     * @param array<mixed> $attrs
+     * @param array<int, array<string, mixed>> $media
+     */
+    private static function file(array $attrs, array $media): string
+    {
+        $found = self::lookUp($attrs, $media);
+        /** @var array<string, array{preset: string, format: string, width: int, height: int, url: string}> $variants */
+        $variants = array_column(is_array($found['variants'] ?? null) ? $found['variants'] : [], null, 'preset');
+        if (($found['kind'] ?? null) !== 'file' || !isset($variants['file'])) {
+            return '';
+        }
+
+        $url = Body::escape($variants['file']['url']);
+        $format = $variants['file']['format'];
+        $name = Body::escape(is_string($found['name'] ?? null) ? $found['name'] : 'file');
+        $about = ($format === 'bin' ? 'File' : strtoupper($format)) . ' · ' . self::size(is_int($found['bytes'] ?? null) ? $found['bytes'] : 0);
+        $preview = $variants['preview'] ?? null;
+        $picture = $preview === null
+            ? '<svg class="file-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>'
+            : '<img src="' . Body::escape($preview['url']) . '" width="' . $preview['width'] . '" height="' . $preview['height'] . '" alt="" loading="lazy" decoding="async">';
+        $card = $picture . '<span class="file-name">' . $name . '</span><span class="file-about">' . $about . '</span>';
+
+        $html = $format === 'pdf'
+            ? '<a class="file-card" href="' . $url . '" type="application/pdf">' . $card . "</a>\n"
+                . '<a class="file-download" href="' . $url . '" download="' . $name . '">Download</a>' . "\n"
+            : '<a class="file-card" href="' . $url . '" download="' . $name . '">' . $card . "</a>\n";
+
+        return "<figure class=\"media-file\">\n" . $html . self::caption($attrs) . "</figure>\n";
+    }
+
+    private static function size(int $bytes): string
+    {
+        foreach (['GB' => 1_000_000_000, 'MB' => 1_000_000, 'KB' => 1_000] as $unit => $factor) {
+            if ($bytes >= $factor) {
+                return rtrim(rtrim(number_format($bytes / $factor, 1, '.', ''), '0'), '.') . ' ' . $unit;
+            }
+        }
+
+        return $bytes . ' bytes';
     }
 
     /**
