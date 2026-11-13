@@ -156,6 +156,18 @@ final class BodyRendererTest extends DbTestCase
         self::assertStringNotContainsString('figcaption', $html);
     }
 
+    public function testAudioCarriesItsLengthAndWaveformForTheSitePlayer(): void
+    {
+        $id = $this->playerRow('audio');
+        $this->pdo->prepare('UPDATE media SET meta = ?::jsonb WHERE id = ?')->execute(['{"seconds": 61.237, "peaks": [0, 50, 100, 140, -3, "x\\"><script>"]}', $id]);
+
+        $html = $this->render(['type' => 'player', 'attrs' => ['mediaId' => $id]]);
+
+        self::assertStringContainsString('<figure class="media-audio" data-seconds="61.24" data-peaks="0 50 100 100 0">', $html);
+        // The browser's own player stays, for anyone without JavaScript.
+        self::assertStringContainsString('<audio controls preload="metadata"', $html);
+    }
+
     public function testPlayersWaitUntilTheyAreReady(): void
     {
         self::assertSame('', trim($this->render(['type' => 'player', 'attrs' => ['mediaId' => $this->playerRow('video', 'processing')]])));

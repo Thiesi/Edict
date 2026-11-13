@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { statSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 
 import { expect, test } from '@playwright/test';
 
@@ -199,6 +199,8 @@ test('typing right after inserting an image continues below it, not over it', as
     await page.locator('#media-panel button[data-media-id]').first().click();
     await page.locator('#media-panel').getByRole('button', { name: 'Insert' }).click();
     await expect(page.locator('.editor-media')).toHaveCount(1);
+    // Typing while the block was still loading its picture once lost the first letters in CI.
+    await expect(page.locator('.editor-media img')).toBeVisible();
 
     await page.keyboard.type('After the picture');
 
@@ -316,4 +318,72 @@ test('on a phone the library steps aside after inserting', async ({ page }) => {
     await expect(page.locator('#media-panel')).toBeHidden();
     await expect(page.locator('#media-toggle')).toHaveAttribute('aria-expanded', 'false');
     await expect(page.locator('.editor-media')).toBeVisible();
+});
+
+test('a published recording gets the site player with waveform, time and speed', async ({ page }, info) => {
+    test.setTimeout(180_000);
+    const path = info.outputPath('talk.wav');
+    execFileSync('ffmpeg', ['-nostdin', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', "sine=frequency=330:duration=6,volume='if(lt(t,3),0.1,0.9)':eval=frame", path]);
+
+    await newArticle(page);
+    await page.getByLabel('Title').fill('With a talk');
+    await page.locator('#file-input').setInputFiles(path);
+    await expect(page.locator('.editor-media audio')).toBeAttached({ timeout: 120_000 });
+    await saved(page);
+    await page.locator('#publish').click();
+    await expect(page.getByRole('link', { name: 'View', exact: true })).toBeVisible();
+    await page.waitForLoadState('load');
+
+    // The test browser has no AAC decoder, so it gets the same sound as WAV, served in
+    // ranges as Apache does: without them the browser can't seek.
+    const wav = readFileSync(path);
+    await page.route('**/*-aac.m4a', (route) => {
+        const asked = /bytes=(\d+)-(\d*)/.exec(route.request().headers().range ?? '');
+        if (asked === null) {
+            return route.fulfill({ status: 200, contentType: 'audio/wav', headers: { 'Accept-Ranges': 'bytes' }, body: wav });
+        }
+        const from = Number(asked[1]);
+        const to = asked[2] === '' ? wav.length - 1 : Math.min(Number(asked[2]), wav.length - 1);
+
+        return route.fulfill({
+            status: 206,
+            contentType: 'audio/wav',
+            headers: { 'Accept-Ranges': 'bytes', 'Content-Range': `bytes ${from}-${to}/${wav.length}` },
+            body: wav.subarray(from, to + 1),
+        });
+    });
+    await page.goto('/with-a-talk');
+
+    const player = page.locator('.audio-player');
+    await expect(player).toBeVisible();
+    await expect(page.locator('figure.media-audio audio')).toBeHidden();
+    await expect(player.locator('.audio-bars rect')).toHaveCount(200);
+    // Louder in the second half, so the bars say so.
+    const heights = await player.locator('.audio-bars rect').evaluateAll((rects) => rects.map((rect) => Number(rect.getAttribute('height'))));
+    expect(heights[150]).toBeGreaterThan(heights[50] * 3);
+    await expect(player.locator('.audio-time')).toHaveText('0:00 / 0:06');
+
+    const wave = player.getByRole('slider', { name: 'Position' });
+    await wave.focus();
+    await page.keyboard.press('End');
+    await expect(wave).toHaveAttribute('aria-valuenow', '6');
+    await page.keyboard.press('Home');
+    await expect(wave).toHaveAttribute('aria-valuenow', '0');
+    await page.keyboard.press('ArrowRight');
+    await expect(wave).toHaveAttribute('aria-valuenow', '5');
+
+    // Clicking the middle of the waveform jumps to the middle.
+    const box = await wave.boundingBox();
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await expect(wave).toHaveAttribute('aria-valuenow', '3');
+
+    await player.getByRole('button', { name: 'Playback speed' }).click();
+    await expect(player.getByRole('button', { name: 'Playback speed' })).toHaveText('1.25×');
+    expect(await page.locator('figure.media-audio audio').evaluate((audio) => audio.playbackRate)).toBe(1.25);
+
+    await player.getByRole('button', { name: 'Play', exact: true }).click();
+    await expect(player.getByRole('button', { name: 'Pause', exact: true })).toBeVisible();
+    await expect.poll(() => page.locator('figure.media-audio audio').evaluate((audio) => audio.currentTime)).toBeGreaterThan(3.2);
+    await player.getByRole('button', { name: 'Pause', exact: true }).click();
+    await expect(player.getByRole('button', { name: 'Play', exact: true })).toBeVisible();
 });
