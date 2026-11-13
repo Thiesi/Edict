@@ -1,12 +1,14 @@
 import { expect, test } from '@playwright/test';
 
 // The policy is strict, so anything inline or from elsewhere would be blocked silently.
-// This visits the pages that do the most and fails on any violation.
+// This visits the pages that do the most and fails on any violation. Error pages are left
+// out: tests run in development mode, where Slim's detailed error page has inline styles.
+// The themed error page readers get is covered by FeedFlowTest.
 test('no page breaks the Content-Security-Policy', async ({ page }) => {
     await page.addInitScript(() => {
         window.cspViolations = [];
         document.addEventListener('securitypolicyviolation', (event) => {
-            window.cspViolations.push(`${event.violatedDirective} ${event.blockedURI} ${event.sourceFile}:${event.lineNumber}`);
+            window.cspViolations.push(`${event.documentURI} ${event.violatedDirective} ${event.blockedURI} ${event.sourceFile}:${event.lineNumber} ${event.sample}`);
         });
     });
     const violations = [];
@@ -14,7 +16,7 @@ test('no page breaks the Content-Security-Policy', async ({ page }) => {
         violations.push(...await page.evaluate(() => window.cspViolations ?? []));
     };
 
-    for (const path of ['/', '/archive', '/search?q=a', '/login', '/admin', '/admin/articles', '/admin/site', '/admin/comments', '/admin/tags', '/admin/themes', '/no-such-page']) {
+    for (const path of ['/', '/archive', '/search?q=a', '/login', '/admin', '/admin/articles', '/admin/site', '/admin/comments', '/admin/tags', '/admin/themes']) {
         await page.goto(path);
         await page.waitForLoadState('load');
         await collect();

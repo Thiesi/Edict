@@ -43,6 +43,8 @@ const errorLine = field('editor-errors');
 // Only what Edict\Content\Body allows. Adding a block type means changing both.
 const editor = new Editor({
     element: field('body'),
+    // Tiptap would add its base styles as a <style> element, which the CSP forbids. They're in editor.css.
+    injectCSS: false,
     content: state.body,
     extensions: [
         StarterKit.configure({
