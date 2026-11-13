@@ -346,6 +346,47 @@ final class ArticleFlowTest extends DbTestCase
         self::assertStringContainsString('href="/deutsch"', $all);
     }
 
+    public function testATagIsRenamedEverywhereDraftsIncluded(): void
+    {
+        $first = $this->published(['slug' => 'one', 'tags' => 'Fotografie, Reisen']);
+        $this->saved(['slug' => 'two', 'tags' => 'fotografie']);
+        self::assertGreaterThan(0, $first);
+
+        $response = $this->adminPost('/admin/tags/fotografie', ['name' => 'Photography']);
+        self::assertSame(303, $response->getStatusCode(), (string) $response->getBody());
+
+        self::assertSame(404, $this->get('/tag/fotografie')->getStatusCode());
+        self::assertStringContainsString('href="/one"', (string) $this->get('/tag/photography')->getBody());
+        $drafts = $this->pdo->query("SELECT draft->>'tags' FROM article WHERE slug <> 'one' AND draft IS NOT NULL");
+        self::assertNotFalse($drafts);
+        self::assertSame(['Photography'], $drafts->fetchAll(\PDO::FETCH_COLUMN), 'publishing the draft won’t bring the old name back');
+        self::assertStringContainsString('Photography', (string) $this->get('/admin/tags', $this->admin)->getBody());
+    }
+
+    public function testRenamingIntoAnExistingTagMergesThem(): void
+    {
+        $this->published(['slug' => 'one', 'tags' => 'Travel']);
+        $this->published(['slug' => 'two', 'tags' => 'Travelling, Travel']);
+
+        self::assertSame(303, $this->adminPost('/admin/tags/travelling', ['name' => 'Travel'])->getStatusCode());
+
+        $tags = $this->pdo->query('SELECT t.name, count(*) FROM tag t JOIN article_tag x ON x.tag_id = t.id GROUP BY t.name');
+        self::assertNotFalse($tags);
+        self::assertSame([['name' => 'Travel', 'count' => 2]], $tags->fetchAll(\PDO::FETCH_ASSOC));
+        self::assertSame(422, $this->adminPost('/admin/tags/travel', ['name' => 'A, B'])->getStatusCode());
+        self::assertSame(422, $this->adminPost('/admin/tags/nonesuch', ['name' => 'X'])->getStatusCode());
+    }
+
+    public function testTheEditorSuggestsTagsInUse(): void
+    {
+        $this->published(['slug' => 'one', 'tags' => 'Alpha, Beta']);
+
+        $editor = (string) $this->get('/admin/articles/' . $this->newRow(), $this->admin)->getBody();
+
+        self::assertStringContainsString('list="tag-suggestions"', $editor);
+        self::assertStringContainsString('&quot;tags&quot;:[&quot;Alpha&quot;,&quot;Beta&quot;]', $editor);
+    }
+
     public function testEveryApplicationPathIsReservedFromSlugs(): void
     {
         foreach ($this->app->getRouteCollector()->getRoutes() as $route) {

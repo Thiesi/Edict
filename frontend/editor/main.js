@@ -767,3 +767,33 @@ field('publish')?.addEventListener('click', async () => {
 
 editor.commands.focus('end');
 lastBody = JSON.stringify(editor.getJSON());
+
+/* Words, reading time, tag suggestions */
+
+const countLine = field('word-count');
+const showCount = () => {
+    const words = editor.getText().trim().split(/\s+/).filter(Boolean).length;
+    const minutes = Math.max(1, Math.round(words / 200));
+    countLine.textContent = words === 0 ? '' : `${words.toLocaleString()} ${words === 1 ? 'word' : 'words'} · ${minutes} min read`;
+};
+editor.on('update', showCount);
+showCount();
+
+// The tags field holds several, separated by commas: suggest for the one being typed.
+const suggestions = field('tag-suggestions');
+if (fields.tags && suggestions) {
+    const suggest = () => {
+        const value = fields.tags.value;
+        const cut = value.lastIndexOf(',') + 1;
+        const before = value.slice(0, cut);
+        const typed = value.slice(cut).trim().toLowerCase();
+        const used = new Set(before.split(',').map((tag) => tag.trim().toLowerCase()));
+        const lead = before === '' ? '' : `${before.trimEnd()} `;
+        suggestions.replaceChildren(...(state.tags ?? [])
+            .filter((tag) => !used.has(tag.toLowerCase()) && tag.toLowerCase().startsWith(typed))
+            .slice(0, 20)
+            .map((tag) => Object.assign(document.createElement('option'), { value: lead + tag })));
+    };
+    fields.tags.addEventListener('input', suggest);
+    fields.tags.addEventListener('focus', suggest);
+}

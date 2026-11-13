@@ -79,6 +79,7 @@ final readonly class ArticleAdminController
             'article' => $article,
             'input' => $input,
             'revisions' => $this->articles->revisions($article->id),
+            'known_tags' => array_column($this->articles->tags(), 'name'),
             'restored' => ($request->getQueryParams()['restored'] ?? null) === '1',
             'asset_version' => $this->config->release(),
             'state' => [
@@ -86,6 +87,7 @@ final readonly class ArticleAdminController
                 'version' => $article->draftVersion,
                 'body' => Body::decode($input->body),
                 'csrf' => $session instanceof Session ? $session->csrfToken : '',
+                'tags' => array_column($this->articles->tags(), 'name'),
             ],
         ]);
     }
@@ -101,6 +103,34 @@ final readonly class ArticleAdminController
         }
 
         return $response->withStatus(303)->withHeader('Location', '/admin/articles/' . $article->id . '?restored=1');
+    }
+
+    public function tags(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
+    {
+        return $this->html($request, $response, 'admin/tags.html.twig', [
+            'tags' => $this->articles->tags(),
+            'error' => null,
+            'renamed' => ($request->getQueryParams()['renamed'] ?? null) === '1',
+        ]);
+    }
+
+    /**
+     * @param array<string, string> $args
+     */
+    public function renameTag(ServerRequestInterface $request, ResponseInterface $response, array $args): ResponseInterface
+    {
+        $body = $request->getParsedBody();
+        $name = is_array($body) && is_string($body['name'] ?? null) ? $body['name'] : '';
+        $error = $this->articles->renameTag($args['slug'] ?? '', $name);
+        if ($error === null) {
+            return $response->withStatus(303)->withHeader('Location', '/admin/tags?renamed=1');
+        }
+
+        return $this->html($request, $response->withStatus(422), 'admin/tags.html.twig', [
+            'tags' => $this->articles->tags(),
+            'error' => $error,
+            'renamed' => false,
+        ]);
     }
 
     /**
