@@ -193,7 +193,7 @@
 
         audio.addEventListener('play', () => {
             // One recording or video at a time.
-            for (const other of document.querySelectorAll('audio, video')) {
+            for (const other of document.querySelectorAll('audio, video:not(.media-loop)')) {
                 if (other !== audio) {
                     other.pause();
                 }
@@ -232,4 +232,22 @@
     };
 
     document.querySelectorAll('figure.media-audio').forEach(enhance);
+
+    // Animated GIFs play as muted loops. Readers who asked for less motion get them
+    // paused, and anyone can pause or play one with a tap, a click or the keyboard.
+    const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    document.querySelectorAll('video.media-loop').forEach((loop) => {
+        if (calm) {
+            loop.pause();
+        }
+        const toggle = () => (loop.paused ? loop.play().catch(() => {}) : loop.pause());
+        loop.tabIndex = 0;
+        loop.addEventListener('click', toggle);
+        loop.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                toggle();
+            }
+        });
+    });
 })();

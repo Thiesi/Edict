@@ -68,6 +68,25 @@ final class BodyRendererTest extends DbTestCase
         self::assertStringNotContainsString('figcaption', $html);
     }
 
+    public function testAnAnimatedGifPlaysAsAMutedLoop(): void
+    {
+        $id = $this->mediaRow();
+        $this->pdo->prepare("INSERT INTO media_variant (media_id, preset, format, width, height, bytes) VALUES (?, 'loop', 'mp4', 640, 320, 10)")->execute([$id]);
+
+        $html = $this->render(['type' => 'image', 'attrs' => ['mediaId' => $id, 'alt' => 'A <dancing> cat']]);
+
+        self::assertMatchesRegularExpression(
+            '~<video class="media-loop" src="/media/[^"]+-loop\.mp4" poster="/media/[^"]+-w960-jpg\.jpg" width="640" height="320" autoplay loop muted playsinline disablepictureinpicture role="img" aria-label="A &lt;dancing&gt; cat"></video>~',
+            $html,
+        );
+        self::assertStringNotContainsString('lightbox', $html, 'a still full-size picture is not what it is');
+
+        $gallery = $this->render(['type' => 'gallery', 'attrs' => ['items' => [['mediaId' => $id], ['mediaId' => $this->mediaRow()]]]]);
+        self::assertStringContainsString('aria-hidden="true"', $gallery, 'without a description it is decoration');
+        self::assertSame(1, substr_count($gallery, 'class="media-loop"'));
+        self::assertSame(1, substr_count($gallery, 'class="lightbox"'));
+    }
+
     public function testImagesThatArentReadyAreLeftOut(): void
     {
         foreach (['processing', 'failed'] as $status) {

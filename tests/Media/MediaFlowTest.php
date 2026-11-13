@@ -1283,6 +1283,55 @@ final class MediaFlowTest extends DbTestCase
         self::assertNull($this->service(MediaLibrary::class)->find(self::id($media))['posterError'] ?? null);
     }
 
+    public function testAnAnimatedGifAlsoBecomesAMutedLoopingVideo(): void
+    {
+        $this->requireTools();
+        $this->requireFfmpeg();
+        $gif = $this->ffmpegMakes('dance.gif', ['-f', 'lavfi', '-i', 'testsrc2=size=321x241:rate=10:duration=1']);
+
+        $media = $this->processedUpload('dance.gif', $gif);
+
+        self::assertSame('ready', $media['status'], (string) json_encode($media['error']));
+        self::assertSame('image', $media['kind'], 'still an image to the editor, with its first frame as the picture');
+        self::assertTrue($media['animated']);
+        $this->variant($media, 'w480-jpg');
+        $loop = $this->variant($media, 'loop');
+        self::assertSame([320, 240], [$loop['width'], $loop['height']], 'even, as H.264 needs');
+        $found = $this->probed($loop);
+        self::assertIsArray($found['streams']);
+        self::assertSame(['h264'], array_column($found['streams'], 'codec_name'), 'no sound');
+    }
+
+    public function testAnAnimatedGifsTransparencyBecomesWhite(): void
+    {
+        $this->requireTools();
+        $this->requireFfmpeg();
+        $gif = $this->ffmpegMakes('clear.gif', [
+            '-f', 'lavfi', '-i', 'color=c=red@0.0:size=32x32:rate=5:duration=1,format=rgba,split[a][b];[a]palettegen=reserve_transparent=1[p];[b][p]paletteuse=alpha_threshold=128',
+        ]);
+
+        $media = $this->processedUpload('clear.gif', $gif);
+        $loop = $this->variant($media, 'loop');
+        self::assertIsString($loop['path']);
+
+        $pixel = shell_exec('ffmpeg -v error -i ' . escapeshellarg($loop['path']) . ' -frames:v 1 -vf scale=1:1,format=gray -f rawvideo - 2>&1');
+        self::assertIsString($pixel);
+        self::assertSame(1, strlen($pixel), $pixel);
+        self::assertGreaterThan(240, ord($pixel), 'white like the page, not black');
+    }
+
+    public function testAStillGifIsJustAPicture(): void
+    {
+        $this->requireTools();
+        $this->requireFfmpeg();
+        $gif = $this->ffmpegMakes('still.gif', ['-f', 'lavfi', '-i', 'testsrc2=size=64x48', '-frames:v', '1']);
+
+        $media = $this->processedUpload('still.gif', $gif);
+
+        self::assertSame('ready', $media['status'], (string) json_encode($media['error']));
+        self::assertFalse($media['animated']);
+    }
+
     public function testWhileAVideoRunsTheNextWorkerOnlyDoesImagesAndNoHousekeeping(): void
     {
         $url = getenv('TEST_DATABASE_URL');

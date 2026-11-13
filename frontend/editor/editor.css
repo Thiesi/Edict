@@ -315,8 +315,9 @@
     white-space: nowrap;
 }
 
-/* A video's poster looks like a photo without this. */
-.media-grid button.is-video::after {
+/* A video's poster looks like a photo without this, and so does a GIF's first frame. */
+.media-grid button.is-video::after,
+.media-grid button.is-animated::after {
     content: '▶';
     position: absolute;
     left: 0.35rem;
@@ -436,6 +437,10 @@
 .editor-details form {
     display: inline-block;
     margin-right: 0.5rem;
+}
+
+.media-grid button.is-animated::after {
+    content: 'GIF';
 }
 
 .poster-chooser {
