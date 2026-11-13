@@ -148,6 +148,16 @@ final class BodyRendererTest extends DbTestCase
         self::assertStringNotContainsString('autoplay', $html);
     }
 
+    public function testAChosenPosterIsUsed(): void
+    {
+        $id = $this->playerRow('video');
+        $this->pdo->prepare("UPDATE media_variant SET preset = 'poster-12500' WHERE media_id = ? AND preset = 'poster'")->execute([$id]);
+
+        $html = $this->render(['type' => 'player', 'attrs' => ['mediaId' => $id]]);
+
+        self::assertMatchesRegularExpression('~poster="/media/[^"]+-poster-12500\.jpg"~', $html);
+    }
+
     public function testAudioBecomesAPlayer(): void
     {
         $html = $this->render(['type' => 'player', 'attrs' => ['mediaId' => $this->playerRow('audio')]]);

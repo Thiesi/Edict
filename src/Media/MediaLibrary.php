@@ -413,6 +413,82 @@ final readonly class MediaLibrary
         }
     }
 
+    /**
+     * Asks for a new poster from the video at this point. The worker makes it.
+     *
+     * @return string the preset the new poster will have
+     *
+     * @throws MediaError
+     */
+    public function choosePoster(int $mediaId, float $seconds): string
+    {
+        $media = $this->find($mediaId);
+        if ($media === null || $media['kind'] !== 'video' || $media['status'] !== 'ready') {
+            throw new MediaError('Only a finished video can get a poster.');
+        }
+        if (!is_finite($seconds) || $seconds < 0) {
+            throw new MediaError('That is not a point in the video.');
+        }
+        $length = $media['seconds'];
+        $seconds = is_float($length) ? min($seconds, $length) : $seconds;
+
+        $this->pdo->prepare("UPDATE media SET meta = coalesce(meta, '{}'::jsonb) - 'poster_error' WHERE id = ?")->execute([$mediaId]);
+        $this->jobs->enqueue(AvProcessor::POSTER_JOB, ['media_id' => $mediaId, 'seconds' => round($seconds, 3)]);
+
+        return self::posterPreset($seconds);
+    }
+
+    /**
+     * Each chosen frame gets its own name, since variants are cached as never changing.
+     */
+    public static function posterPreset(float $seconds): string
+    {
+        return 'poster-' . (int) round($seconds * 1000);
+    }
+
+    public static function isPoster(string $preset): bool
+    {
+        return preg_match('~^poster(-[0-9]+)?$~D', $preset) === 1;
+    }
+
+    /**
+     * Puts a new poster in place of the old one, whose file goes once nothing points at it.
+     */
+    public function replacePoster(int $mediaId, string $sha256, string $preset, string $file, int $width, int $height): void
+    {
+        $bytes = (int) @filesize($file);
+        $this->assertRoomFor($bytes, null, true);
+        $target = $this->store->variantPath($sha256, $preset, 'jpg');
+
+        $this->pdo->beginTransaction();
+        try {
+            $old = $this->pdo->prepare("DELETE FROM media_variant WHERE media_id = ? AND preset ~ '^poster(-[0-9]+)?$' RETURNING preset, format");
+            $old->execute([$mediaId]);
+            $replaced = $old->fetchAll();
+            $this->pdo->prepare('INSERT INTO media_variant (media_id, preset, format, width, height, bytes) VALUES (?, ?, ?, ?, ?, ?)')
+                ->execute([$mediaId, $preset, 'jpg', $width, $height, $bytes]);
+            $this->pdo->prepare("UPDATE media SET meta = coalesce(meta, '{}'::jsonb) - 'poster_error' WHERE id = ?")->execute([$mediaId]);
+            $this->store->install($file, $target);
+            $this->pdo->commit();
+        } catch (\Throwable $e) {
+            $this->pdo->rollBack();
+
+            throw $e;
+        }
+
+        foreach ($replaced as $row) {
+            if (is_array($row) && Row::str($row, 'preset') !== $preset) {
+                MediaStore::remove($this->store->variantPath($sha256, Row::str($row, 'preset'), Row::str($row, 'format')));
+            }
+        }
+    }
+
+    public function posterFailed(int $mediaId, string $error): void
+    {
+        $this->pdo->prepare("UPDATE media SET meta = jsonb_set(coalesce(meta, '{}'::jsonb), '{poster_error}', to_jsonb(?::text)) WHERE id = ?")
+            ->execute([mb_substr($error, 0, 500), $mediaId]);
+    }
+
     public function markFailed(int $mediaId, string $error): void
     {
         $this->pdo->prepare("UPDATE media SET status = 'failed', error = ? WHERE id = ?")->execute([mb_substr($error, 0, 500), $mediaId]);
@@ -512,6 +588,7 @@ final readonly class MediaLibrary
             'variants' => $this->variants($id, $sha256),
             'seconds' => is_numeric($meta['seconds'] ?? null) ? (float) $meta['seconds'] : null,
             'peaks' => is_array($meta['peaks'] ?? null) ? $meta['peaks'] : [],
+            'posterError' => is_string($meta['poster_error'] ?? null) ? $meta['poster_error'] : null,
         ];
     }
 

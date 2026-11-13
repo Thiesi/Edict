@@ -56,6 +56,7 @@ return static function (App $app): void {
         $group->delete('/uploads/{id}', [MediaController::class, 'abort']);
         $group->get('/media', [MediaController::class, 'index']);
         $group->get('/media/{id:[0-9]+}', [MediaController::class, 'show']);
+        $group->post('/media/{id:[0-9]+}/poster', [MediaController::class, 'poster']);
 
         $group->get('/csrf', [ArticleAdminController::class, 'csrf']);
         $group->get('/articles', [ArticleAdminController::class, 'index']);

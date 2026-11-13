@@ -25,7 +25,8 @@ final readonly class JobRunner
      */
     public function runNext(bool $imagesOnly = false): bool
     {
-        $job = $this->jobs->claim($imagesOnly ? ImageProcessor::JOB : null);
+        // A new poster takes seconds, so it needn't wait hours behind a video either.
+        $job = $this->jobs->claim($imagesOnly ? [ImageProcessor::JOB, AvProcessor::POSTER_JOB] : null);
         if ($job === null) {
             return false;
         }
@@ -37,8 +38,8 @@ final readonly class JobRunner
             // Only messages written for the admin reach the admin.
             $message = $e instanceof MediaError ? $e->getMessage() : 'Processing failed unexpectedly.';
             $hopeless = $e instanceof MediaError && $e->hopeless;
-            if (!$this->jobs->fail($job['id'], $e->getMessage(), $hopeless) && self::isAboutMedia($job['type'])) {
-                $this->library->markFailed(self::mediaId($job['payload']), $message);
+            if (!$this->jobs->fail($job['id'], $e->getMessage(), $hopeless)) {
+                $this->gaveUp($job['type'], $job['payload'], $message);
             }
         }
 
@@ -48,9 +49,23 @@ final readonly class JobRunner
     public function housekeeping(): void
     {
         foreach ($this->jobs->housekeeping() as $job) {
-            if (self::isAboutMedia($job['type'])) {
-                $this->library->markFailed(self::mediaId($job['payload']), 'Processing stopped unexpectedly. Upload the file again to retry.');
-            }
+            $this->gaveUp($job['type'], $job['payload'], $job['type'] === AvProcessor::POSTER_JOB
+                ? 'Making the poster stopped unexpectedly. Try again.'
+                : 'Processing stopped unexpectedly. Upload the file again to retry.');
+        }
+    }
+
+    /**
+     * A failed poster leaves the video as it was, and only says so.
+     *
+     * @param array<mixed> $payload
+     */
+    private function gaveUp(string $type, array $payload, string $message): void
+    {
+        if ($type === AvProcessor::POSTER_JOB) {
+            $this->library->posterFailed(self::mediaId($payload), $message);
+        } elseif ($type === ImageProcessor::JOB || $type === AvProcessor::JOB) {
+            $this->library->markFailed(self::mediaId($payload), $message);
         }
     }
 
@@ -62,14 +77,11 @@ final readonly class JobRunner
         match ($type) {
             ImageProcessor::JOB => $this->images->process(self::mediaId($payload)),
             AvProcessor::JOB => $this->av->process(self::mediaId($payload)),
+            AvProcessor::POSTER_JOB => $this->av->choosePoster(self::mediaId($payload), is_numeric($payload['seconds'] ?? null) ? (float) $payload['seconds'] : 0.0),
             default => throw new \RuntimeException("Unknown job type $type"),
         };
     }
 
-    private static function isAboutMedia(string $type): bool
-    {
-        return $type === ImageProcessor::JOB || $type === AvProcessor::JOB;
-    }
 
     /**
      * @param array<mixed> $payload

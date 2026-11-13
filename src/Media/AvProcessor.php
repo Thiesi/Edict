@@ -18,6 +18,7 @@ use Edict\Database\Row;
 final readonly class AvProcessor
 {
     public const JOB = 'av';
+    public const POSTER_JOB = 'poster';
 
     private const DEMUXERS = [
         'mp4' => 'mov', 'mov' => 'mov', 'm4a' => 'mov', 'mkv' => 'matroska', 'avi' => 'avi',
@@ -164,6 +165,45 @@ final readonly class AvProcessor
     }
 
     /**
+     * The frame the author picked in the editor, from the public video, so it matches
+     * what plays: upright, tone-mapped, scaled.
+     *
+     * @throws MediaError
+     */
+    public function choosePoster(int $mediaId, float $seconds): void
+    {
+        $stmt = $this->pdo->prepare("SELECT sha256 FROM media WHERE id = ? AND kind = 'video' AND status = 'ready'");
+        $stmt->execute([$mediaId]);
+        $sha256 = $stmt->fetchColumn();
+        $video = is_string($sha256) ? (array_column($this->library->variants($mediaId, $sha256), null, 'preset')['h264'] ?? null) : null;
+        if (!is_string($sha256) || $video === null) {
+            return; // Deleted or being processed again since the job was queued.
+        }
+
+        $dir = $this->store->newJobDir();
+        try {
+            $file = $this->store->variantPath($sha256, 'h264', 'mp4');
+            $poster = $dir . '/poster.jpg';
+            try {
+                $this->takeFrame($file, $poster, $seconds, $dir);
+            } catch (MediaError) {
+                // ffmpeg calls an empty result an error. The next lines decide.
+            }
+            // Past the last frame's start there is nothing to seek to. The end is what was meant.
+            if (!is_file($poster) || filesize($poster) === 0) {
+                $this->takeLastFrame($file, $poster, $dir);
+            }
+            if (!is_file($poster) || filesize($poster) === 0) {
+                throw new MediaError('There is no picture at that point of the video.', true);
+            }
+
+            $this->library->replacePoster($mediaId, $sha256, MediaLibrary::posterPreset($seconds), $poster, $video['width'], $video['height']);
+        } finally {
+            MediaStore::remove($dir);
+        }
+    }
+
+    /**
      * The filters that make HDR ordinary, with the table written into the job dir.
      */
     private function toneMap(string $transfer, string $dir): string
@@ -268,6 +308,14 @@ final readonly class AvProcessor
         Command::run([
             $this->config->ffmpegBin, ...self::QUIET, '-protocol_whitelist', 'file', '-ss', sprintf('%.3F', $at), '-f', 'mov', '-i', $video,
             '-map', '0:V:0', '-frames:v', '1', '-q:v', '3', '-map_metadata', '-1', '-update', '1', $poster,
+        ], self::POSTER_SECONDS, $dir);
+    }
+
+    private function takeLastFrame(string $video, string $poster, string $dir): void
+    {
+        Command::run([
+            $this->config->ffmpegBin, ...self::QUIET, '-protocol_whitelist', 'file', '-sseof', '-1', '-f', 'mov', '-i', $video,
+            '-map', '0:V:0', '-q:v', '3', '-map_metadata', '-1', '-update', '1', $poster,
         ], self::POSTER_SECONDS, $dir);
     }
 

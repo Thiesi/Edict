@@ -3,11 +3,14 @@ import { Node } from '@tiptap/core';
 
 const POLL_MS = 2000;
 
+// The one made at upload, or the frame chosen since. Must match MediaLibrary::isPoster().
+const isPoster = (preset) => /^poster(-\d+)?$/.test(preset);
+
 // The smallest version that still looks sharp in the editor.
 export const preview = (media) => {
     const variants = media.variants ?? [];
 
-    return (variants.find((variant) => variant.preset === 'poster')
+    return (variants.find((variant) => isPoster(variant.preset))
         ?? variants.find((variant) => variant.preset === 'w960-webp')
         ?? variants.find((variant) => variant.preset === 'w480-webp')
         ?? variants.find((variant) => variant.preset === 'full'))?.url ?? null;
@@ -78,6 +81,79 @@ const playerFor = (media) => {
     }
 
     return player;
+};
+
+// Pause on the frame you want, then take it. The worker grabs it from the video.
+const posterChooser = (media, video, csrf, refreshCsrf) => {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'poster-chooser';
+    const thumbnail = document.createElement('img');
+    thumbnail.alt = 'Current poster';
+    thumbnail.src = preview(media) ?? '';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = 'Use this frame as poster';
+    const note = document.createElement('span');
+    note.setAttribute('role', 'status');
+    wrapper.append(thumbnail, button, note);
+
+    const failed = (message) => {
+        note.textContent = message;
+        note.setAttribute('role', 'alert');
+        button.disabled = false;
+    };
+
+    const waitFor = async (preset) => {
+        let found = null;
+        try {
+            const response = await fetch(`/admin/media/${media.id}`, { credentials: 'same-origin', redirect: 'manual' });
+            found = response.ok ? await response.json() : null;
+        } catch {
+            found = null;
+        }
+        const poster = found?.variants?.find((variant) => variant.preset === preset);
+        if (poster !== undefined) {
+            thumbnail.src = poster.url;
+            video.poster = poster.url;
+            note.textContent = 'Poster changed.';
+            button.disabled = false;
+        } else if (found?.posterError) {
+            failed(`The poster could not be made: ${found.posterError}`);
+        } else if (wrapper.isConnected) {
+            setTimeout(() => waitFor(preset), POLL_MS / 2);
+        }
+    };
+
+    const send = () => fetch(`/admin/media/${media.id}/poster`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf() },
+        credentials: 'same-origin',
+        redirect: 'manual',
+        body: JSON.stringify({ seconds: Number.isFinite(video.currentTime) ? video.currentTime : 0 }),
+    });
+
+    button.addEventListener('click', async () => {
+        video.pause();
+        button.disabled = true;
+        note.setAttribute('role', 'status');
+        note.textContent = 'Making the poster…';
+        try {
+            let response = await send();
+            if ((response.status === 403 || response.status === 0) && await refreshCsrf()) {
+                response = await send();
+            }
+            const answer = await response.json().catch(() => ({}));
+            if (response.ok && typeof answer.preset === 'string') {
+                waitFor(answer.preset);
+            } else {
+                failed(answer.error ?? 'The poster could not be changed. Try again.');
+            }
+        } catch {
+            failed('The poster could not be changed. Check the connection and try again.');
+        }
+    });
+
+    return wrapper;
 };
 
 const textField = (label, value, onInput) => {
@@ -214,6 +290,11 @@ export const MediaPlayer = Node.create({
         return { mediaId: { default: null }, caption: { default: '' } };
     },
 
+    addOptions() {
+        // The editor's CSRF token, and a way to get a new one once the session has changed.
+        return { csrf: () => '', refreshCsrf: async () => false };
+    },
+
     parseHTML() {
         return [{
             tag: 'figure[data-player-id]',
@@ -232,6 +313,8 @@ export const MediaPlayer = Node.create({
     },
 
     addNodeView() {
+        const { csrf, refreshCsrf } = this.options;
+
         return ({ node, getPos, editor }) => {
             let gone = false;
             let current = node;
@@ -262,6 +345,9 @@ export const MediaPlayer = Node.create({
                 (media) => {
                     const player = playerFor(media);
                     slot.replaceChildren(...(player === null ? [] : [player]));
+                    if (player !== null && media.kind === 'video') {
+                        slot.append(posterChooser(media, player, csrf, refreshCsrf));
+                    }
                 },
             );
             show();
