@@ -1,5 +1,16 @@
 {% extends 'public/layout.html.twig' %}
 
+{% set meta = {
+    title: article.title,
+    description: article.teaser ?: null,
+    url: '/' ~ article.slug,
+    type: article.kind == 'article' ? 'article' : 'website',
+    locale: article.lang == 'de' ? 'de_DE' : 'en_GB',
+    image: preview ? null : share_image(article),
+    image_alt: article.coverAlt,
+    robots: preview ? 'noindex' : null,
+}|filter(v => v is not null) %}
+
 {% block title %}{{ article.title }} · {{ site().title }}{% endblock %}
 
 {% block main %}

@@ -7,6 +7,7 @@ namespace Edict;
 use DI\Container;
 use DI\ContainerBuilder;
 use Dotenv\Dotenv;
+use Edict\Http\ErrorPage;
 use Edict\Http\Middleware\CsrfMiddleware;
 use Edict\Http\Middleware\RawCookieMiddleware;
 use Edict\Http\Middleware\SessionMiddleware;
@@ -17,6 +18,7 @@ use Slim\App;
 use Slim\Exception\HttpMethodNotAllowedException;
 use Slim\Exception\HttpNotFoundException;
 use Slim\Factory\AppFactory;
+use Slim\Handlers\ErrorHandler;
 use Slim\Interfaces\ErrorHandlerInterface;
 
 /**
@@ -61,6 +63,9 @@ final class Kernel
         // Scanners probe for files all day. A 404 or 405 is an answer, not an error
         // worth a stack trace in the log, so these use the default handler unlogged.
         $default = $errors->getDefaultErrorHandler();
+        if ($default instanceof ErrorHandler) {
+            $default->registerErrorRenderer('text/html', ErrorPage::class);
+        }
         if ($default instanceof ErrorHandlerInterface) {
             $errors->setErrorHandler(
                 [HttpNotFoundException::class, HttpMethodNotAllowedException::class],

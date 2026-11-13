@@ -1,0 +1,18 @@
+{% extends 'public/layout.html.twig' %}
+
+{% set meta = {robots: 'noindex'} %}
+
+{% block title %}{{ title }} · {{ site().title }}{% endblock %}
+
+{% block main %}
+    <main class="error-page">
+        <h1>{{ title }}</h1>
+        <p>{{ text }}</p>
+        <form class="site-search" role="search" method="get" action="/search">
+            <label class="visually-hidden" for="error-search">Search</label>
+            <input id="error-search" type="search" name="q" placeholder="Search instead" maxlength="200">
+            <button type="submit">Search</button>
+        </form>
+        <p><a href="/">To the home page</a> · <a href="/archive">All articles</a></p>
+    </main>
+{% endblock %}

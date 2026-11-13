@@ -6,6 +6,7 @@ use Edict\Http\AccountController;
 use Edict\Http\AdminAuthController;
 use Edict\Http\ArticleAdminController;
 use Edict\Http\CommentController;
+use Edict\Http\FeedController;
 use Edict\Http\HealthAction;
 use Edict\Http\MediaController;
 use Edict\Http\Middleware\RequireAdmin;
@@ -22,6 +23,10 @@ return static function (App $app): void {
     $app->get('/', [PublicController::class, 'home']);
     $app->get('/archive', [PublicController::class, 'archive']);
     $app->get('/search', [PublicController::class, 'search']);
+    $app->get('/feed.atom', [FeedController::class, 'site']);
+    $app->get('/tag/{slug:[a-z0-9-]+}/feed.atom', [FeedController::class, 'tag']);
+    $app->get('/sitemap.xml', [FeedController::class, 'sitemap']);
+    $app->get('/robots.txt', [FeedController::class, 'robots']);
     $app->get('/tag/{slug:[a-z0-9-]+}', [PublicController::class, 'tag']);
     $app->get('/healthz', HealthAction::class);
 
