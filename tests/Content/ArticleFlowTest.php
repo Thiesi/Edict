@@ -236,7 +236,7 @@ final class ArticleFlowTest extends DbTestCase
 
         self::assertSame(200, $response->getStatusCode());
         self::assertStringStartsWith('text/html', $response->getHeaderLine('Content-Type'));
-        self::assertStringContainsString('<h1>Hello, Edict</h1>', (string) $response->getBody());
+        self::assertStringContainsString('<p class="site-title"><a href="/">Edict</a></p>', (string) $response->getBody());
         self::assertStringContainsString('Nothing to read yet', (string) $response->getBody());
     }
 

@@ -192,6 +192,19 @@ final readonly class Articles
         return self::all($stmt);
     }
 
+    /**
+     * Static pages readers can open, for choosing the imprint and privacy pages.
+     *
+     * @return list<Article>
+     */
+    public function publishedPages(): array
+    {
+        $stmt = $this->pdo->prepare('SELECT ' . self::COLUMNS . " FROM article a WHERE a.kind = 'page' AND " . self::PUBLIC_WHERE . ' ORDER BY a.title');
+        $stmt->execute([$this->clock->now()]);
+
+        return self::all($stmt);
+    }
+
     public function publicCount(): int
     {
         $stmt = $this->pdo->prepare('SELECT count(*) FROM article a WHERE ' . self::LISTED . self::PUBLIC_WHERE);

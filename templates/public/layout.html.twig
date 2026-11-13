@@ -1,12 +1,40 @@
 {% extends 'base.html.twig' %}
 
-{% block head %}<link rel="stylesheet" href="/assets/site.css">{% endblock %}
+{% set site = site() %}
+
+{% block head %}
+    <link rel="stylesheet" href="/assets/site.css?v={{ asset_version }}">
+    <link rel="stylesheet" href="/assets/build/themes/{{ site.theme }}.css?v={{ asset_version }}">
+{% endblock %}
+
+{% block body_class %}theme-{{ site.theme }}{% endblock %}
 
 {% block body %}
-    <nav>
-        <a href="/">Edict</a>
-        <a href="/archive">Archive</a>
-        {% if signed_in %}<a href="/account">Your account</a>{% else %}<a href="/login">Sign in</a>{% endif %}
-    </nav>
-    {% block main %}{% endblock %}
+    <a class="skip-link" href="#content">Skip to the content</a>
+    <header class="site-header">
+        <div class="site-header-inner">
+            <p class="site-title"><a href="/">{{ site.title }}</a></p>
+            {% if site.description %}<p class="site-description">{{ site.description }}</p>{% endif %}
+            <nav class="site-nav" aria-label="Main">
+                <ul>
+                    {% for link in site.menu %}<li><a href="{{ link.url }}">{{ link.label }}</a></li>{% endfor %}
+                    <li><a href="/archive">Archive</a></li>
+                    <li>{% if signed_in|default(false) %}<a href="/account">Your account</a>{% else %}<a href="/login">Sign in</a>{% endif %}</li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+    <div class="site-content" id="content">
+        {% block main %}{% endblock %}
+    </div>
+    <footer class="site-footer">
+        <nav aria-label="Footer">
+            <ul>
+                {% for link in site.footer %}<li><a href="{{ link.url }}">{{ link.label }}</a></li>{% endfor %}
+                {% if site.imprint %}<li><a href="/{{ site.imprint }}">Impressum</a></li>{% endif %}
+                {% if site.privacy %}<li><a href="/{{ site.privacy }}">Datenschutz</a></li>{% endif %}
+            </ul>
+        </nav>
+        <p class="site-colophon">{{ site.title }} · published with <a href="https://github.com/Thiesi/Edict" rel="noopener">Edict</a></p>
+    </footer>
 {% endblock %}

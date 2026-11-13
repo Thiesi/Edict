@@ -1,8 +1,9 @@
-{% extends 'base.html.twig' %}
+{% extends 'public/layout.html.twig' %}
+{% set signed_in = true %}
 
-{% block title %}Your account · Edict{% endblock %}
+{% block title %}Your account · {{ site().title }}{% endblock %}
 
-{% block body %}
+{% block main %}
     <main>
         <h1>Your account</h1>
         {% if notice %}<p role="status">{{ notice }}</p>{% endif %}
