@@ -16,6 +16,7 @@
             {% if article.teaser %}<p class="teaser">{{ article.teaser }}</p>{% endif %}
             {{ article.bodyJson|body_html }}
         </article>
+        {% if likes is defined and likes %}{% include 'public/_likes.html.twig' %}{% endif %}
         {% if article.kind == 'article' and article.tags %}
             <p>Tags:
                 {% for tag in article.tags %}<a href="/tag/{{ tag.slug }}">{{ tag.name }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
@@ -24,4 +25,5 @@
     </main>
     <script src="/assets/lightbox.js" defer></script>
     <script src="/assets/player.js" defer></script>
+    {% if likes is defined and likes and session and not banned %}<script src="/assets/likes.js" defer></script>{% endif %}
 {% endblock %}
