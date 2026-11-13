@@ -476,7 +476,8 @@
     border-radius: 3px;
 }
 
-.editor-cover label {
+/* Only shown with a cover. */
+.editor-cover label:not([hidden]) {
     display: flex;
     flex-direction: column;
     flex: 1 1 100%;
