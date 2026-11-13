@@ -9,6 +9,7 @@
         <header class="editor-bar">
             <a href="/admin/articles?kind={{ article.kind }}">Back</a>
             <span id="save-status" role="status">Up to date</span>
+            <span id="word-count" class="editor-count" aria-live="off"></span>
             <span class="editor-bar-end">
                 <a id="preview" href="/admin/articles/{{ article.id }}/preview" target="_blank" rel="noopener">Preview</a>
                 {% if article.isPublished and not article.deletedAt %}<a href="/{{ article.slug }}" target="_blank" rel="noopener">View</a>{% endif %}
@@ -93,8 +94,9 @@
             {% if article.kind == 'article' %}
                 <p>
                     <label for="tags">Tags</label>
-                    <input id="tags" value="{{ input.tags }}" aria-describedby="tags-help" autocomplete="off">
-                    <small id="tags-help">Separated by commas.</small>
+                    <input id="tags" value="{{ input.tags }}" aria-describedby="tags-help" autocomplete="off" list="tag-suggestions">
+                    <datalist id="tag-suggestions"></datalist>
+                    <small id="tags-help">Separated by commas. Suggestions come from tags already in use. <a href="/admin/tags">Rename tags</a></small>
                 </p>
             {% endif %}
             {% if revisions %}

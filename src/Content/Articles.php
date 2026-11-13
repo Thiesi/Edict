@@ -454,6 +454,86 @@ final readonly class Articles
         return $stmt->fetchColumn() === false;
     }
 
+    /**
+     * Every tag with how many articles use it, for suggestions and the tag page.
+     *
+     * @return list<array{slug: string, name: string, count: int}>
+     */
+    public function tags(): array
+    {
+        $stmt = $this->pdo->query(
+            'SELECT t.slug, t.name, count(x.article_id) AS n FROM tag t LEFT JOIN article_tag x ON x.tag_id = t.id GROUP BY t.id ORDER BY lower(t.name)',
+        );
+        $tags = [];
+        foreach ($stmt === false ? [] : $stmt->fetchAll() as $row) {
+            if (is_array($row)) {
+                $tags[] = ['slug' => Row::str($row, 'slug'), 'name' => Row::str($row, 'name'), 'count' => Row::int($row, 'n')];
+            }
+        }
+
+        return $tags;
+    }
+
+    /**
+     * Renames a tag everywhere: on the published articles, and in drafts, so publishing
+     * a draft doesn't bring the old name back. A name that becomes an existing tag
+     * merges the two.
+     *
+     * @return string|null what is wrong, or null when done
+     */
+    public function renameTag(string $slug, string $newName): ?string
+    {
+        $clean = (new ArticleInput('', '', 'en', '', Body::EMPTY, $newName))->tagList();
+        if (count($clean) !== 1 || mb_strlen($clean[0]['name']) > 64) {
+            return 'Please enter one tag name of up to 64 characters, without commas.';
+        }
+        ['slug' => $newSlug, 'name' => $name] = $clean[0];
+        if ($this->tagName($slug) === null) {
+            return 'That tag no longer exists.';
+        }
+
+        return $this->transaction(function () use ($slug, $newSlug, $name): ?string {
+            $target = $this->pdo->prepare('SELECT id FROM tag WHERE slug = ? FOR UPDATE');
+            $target->execute([$newSlug]);
+            $targetId = $target->fetchColumn();
+            if ($newSlug !== $slug && $targetId !== false) {
+                // Into the existing tag: its articles keep one link each.
+                $this->pdo->prepare(
+                    'INSERT INTO article_tag (article_id, tag_id)
+                     SELECT x.article_id, ? FROM article_tag x JOIN tag t ON t.id = x.tag_id WHERE t.slug = ?
+                     ON CONFLICT DO NOTHING',
+                )->execute([$targetId, $slug]);
+                $this->pdo->prepare('DELETE FROM tag WHERE slug = ?')->execute([$slug]);
+                $this->pdo->prepare('UPDATE tag SET name = ? WHERE id = ?')->execute([$name, $targetId]);
+            } else {
+                $this->pdo->prepare('UPDATE tag SET slug = ?, name = ? WHERE slug = ?')->execute([$newSlug, $name, $slug]);
+            }
+
+            $drafts = $this->pdo->query("SELECT id, draft::text AS draft FROM article WHERE draft IS NOT NULL AND draft->>'tags' <> ''");
+            $update = $this->pdo->prepare('UPDATE article SET draft = ?::jsonb WHERE id = ?');
+            foreach ($drafts === false ? [] : $drafts->fetchAll() as $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+                $input = ArticleInput::fromJson(Row::str($row, 'draft'));
+                $names = [];
+                $changed = false;
+                foreach ($input->tagList() as $tag) {
+                    $changed = $changed || $tag['slug'] === $slug;
+                    $names[] = $tag['slug'] === $slug ? $name : $tag['name'];
+                }
+                if ($changed) {
+                    $data = json_decode(Row::str($row, 'draft'), true);
+                    if (is_array($data)) {
+                        $data['tags'] = implode(', ', array_unique($names));
+                        $update->execute([json_encode($data, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE), Row::int($row, 'id')]);
+                    }
+                }
+            }
+            return null;
+        });
+    }
+
     private function setTags(int $articleId, ArticleInput $input): void
     {
         $this->pdo->prepare('DELETE FROM article_tag WHERE article_id = ?')->execute([$articleId]);
