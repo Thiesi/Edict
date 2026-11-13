@@ -36,7 +36,7 @@ final class CommentAlertTest extends DbTestCase
         file_put_contents($this->dir . '/failing', "#!/bin/sh\ncat > /dev/null\necho 'relay refused' >&2\nexit 75\n");
         chmod($this->dir . '/sendmail', 0o755);
         chmod($this->dir . '/failing', 0o755);
-        $this->settings = ['ALERT_EMAIL' => 'sovereign@example.org', 'SENDMAIL_BIN' => $this->dir . '/sendmail'];
+        $this->settings = ['ALERT_EMAIL' => 'sovereign@example.org', 'MAIL_FROM' => 'edict@example.net', 'SENDMAIL_BIN' => $this->dir . '/sendmail'];
         parent::setUp();
 
         $stmt = $this->pdo->prepare(
@@ -120,13 +120,14 @@ final class CommentAlertTest extends DbTestCase
 
         $mail = (string) file_get_contents($this->dir . '/mail');
         self::assertStringContainsString("To: sovereign@example.org\r\n", $mail);
-        self::assertStringContainsString("From: Edict <edict@localhost>\r\n", $mail);
-        self::assertMatchesRegularExpression('~^Subject: =\?UTF-8\?Q\?.+$~m', $mail);
-        self::assertStringNotContainsString("\nBcc:", $mail, 'a title is one line in a header');
+        self::assertStringContainsString("From: Edict <edict@example.net>\r\n", $mail);
+        [$headers] = explode("\r\n\r\n", $mail, 2);
+        self::assertStringContainsString("\r\nSubject: [Edict] New comment on \"Talk Bcc: victim@example.org\"\r\n", $headers, 'a title is one line in a header');
+        self::assertStringNotContainsString("\nBcc:", $headers);
         self::assertStringContainsString("Alice commented on \"Talk\r\nBcc: victim@example.org\":", str_replace("\r\n\r\n", "\r\n", $mail), 'the body may show it as it is');
         self::assertStringContainsString("Hello there,\r\nfine article.", $mail);
         self::assertMatchesRegularExpression('~See it, or remove it: http://localhost:8080/talk#comment-[0-9]+~', $mail);
-        self::assertSame("-i\n-f\nedict@localhost\n--\nsovereign@example.org\n", file_get_contents($this->dir . '/args'), 'the recipient never comes from the headers');
+        self::assertSame("-i\n-f\nedict@example.net\n--\nsovereign@example.org\n", file_get_contents($this->dir . '/args'), 'the recipient never comes from the headers');
     }
 
     public function testAHeldCommentSaysItWaits(): void
@@ -154,9 +155,9 @@ final class CommentAlertTest extends DbTestCase
         self::assertFileDoesNotExist($this->dir . '/mail');
     }
 
-    public function testWithoutAnAddressNothingIsSent(): void
+    public function testWithoutBothAddressesNothingIsSent(): void
     {
-        $this->reboot(['SENDMAIL_BIN' => $this->dir . '/sendmail']);
+        $this->reboot(['ALERT_EMAIL' => 'sovereign@example.org', 'SENDMAIL_BIN' => $this->dir . '/sendmail']);
         $this->pdo->exec("INSERT INTO article (kind, slug, lang, title, body_json, status, published_at, created_at, updated_at)
              VALUES ('article', 'quiet', 'en', 'Quiet', '{\"type\":\"doc\",\"content\":[]}', 'published', to_timestamp(1), now(), now())");
         $article = $this->pdo->query("SELECT id FROM article WHERE slug = 'quiet'");
@@ -171,7 +172,7 @@ final class CommentAlertTest extends DbTestCase
 
     public function testARefusingRelayIsTriedAgain(): void
     {
-        $this->reboot(['ALERT_EMAIL' => 'sovereign@example.org', 'SENDMAIL_BIN' => $this->dir . '/failing']);
+        $this->reboot(['ALERT_EMAIL' => 'sovereign@example.org', 'MAIL_FROM' => 'edict@example.net', 'SENDMAIL_BIN' => $this->dir . '/failing']);
         $this->pdo->exec("INSERT INTO article (kind, slug, lang, title, body_json, status, published_at, created_at, updated_at)
              VALUES ('article', 'retry', 'en', 'Retry', '{\"type\":\"doc\",\"content\":[]}', 'published', to_timestamp(1), now(), now())");
         $article = $this->pdo->query("SELECT id FROM article WHERE slug = 'retry'");
