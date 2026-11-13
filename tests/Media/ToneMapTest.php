@@ -28,10 +28,12 @@ final class ToneMapTest extends TestCase
 
     public function testPqBrightnessLandsWhereAnOrdinaryScreenExpectsIt(): void
     {
-        // Mid-grey (18 % of reference white) stays mid-grey, untouched by the roll-off.
-        self::assertEqualsWithDelta(0.18 ** (1 / 2.4), self::grey(ToneMap::PQ, ToneMap::nitsToPq(0.18 * 203)), 0.005);
-        // Reference white is bright but leaves room for highlights.
-        self::assertEqualsWithDelta(0.90, self::grey(ToneMap::PQ, ToneMap::nitsToPq(203)), 0.02);
+        // Mid-grey (18 % of reference white) is untouched by the roll-off: a stop below SDR mid-grey.
+        self::assertEqualsWithDelta((0.18 * 203 / 400) ** (1 / 2.4), self::grey(ToneMap::PQ, ToneMap::nitsToPq(0.18 * 203)), 0.005);
+        // A white wall is clearly lighter than mid-grey but well short of white, so lamps stand out.
+        $wall = self::grey(ToneMap::PQ, ToneMap::nitsToPq(ToneMap::REFERENCE_WHITE));
+        self::assertEqualsWithDelta(0.75, $wall, 0.02);
+        self::assertGreaterThan($wall + 0.2, self::grey(ToneMap::PQ, ToneMap::nitsToPq(600)));
         // The source peak, and anything brighter, is white.
         self::assertEqualsWithDelta(1.0, self::grey(ToneMap::PQ, ToneMap::nitsToPq(1000)), 0.001);
         self::assertEqualsWithDelta(1.0, self::grey(ToneMap::PQ, 1.0), 0.001);
