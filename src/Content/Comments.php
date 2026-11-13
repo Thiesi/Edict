@@ -6,6 +6,8 @@ namespace Edict\Content;
 
 use Edict\Clock;
 use Edict\Database\Row;
+use Edict\Mail\CommentAlert;
+use Edict\Media\JobQueue;
 use Edict\Site\Settings;
 
 /**
@@ -22,7 +24,7 @@ final readonly class Comments
     private const DAILY = 60;
     private const FOREVER = '9999-12-31 00:00:00+00';
 
-    public function __construct(private \PDO $pdo, private Clock $clock, private Settings $settings) {}
+    public function __construct(private \PDO $pdo, private Clock $clock, private Settings $settings, private JobQueue $jobs) {}
 
     /**
      * Whether readers can comment on this article right now, and how.
@@ -131,6 +133,10 @@ final readonly class Comments
             $id = Row::int(['id' => $insert->fetchColumn()], 'id');
             $path = (is_array($parent) ? Row::str($parent, 'path') . '.' : '') . str_pad((string) $id, self::PAD, '0', STR_PAD_LEFT);
             $this->pdo->prepare('UPDATE comment SET path = ? WHERE id = ?')->execute([$path, $id]);
+            // In the same transaction: no comment without its alert, and no alert without its comment.
+            if (!$isAdmin) {
+                $this->jobs->enqueue(CommentAlert::JOB, ['comment_id' => $id]);
+            }
             $this->pdo->commit();
         } catch (\Throwable $e) {
             $this->pdo->rollBack();
