@@ -69,6 +69,6 @@ final class HardeningFlowTest extends DbTestCase
         $html = (string) $this->get('/admin', $admin['cookies'])->getBody();
 
         self::assertStringContainsString('<h2>Storage</h2>', $html);
-        self::assertMatchesRegularExpression('~Media: 0\.0 of [0-9.]+ GB, 0 of [0-9,]+ files\.~', $html);
+        self::assertMatchesRegularExpression('~Media: 0\.0 of [0-9.]+ GB,\s+0 of [0-9,]+ files\.~', $html);
     }
 }

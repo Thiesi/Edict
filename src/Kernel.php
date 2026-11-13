@@ -53,7 +53,6 @@ final class Kernel
 
         // Slim runs the last-added middleware first: errors, routing, body parsing, raw cookies, session, CSRF.
         $app->add(SitePreviewMiddleware::class);
-        $app->add(SecurityHeadersMiddleware::class);
         $app->add(CsrfMiddleware::class);
         $app->add(SessionMiddleware::class);
         $app->add(RawCookieMiddleware::class);
@@ -75,6 +74,9 @@ final class Kernel
                 fn(ServerRequestInterface $request, \Throwable $error, bool $display): ResponseInterface => $default($request, $error, $display, false, false),
             );
         }
+
+        // Outermost, so error pages get the headers too.
+        $app->add(SecurityHeadersMiddleware::class);
 
         return $app;
     }
