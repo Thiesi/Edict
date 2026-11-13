@@ -220,6 +220,72 @@ final class ArticleFlowTest extends DbTestCase
         self::assertSame(['coverAlt'], array_keys($data['errors']));
     }
 
+    public function testEveryPublishKeepsAVersionToRestore(): void
+    {
+        $id = $this->published(['title' => 'First take']);
+        $this->clock->advance(60);
+        self::assertSame(200, $this->republish($id, ['title' => 'Second take'])->getStatusCode());
+
+        $editor = (string) $this->get("/admin/articles/$id", $this->admin)->getBody();
+        self::assertStringContainsString('Published versions', $editor);
+        self::assertMatchesRegularExpression('~Second take.*First take~s', $editor, 'newest first');
+        $oldest = $this->pdo->query('SELECT min(id) FROM article_revision');
+        self::assertNotFalse($oldest);
+        $last = [1 => (string) $oldest->fetchColumn()];
+        self::assertStringContainsString('/revisions/' . $last[1] . '/restore', $editor);
+
+        $restore = $this->adminPost("/admin/articles/$id/revisions/{$last[1]}/restore");
+        self::assertSame(303, $restore->getStatusCode());
+        $article = $this->service(Articles::class)->find($id);
+        self::assertNotNull($article);
+        self::assertSame('First take', $article->input()->title, 'back in the draft');
+        self::assertSame('Second take', $article->title, 'readers still see what was published');
+        self::assertSame(404, $this->adminPost('/admin/articles/' . $this->newRow() . "/revisions/{$last[1]}/restore")->getStatusCode(), 'only its own versions');
+    }
+
+    public function testOnlyTheLastTwentyVersionsAreKept(): void
+    {
+        $id = $this->published();
+        for ($i = 1; $i <= 22; ++$i) {
+            $this->republish($id, ['title' => "Take $i"]);
+        }
+
+        $count = $this->pdo->query('SELECT count(*) FROM article_revision');
+        self::assertNotFalse($count);
+        self::assertSame(Articles::KEEP_REVISIONS, (int) $count->fetchColumn());
+    }
+
+    public function testChangesAfterPublishingShowAnUpdateDate(): void
+    {
+        $id = $this->published();
+        $this->clock->advance(3 * 86400);
+        $this->republish($id, []);
+        self::assertStringNotContainsString('Updated on', (string) $this->get('/hello-world')->getBody(), 'publishing the same text again changes nothing');
+
+        $this->republish($id, ['teaser' => 'A better teaser']);
+        self::assertStringContainsString('Updated on <time', (string) $this->get('/hello-world')->getBody());
+    }
+
+    public function testTheExportHasEverythingWritten(): void
+    {
+        $this->published(['title' => 'Exported', 'tags' => 'Alpha']);
+        $this->saved(['title' => 'Only a draft']);
+
+        $response = $this->get('/admin/export', $this->admin);
+
+        self::assertSame(200, $response->getStatusCode());
+        self::assertStringStartsWith('attachment; filename="edict-export-', $response->getHeaderLine('Content-Disposition'));
+        $data = json_decode((string) $response->getBody(), true);
+        self::assertIsArray($data);
+        self::assertIsArray($data['articles']);
+        self::assertSame(['Exported', 'Untitled'], array_column($data['articles'], 'title'));
+        self::assertIsArray($data['articles'][1]);
+        self::assertIsArray($data['articles'][1]['draft']);
+        self::assertSame('Only a draft', $data['articles'][1]['draft']['title']);
+        self::assertSame([['slug' => 'alpha', 'name' => 'Alpha']], $data['tags']);
+        self::assertSame(303, $this->get('/admin/export')->getStatusCode(), 'admins only');
+    }
+
     public function testEveryApplicationPathIsReservedFromSlugs(): void
     {
         foreach ($this->app->getRouteCollector()->getRoutes() as $route) {

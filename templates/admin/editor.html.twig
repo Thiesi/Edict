@@ -26,6 +26,7 @@
             <details><summary>Show that text</summary><pre id="restore-text"></pre></details>
         </div>
         <p id="editor-errors" class="editor-banner" role="alert" hidden></p>
+        {% if restored %}<p class="editor-banner" role="status">The version is in the draft now. Check it, then publish to make it live.</p>{% endif %}
         {% if article.deletedAt %}<p class="editor-banner">This is in the trash. Restore it from the list to publish it.</p>{% endif %}
 
         <aside id="media-panel" class="media-panel" aria-label="Media library" hidden>
@@ -95,6 +96,22 @@
                     <input id="tags" value="{{ input.tags }}" aria-describedby="tags-help" autocomplete="off">
                     <small id="tags-help">Separated by commas.</small>
                 </p>
+            {% endif %}
+            {% if revisions %}
+                <h3>Published versions</h3>
+                <p><small>Restoring puts a version into the draft. Readers see it once you publish again.</small></p>
+                <ol class="editor-revisions">
+                    {% for revision in revisions %}
+                        <li>
+                            <time datetime="{{ revision.publishedAt|article_iso }}">{{ revision.publishedAt|date('Y-m-d H:i') }}</time>: {{ revision.title }}
+                            {% if loop.first %}<small>(what readers see{% if article.hasPendingChanges %}, before your changes{% endif %})</small>{% endif %}
+                            <form method="post" action="/admin/articles/{{ article.id }}/revisions/{{ revision.id }}/restore">
+                                <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                                <button type="submit">Restore into the draft</button>
+                            </form>
+                        </li>
+                    {% endfor %}
+                </ol>
             {% endif %}
             <p>
                 Status: <strong>{{ article.status }}</strong>{% if article.hasPendingChanges %}, with changes readers don't see yet{% endif %}.

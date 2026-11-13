@@ -75,6 +75,8 @@ return static function (App $app): void {
         $group->post('/articles/{id:[0-9]+}/trash', [ArticleAdminController::class, 'trash']);
         $group->post('/articles/{id:[0-9]+}/restore', [ArticleAdminController::class, 'restore']);
         $group->post('/articles/{id:[0-9]+}/delete', [ArticleAdminController::class, 'delete']);
+        $group->post('/articles/{id:[0-9]+}/revisions/{revision:[0-9]+}/restore', [ArticleAdminController::class, 'restoreRevision']);
+        $group->get('/export', [ArticleAdminController::class, 'export']);
         $group->post('/articles/{id:[0-9]+}/votes', [VoteController::class, 'adjust']);
 
         $group->get('/comments', [CommentController::class, 'queue']);

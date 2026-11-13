@@ -78,6 +78,8 @@ final readonly class ArticleAdminController
         return $this->html($request, $response, 'admin/editor.html.twig', [
             'article' => $article,
             'input' => $input,
+            'revisions' => $this->articles->revisions($article->id),
+            'restored' => ($request->getQueryParams()['restored'] ?? null) === '1',
             'asset_version' => $this->config->release(),
             'state' => [
                 'id' => $article->id,
@@ -86,6 +88,33 @@ final readonly class ArticleAdminController
                 'csrf' => $session instanceof Session ? $session->csrfToken : '',
             ],
         ]);
+    }
+
+    /**
+     * @param array<string, string> $args
+     */
+    public function restoreRevision(ServerRequestInterface $request, ResponseInterface $response, array $args): ResponseInterface
+    {
+        $article = $this->article($request, $args);
+        if (!$this->articles->restoreRevision($article->id, (int) ($args['revision'] ?? 0))) {
+            throw new HttpNotFoundException($request);
+        }
+
+        return $response->withStatus(303)->withHeader('Location', '/admin/articles/' . $article->id . '?restored=1');
+    }
+
+    /**
+     * Everything written, as one JSON file: articles, pages, their drafts and tags.
+     * Media are plain files already, in the backups.
+     */
+    public function export(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
+    {
+        $response->getBody()->write(json_encode($this->articles->export(), JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT));
+
+        return $response
+            ->withHeader('Content-Type', 'application/json; charset=utf-8')
+            ->withHeader('Content-Disposition', 'attachment; filename="edict-export-' . gmdate('Y-m-d', time()) . '.json"')
+            ->withHeader('Cache-Control', 'no-store');
     }
 
     /**
