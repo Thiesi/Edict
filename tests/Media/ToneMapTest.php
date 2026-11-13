@@ -81,6 +81,15 @@ final class ToneMapTest extends TestCase
         self::assertSame(2, array_search(max($blue), $blue, true));
     }
 
+    public function testBrightColoursStaySaturatedInsteadOfTurningPale(): void
+    {
+        // A cyan keyboard backlight at about 600 nits: it stays cyan, not near-white.
+        [$r, $g, $b] = ToneMap::map(ToneMap::PQ, 0.4, 0.75, 0.75);
+        self::assertLessThan(0.2, $r);
+        self::assertGreaterThan(0.9, $g);
+        self::assertGreaterThan(0.9, $b);
+    }
+
     public function testTheCubeHasEveryPointInOrder(): void
     {
         $lines = explode("\n", rtrim(ToneMap::cube(ToneMap::PQ)));

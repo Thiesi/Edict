@@ -11,8 +11,9 @@ namespace Edict\Media;
  * The table maps BT.2020 RGB, encoded with PQ (HDR10, HDR10+) or HLG (iPhones), to BT.709
  * RGB for an ordinary screen. Brightness follows ITU-R BT.2390: the HDR reference white of
  * 203 nits (BT.2408) becomes the screen's white, and anything brighter is rolled off into
- * the top of the range instead of clipping. Mapping luminance keeps hues, and colours the
- * smaller gamut can't show are desaturated towards their own grey.
+ * the top of the range instead of clipping. The curve follows each colour's brightest
+ * channel, so bright colours keep their saturation, and colours the smaller gamut can't
+ * show are desaturated towards their own grey.
  */
 final class ToneMap
 {
@@ -92,31 +93,32 @@ final class ToneMap
             default => throw new \InvalidArgumentException("Not an HDR transfer: $transfer"),
         };
 
-        $luminance = self::luminance($nits);
-        if ($luminance <= 0.0) {
-            return [0.0, 0.0, 0.0];
-        }
-        $scale = self::rollOff($luminance) / $luminance / self::TARGET_WHITE;
         $linear = [];
         foreach (self::TO_709 as $row) {
-            $linear[] = ($row[0] * $nits[0] + $row[1] * $nits[1] + $row[2] * $nits[2]) * $scale;
+            $linear[] = $row[0] * $nits[0] + $row[1] * $nits[1] + $row[2] * $nits[2];
         }
-        $grey = min(1.0, self::rollOff($luminance) / self::TARGET_WHITE);
 
-        // As much of the colour as fits, keeping its brightness.
+        // Colours outside BT.709 lose saturation towards their own grey until they fit.
+        $grey = self::luminance($nits);
+        if ($grey <= 0.0) {
+            return [0.0, 0.0, 0.0];
+        }
         $keep = 1.0;
         foreach ($linear as $channel) {
-            if ($channel > 1.0) {
-                $keep = min($keep, (1.0 - $grey) / ($channel - $grey));
-            } elseif ($channel < 0.0) {
+            if ($channel < 0.0) {
                 $keep = min($keep, $grey / ($grey - $channel));
             }
         }
+        $linear = array_map(static fn(float $channel): float => max(0.0, $grey + $keep * ($channel - $grey)), $linear);
+
+        // The curve works on the brightest channel, as HDR10+ itself does: a bright colour
+        // gets darker rather than paler, so neon and backlights stay saturated.
+        $brightest = max($linear);
+        $scale = self::rollOff($brightest) / $brightest / self::TARGET_WHITE;
 
         $out = [];
         foreach ($linear as $channel) {
-            $fitted = min(1.0, max(0.0, $grey + $keep * ($channel - $grey)));
-            $out[] = $fitted ** (1 / self::SCREEN_GAMMA);
+            $out[] = min(1.0, $channel * $scale) ** (1 / self::SCREEN_GAMMA);
         }
 
         return [$out[0], $out[1], $out[2]];
