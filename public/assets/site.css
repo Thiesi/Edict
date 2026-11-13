@@ -532,3 +532,154 @@ figure.media-file {
 .like-admin input {
     width: 8rem;
 }
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+/* Comments. Indentation stops at five levels, three on a phone; deeper replies say whom they answer. */
+.comments {
+    margin: 2.5rem 0 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+}
+
+.comment-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.comment-list .comment-list {
+    padding-left: 1.25rem;
+    border-left: 2px solid var(--border);
+}
+
+.comment.depth-5 > .comment-replies > .comment-list {
+    padding-left: 0;
+    border-left: 0;
+}
+
+@media (max-width: 40rem) {
+    .comment-list .comment-list {
+        padding-left: 0.75rem;
+    }
+
+    .comment.depth-3 > .comment-replies > .comment-list,
+    .comment.depth-4 > .comment-replies > .comment-list {
+        padding-left: 0;
+        border-left: 0;
+    }
+}
+
+.comment-body {
+    margin: 0.75rem 0;
+}
+
+.comment-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 0.75rem;
+    align-items: baseline;
+    font-size: 0.9rem;
+}
+
+.comment-meta time,
+.comment-reply-to,
+.comment-flag {
+    color: var(--muted);
+}
+
+.comment-flag {
+    font-size: 0.8rem;
+    font-style: italic;
+}
+
+.comment-text p {
+    margin: 0.35rem 0;
+}
+
+.comment.is-held > .comment-body,
+.comment.is-removed > .comment-body {
+    opacity: 0.8;
+}
+
+.comment-removed {
+    color: var(--muted);
+    font-style: italic;
+}
+
+.comment.is-pinned > .comment-body {
+    padding: 0.5rem 0.75rem;
+    border-left: 3px solid var(--accent);
+    background: var(--surface);
+}
+
+.comment-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.75rem;
+    align-items: center;
+    font-size: 0.85rem;
+}
+
+.comment-actions form {
+    display: inline;
+}
+
+.comment-actions button,
+.comment-actions select {
+    font-size: 0.8rem;
+}
+
+.comment-replies > summary {
+    color: var(--muted);
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.comment-form {
+    display: grid;
+    gap: 0.4rem;
+    margin: 1rem 0;
+}
+
+.comment-form textarea {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg);
+    color: var(--fg);
+    font: inherit;
+}
+
+.comment-form button {
+    justify-self: start;
+}
+
+.comment-hint {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.85rem;
+}
+
+.comment-error {
+    margin: 0;
+    font-weight: 700;
+}
+
+.comment-mode {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    border: 1px dashed currentColor;
+    font-size: 0.875rem;
+}

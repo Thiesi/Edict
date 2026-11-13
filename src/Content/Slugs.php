@@ -13,7 +13,7 @@ final class Slugs
     public const MAX_LENGTH = 120;
 
     private const RESERVED = [
-        'account', 'admin', 'archive', 'assets', 'auth', 'favicon', 'feed', 'healthz', 'index',
+        'account', 'admin', 'archive', 'assets', 'auth', 'comments', 'favicon', 'feed', 'healthz', 'index',
         'login', 'logout', 'media', 'page', 'robots', 'sitemap', 'tag', 'tags', 'votes',
     ];
 

@@ -1,0 +1,134 @@
+{% macro form(article, comments, session, csrf_field, parent) %}
+    <form class="comment-form" method="post" action="/comments/{{ article.id }}" id="{{ parent ? 'reply-' ~ parent : 'comment-form' }}">
+        <input type="hidden" name="{{ csrf_field }}" value="{{ session.csrfToken }}">
+        {% if parent %}<input type="hidden" name="parent" value="{{ parent }}">{% endif %}
+        <label for="comment-body-{{ parent ?: 'new' }}">{{ parent ? 'Your reply' : 'Your comment' }}, as {{ session.displayName }}</label>
+        <textarea id="comment-body-{{ parent ?: 'new' }}" name="body" rows="{{ parent ? 3 : 4 }}" maxlength="5000" required{% if comments.error and comments.reply == parent %} aria-invalid="true" aria-describedby="comment-error"{% endif %}>{{ comments.reply == parent ? comments.text : '' }}</textarea>
+        {% if comments.error and comments.reply == parent %}<p class="comment-error" id="comment-error" role="alert">{{ comments.error }}</p>{% endif %}
+        <p class="comment-hint">Plain text. Links work. {% if comments.status == 'hold' %}Comments appear once approved.{% endif %}</p>
+        <button type="submit">{{ parent ? 'Reply' : 'Post comment' }}</button>
+        {% if parent %}<a href="/{{ article.slug }}#comment-{{ parent }}">Cancel</a>{% endif %}
+    </form>
+{% endmacro %}
+
+{% macro thread(nodes, article, comments, session, csrf_field) %}
+    {% import _self as self %}
+    <ol class="comment-list">
+        {% for node in nodes %}
+            {% set admin = session and session.isAdmin %}
+            <li class="comment depth-{{ min(node.depth, 5) }}{% if node.pinned %} is-pinned{% endif %}{% if node.state != 'visible' %} is-{{ node.state }}{% endif %}" id="comment-{{ node.id }}">
+                <article class="comment-body" aria-label="Comment{% if node.author %} by {{ node.author }}{% endif %}">
+                    {% if node.state == 'removed' and not admin %}
+                        <p class="comment-removed">[removed]</p>
+                    {% else %}
+                        <header class="comment-meta">
+                            <strong class="comment-author">{{ node.author }}</strong>
+                            {% if node.depth > 4 and node.replyTo %}<span class="comment-reply-to">↳ in reply to {{ node.replyTo }}</span>{% endif %}
+                            <time datetime="{{ node.createdAt|article_iso }}">{{ node.createdAt|article_date(article.lang) }}</time>
+                            {% if node.edited %}<span class="comment-flag">edited</span>{% endif %}
+                            {% if node.pinned %}<span class="comment-flag">pinned</span>{% endif %}
+                            {% if node.state == 'held' %}<span class="comment-flag">{{ admin ? 'waiting for approval' : 'waiting for approval, only you see it' }}</span>{% endif %}
+                            {% if node.state == 'removed' %}<span class="comment-flag">removed</span>{% endif %}
+                            {% if admin and node.trusted %}<span class="comment-flag">approved author</span>{% endif %}
+                            {% if admin and node.banned %}<span class="comment-flag">banned</span>{% endif %}
+                        </header>
+                        {% if admin and comments.edit == node.id %}
+                            <form method="post" action="/admin/comments/{{ node.id }}/edit">
+                                <input type="hidden" name="{{ csrf_field }}" value="{{ session.csrfToken }}">
+                                <label for="edit-{{ node.id }}">Edit this comment</label>
+                                <textarea id="edit-{{ node.id }}" name="body" rows="4" maxlength="5000" required>{{ node.body }}</textarea>
+                                <button type="submit">Save</button> <a href="/{{ article.slug }}#comment-{{ node.id }}">Cancel</a>
+                            </form>
+                        {% else %}
+                            <div class="comment-text">{{ node.body|comment_html }}</div>
+                        {% endif %}
+                    {% endif %}
+                    <footer class="comment-actions">
+                        {% if session and node.state == 'visible' and comments.status != 'closed' %}
+                            <a href="/{{ article.slug }}?reply={{ node.id }}#reply-{{ node.id }}">Reply</a>
+                        {% endif %}
+                        {% if admin %}
+                            {{ self.action(node.id, 'approve', 'Approve', session, csrf_field, node.state == 'held') }}
+                            {% if node.state != 'removed' %}<a href="/{{ article.slug }}?edit={{ node.id }}#comment-{{ node.id }}">Edit</a>{% endif %}
+                            {{ self.action(node.id, node.pinned ? 'unpin' : 'pin', node.pinned ? 'Unpin' : 'Pin', session, csrf_field, node.state == 'visible') }}
+                            {% if node.state != 'removed' %}
+                                {% if node.replies %}
+                                    {{ self.action(node.id, 'delete', 'Remove only this', session, csrf_field) }}
+                                    {{ self.action(node.id, 'delete-thread', 'Remove with replies', session, csrf_field) }}
+                                {% else %}
+                                    {{ self.action(node.id, 'delete', 'Remove', session, csrf_field) }}
+                                {% endif %}
+                            {% endif %}
+                            {% if node.authorId and node.authorId != session.userId %}
+                                {{ self.action(node.id, node.trusted ? 'untrust' : 'trust', node.trusted ? 'Stop approving author' : 'Approve author', session, csrf_field) }}
+                                {% if not node.banned %}
+                                    <form method="post" action="/admin/comments/{{ node.id }}/ban">
+                                        <input type="hidden" name="{{ csrf_field }}" value="{{ session.csrfToken }}">
+                                        <label class="visually-hidden" for="ban-{{ node.id }}">Ban for</label>
+                                        <select id="ban-{{ node.id }}" name="days">
+                                            <option value="1">1 day</option><option value="7" selected>7 days</option><option value="30">30 days</option><option value="365">a year</option><option value="forever">for good</option>
+                                        </select>
+                                        <button type="submit">Ban author</button>
+                                    </form>
+                                {% endif %}
+                            {% endif %}
+                        {% endif %}
+                    </footer>
+                </article>
+                {% if comments.reply == node.id and session and node.state == 'visible' and comments.status != 'closed' %}
+                    {{ self.form(article, comments, session, csrf_field, node.id) }}
+                {% endif %}
+                {% if node.replies %}
+                    <details class="comment-replies" open>
+                        <summary>{{ node.replies|length }} {{ node.replies|length == 1 ? 'reply' : 'replies' }}</summary>
+                        {{ self.thread(node.replies, article, comments, session, csrf_field) }}
+                    </details>
+                {% endif %}
+            </li>
+        {% endfor %}
+    </ol>
+{% endmacro %}
+
+{% macro action(id, action, label, session, csrf_field, show = true) %}
+    {% if show %}
+        <form method="post" action="/admin/comments/{{ id }}/{{ action }}">
+            <input type="hidden" name="{{ csrf_field }}" value="{{ session.csrfToken }}">
+            <button type="submit">{{ label }}</button>
+        </form>
+    {% endif %}
+{% endmacro %}
+
+{% import _self as self %}
+<section class="comments" id="comments" aria-labelledby="comments-heading">
+    <h2 id="comments-heading">{{ comments.count }} {{ comments.count == 1 ? 'comment' : 'comments' }}</h2>
+
+    {% if session and session.isAdmin %}
+        <form class="comment-mode" method="post" action="/admin/articles/{{ article.id }}/comments">
+            <input type="hidden" name="{{ csrf_field }}" value="{{ session.csrfToken }}">
+            <label for="comment-mode">Comments here</label>
+            <select id="comment-mode" name="mode">
+                {% for value, label in {site: 'as the site is set', open: 'post immediately', hold: 'hold for approval', closed: 'closed'} %}
+                    <option value="{{ value }}"{% if comments.mode == value %} selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit">Set</button>
+            <span>Now: {{ comments.status }}.</span>
+        </form>
+    {% endif %}
+
+    {% if comments.posted %}<p role="status">Thanks, your comment is saved.</p>{% endif %}
+
+    {% if comments.thread %}
+        {{ self.thread(comments.thread, article, comments, session, csrf_field) }}
+    {% endif %}
+
+    {% if comments.status == 'closed' %}
+        <p class="comments-closed">Comments are closed.</p>
+    {% elseif not session %}
+        <p><a href="/login?next={{ ('/' ~ article.slug ~ '#comments')|url_encode }}">Log in to comment</a></p>
+    {% elseif banned %}
+        <p>This account can’t comment.</p>
+    {% elseif not comments.reply %}
+        {{ self.form(article, comments, session, csrf_field, null) }}
+    {% endif %}
+</section>

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Edict\Http\AccountController;
 use Edict\Http\AdminAuthController;
 use Edict\Http\ArticleAdminController;
+use Edict\Http\CommentController;
 use Edict\Http\HealthAction;
 use Edict\Http\MediaController;
 use Edict\Http\Middleware\RequireAdmin;
@@ -24,6 +25,7 @@ return static function (App $app): void {
     $app->get('/healthz', HealthAction::class);
 
     $app->post('/votes/{id:[0-9]+}', [VoteController::class, 'like']);
+    $app->post('/comments/{id:[0-9]+}', [CommentController::class, 'post']);
 
     $app->get('/login', [OAuthController::class, 'showLogin']);
     $app->get('/auth/{provider}', [OAuthController::class, 'start']);
@@ -74,6 +76,12 @@ return static function (App $app): void {
         $group->post('/articles/{id:[0-9]+}/restore', [ArticleAdminController::class, 'restore']);
         $group->post('/articles/{id:[0-9]+}/delete', [ArticleAdminController::class, 'delete']);
         $group->post('/articles/{id:[0-9]+}/votes', [VoteController::class, 'adjust']);
+
+        $group->get('/comments', [CommentController::class, 'queue']);
+        $group->post('/comments/rules', [CommentController::class, 'saveRules']);
+        $group->post('/comments/{id:[0-9]+}/{action:[a-z-]+}', [CommentController::class, 'moderate']);
+        $group->post('/articles/{id:[0-9]+}/comments', [CommentController::class, 'mode']);
+        $group->post('/users/{id:[0-9]+}/unban', [CommentController::class, 'unban']);
 
         $group->get('/themes', [SiteController::class, 'themes']);
         $group->post('/themes', [SiteController::class, 'applyTheme']);

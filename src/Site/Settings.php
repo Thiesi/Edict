@@ -16,21 +16,20 @@ final class Settings
     private const MAX_TITLE = 100;
     private const MAX_DESCRIPTION = 300;
 
+    public const MAX_WORDS = 500;
+    private const MAX_AUTO_CLOSE_DAYS = 3650;
+
     private ?SiteSettings $loaded = null;
     private ?string $preview = null;
+    /** @var array<string, mixed>|null */
+    private ?array $values = null;
 
     public function __construct(private readonly \PDO $pdo) {}
 
     public function site(): SiteSettings
     {
         if ($this->loaded === null) {
-            $values = [];
-            $stmt = $this->pdo->query('SELECT key, value::text AS value FROM setting');
-            foreach ($stmt === false ? [] : $stmt->fetchAll() as $row) {
-                if (is_array($row) && is_string($row['key'] ?? null) && is_string($row['value'] ?? null)) {
-                    $values[$row['key']] = json_decode($row['value'], true);
-                }
-            }
+            $values = $this->values();
             $theme = is_string($values['theme'] ?? null) && Themes::exists($values['theme']) ? $values['theme'] : Themes::DEFAULT;
             $this->loaded = new SiteSettings(
                 $theme,
@@ -44,6 +43,66 @@ final class Settings
         }
 
         return $this->preview === null ? $this->loaded : $this->loaded->withTheme($this->preview);
+    }
+
+    public function commentRules(): CommentRules
+    {
+        $values = $this->values();
+        $words = [];
+        foreach (is_array($values['comment_words'] ?? null) ? $values['comment_words'] : [] as $word) {
+            if (is_string($word) && $word !== '') {
+                $words[] = $word;
+            }
+        }
+        $days = $values['comment_auto_close_days'] ?? 0;
+
+        return new CommentRules(
+            ($values['comment_default'] ?? null) === 'hold' ? 'hold' : 'open',
+            is_int($days) && $days > 0 ? $days : 0,
+            $words,
+            ($values['comment_word_action'] ?? null) === 'reject' ? 'reject' : 'hold',
+        );
+    }
+
+    /**
+     * The comment settings form.
+     *
+     * @param array<mixed> $form
+     *
+     * @return array<string, string> what is wrong, by field; nothing is stored then
+     */
+    public function saveCommentRules(array $form): array
+    {
+        $errors = [];
+        $mode = self::field($form, 'comment_default');
+        $action = self::field($form, 'comment_word_action');
+        $days = trim(self::field($form, 'comment_auto_close_days'));
+        if ($days === '') {
+            $days = '0';
+        }
+        if (preg_match('~^[0-9]{1,4}$~D', $days) !== 1 || (int) $days > self::MAX_AUTO_CLOSE_DAYS) {
+            $errors['comment_auto_close_days'] = 'Please enter a number of days up to ' . self::MAX_AUTO_CLOSE_DAYS . ', or 0 for never.';
+        }
+        $words = [];
+        foreach (preg_split('~\R~u', self::field($form, 'comment_words')) ?: [] as $line) {
+            $word = mb_strtolower(trim($line));
+            if ($word !== '' && !in_array($word, $words, true)) {
+                $words[] = mb_substr($word, 0, 100);
+            }
+        }
+        if (count($words) > self::MAX_WORDS) {
+            $errors['comment_words'] = 'Up to ' . self::MAX_WORDS . ' words or phrases.';
+        }
+        if ($errors === []) {
+            $this->store([
+                'comment_default' => $mode === 'hold' ? 'hold' : 'open',
+                'comment_auto_close_days' => (int) $days,
+                'comment_words' => $words,
+                'comment_word_action' => $action === 'reject' ? 'reject' : 'hold',
+            ]);
+        }
+
+        return $errors;
     }
 
     /**
@@ -126,6 +185,25 @@ final class Settings
             $upsert->execute([$key, json_encode($value, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE)]);
         }
         $this->loaded = null;
+        $this->values = null;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function values(): array
+    {
+        if ($this->values === null) {
+            $this->values = [];
+            $stmt = $this->pdo->query('SELECT key, value::text AS value FROM setting');
+            foreach ($stmt === false ? [] : $stmt->fetchAll() as $row) {
+                if (is_array($row) && is_string($row['key'] ?? null) && is_string($row['value'] ?? null)) {
+                    $this->values[$row['key']] = json_decode($row['value'], true);
+                }
+            }
+        }
+
+        return $this->values;
     }
 
     /**

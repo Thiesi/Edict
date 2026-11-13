@@ -9,6 +9,7 @@ use Edict\Auth\LoginThrottle;
 use Edict\Auth\OAuth\ProviderRegistry;
 use Edict\Auth\Session;
 use Edict\Auth\SessionStore;
+use Edict\Content\Comments;
 use Edict\Http\Middleware\CsrfMiddleware;
 use Edict\Http\Middleware\SessionMiddleware;
 use Psr\Http\Message\ResponseInterface;
@@ -24,6 +25,7 @@ final readonly class AdminAuthController
         private LoginThrottle $throttle,
         private SessionCookie $cookie,
         private ProviderRegistry $providers,
+        private Comments $comments,
     ) {}
 
     public function showLogin(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
@@ -77,6 +79,7 @@ final readonly class AdminAuthController
         $session = self::session($request);
         $response->getBody()->write($this->twig->render('admin/dashboard.html.twig', [
             'display_name' => $session?->displayName,
+            'held_comments' => $this->comments->heldCount(),
             'csrf_field' => CsrfMiddleware::FIELD,
             'csrf_token' => $session?->csrfToken,
         ]));
