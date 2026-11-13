@@ -683,3 +683,60 @@ figure.media-file {
     border: 1px dashed currentColor;
     font-size: 0.875rem;
 }
+
+.site-search {
+    display: flex;
+    gap: 0.35rem;
+    margin-top: 0.75rem;
+}
+
+.site-search input {
+    min-width: 0;
+    max-width: 14rem;
+    padding: 0.25rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg);
+    color: var(--fg);
+    font: inherit;
+    font-size: 0.9rem;
+}
+
+.site-search button {
+    font-size: 0.9rem;
+}
+
+.lang-filter {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 1rem;
+    margin: 0 0 1.5rem;
+    padding: 0;
+    list-style: none;
+    font-size: 0.9rem;
+}
+
+.lang-filter [aria-current] {
+    font-weight: 700;
+    text-decoration: none;
+    color: inherit;
+}
+
+.search-results {
+    padding: 0;
+    list-style: none;
+}
+
+.search-results > li {
+    margin-bottom: 1.5rem;
+}
+
+.search-results h2 {
+    margin-bottom: 0.25rem;
+}
+
+mark {
+    padding: 0 0.1em;
+    background: color-mix(in srgb, var(--accent) 25%, transparent);
+    color: inherit;
+}

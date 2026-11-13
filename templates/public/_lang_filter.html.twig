@@ -1,0 +1,5 @@
+<ul class="lang-filter" aria-label="Language">
+    {% for value, label in {'': 'All', de: 'Deutsch', en: 'English'} %}
+        <li><a href="{{ base_path }}{{ value ? '?lang=' ~ value : '' }}"{% if value ? lang_filter == value : not lang_filter %} aria-current="page"{% endif %}{% if value %} lang="{{ value }}"{% endif %}>{{ label }}</a></li>
+    {% endfor %}
+</ul>

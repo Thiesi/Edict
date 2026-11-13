@@ -31,6 +31,9 @@ final readonly class Articles
 
     private const LISTED = "a.kind = 'article' AND ";
 
+    /** The text search configuration for an article's own language. Must match migration 0014. */
+    private const CONFIG = "(CASE WHEN a.lang = 'de' THEN 'german'::regconfig ELSE 'english'::regconfig END)";
+
     public function __construct(private \PDO $pdo, private Clock $clock) {}
 
     /**
@@ -103,13 +106,14 @@ final readonly class Articles
                 // A cover that isn't an image, or no longer exists, is simply none.
                 "UPDATE article SET slug = ?, lang = ?, title = ?, teaser = ?, body_json = ?, status = 'published',
                         cover_media_id = (SELECT id FROM media WHERE id = ? AND kind = 'image'), cover_alt = ?,
+                        body_text = edict_body_text(?::jsonb),
                         published_at = coalesce(published_at, to_timestamp(?)), updated_at = to_timestamp(?),
                         revised_at = CASE WHEN ?::boolean THEN to_timestamp(?) ELSE revised_at END,
                         draft = NULL, draft_version = draft_version + 1, draft_writer = NULL
                  WHERE id = ? AND draft_version = ? AND deleted_at IS NULL",
             );
             $update->execute([
-                $slug, $input->lang, $input->title, $input->teaser, $input->body, $input->cover, $input->coverAlt,
+                $slug, $input->lang, $input->title, $input->teaser, $input->body, $input->cover, $input->coverAlt, $input->body,
                 $now, $now, $revised ? 'true' : 'false', $now, $article->id, $article->draftVersion,
             ]);
             if ($update->rowCount() !== 1) {
@@ -282,14 +286,52 @@ final readonly class Articles
     /**
      * @return list<Article>
      */
-    public function publicList(int $limit, int $offset): array
+    public function publicList(int $limit, int $offset, ?string $lang = null): array
     {
         $stmt = $this->pdo->prepare(
-            'SELECT ' . self::COLUMNS . ' FROM article a WHERE ' . self::LISTED . self::PUBLIC_WHERE . ' ORDER BY a.published_at DESC, a.id DESC LIMIT ? OFFSET ?',
+            'SELECT ' . self::COLUMNS . ' FROM article a WHERE ' . self::LISTED . self::PUBLIC_WHERE . ' AND (?::text IS NULL OR a.lang = ?)
+             ORDER BY a.published_at DESC, a.id DESC LIMIT ? OFFSET ?',
         );
-        $stmt->execute([$this->clock->now(), $limit, $offset]);
+        $stmt->execute([$this->clock->now(), $lang, $lang, $limit, $offset]);
 
         return self::all($stmt);
+    }
+
+    /**
+     * Public articles and pages matching a search, best first. Each is searched in its
+     * own language, so "Häuser" finds "Haus" and "running" finds "run". The excerpt
+     * marks the matches between \x01 and \x02, for the caller to escape around.
+     *
+     * @return list<array{article: Article, excerpt: string}>
+     */
+    public function search(string $query, int $limit, int $offset): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT ' . self::COLUMNS . ',
+                    ts_headline(' . self::CONFIG . ', a.body_text, websearch_to_tsquery(' . self::CONFIG . ", ?),
+                        'StartSel=\x01, StopSel=\x02, MaxWords=30, MinWords=12, MaxFragments=2, FragmentDelimiter=\x03') AS excerpt
+             FROM article a
+             WHERE " . self::PUBLIC_WHERE . ' AND a.search @@ websearch_to_tsquery(' . self::CONFIG . ', ?)
+             ORDER BY ts_rank(a.search, websearch_to_tsquery(' . self::CONFIG . ', ?)) DESC, a.published_at DESC
+             LIMIT ? OFFSET ?',
+        );
+        $stmt->execute([$query, $this->clock->now(), $query, $query, $limit, $offset]);
+        $results = [];
+        foreach ($stmt->fetchAll() as $row) {
+            if (is_array($row)) {
+                $results[] = ['article' => self::hydrate($row), 'excerpt' => Row::str($row, 'excerpt')];
+            }
+        }
+
+        return $results;
+    }
+
+    public function searchCount(string $query): int
+    {
+        $stmt = $this->pdo->prepare('SELECT count(*) FROM article a WHERE ' . self::PUBLIC_WHERE . ' AND a.search @@ websearch_to_tsquery(' . self::CONFIG . ', ?)');
+        $stmt->execute([$this->clock->now(), $query]);
+
+        return (int) $stmt->fetchColumn();
     }
 
     /**
@@ -305,10 +347,10 @@ final readonly class Articles
         return self::all($stmt);
     }
 
-    public function publicCount(): int
+    public function publicCount(?string $lang = null): int
     {
-        $stmt = $this->pdo->prepare('SELECT count(*) FROM article a WHERE ' . self::LISTED . self::PUBLIC_WHERE);
-        $stmt->execute([$this->clock->now()]);
+        $stmt = $this->pdo->prepare('SELECT count(*) FROM article a WHERE ' . self::LISTED . self::PUBLIC_WHERE . ' AND (?::text IS NULL OR a.lang = ?)');
+        $stmt->execute([$this->clock->now(), $lang, $lang]);
 
         return Row::int(['n' => $stmt->fetchColumn()], 'n');
     }

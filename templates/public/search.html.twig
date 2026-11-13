@@ -1,0 +1,38 @@
+{% extends 'public/layout.html.twig' %}
+
+{% block title %}{{ query ? 'Search: ' ~ query : 'Search' }} · {{ site().title }}{% endblock %}
+
+{% block main %}
+    <main>
+        <h1>Search</h1>
+        <form role="search" method="get" action="/search" class="site-search">
+            <label class="visually-hidden" for="search-again">Search for</label>
+            <input id="search-again" type="search" name="q" value="{{ query }}" maxlength="200">
+            <button type="submit">Search</button>
+        </form>
+        {% if query %}
+            <p role="status">{{ total }} {{ total == 1 ? 'result' : 'results' }} for “{{ query }}”.</p>
+            {% if results %}
+                <ol class="search-results">
+                    {% for result in results %}
+                        {% set article = result.article %}
+                        <li lang="{{ article.lang }}">
+                            <h2><a href="/{{ article.slug }}">{{ article.title }}</a></h2>
+                            {% if article.kind == 'article' and article.publishedAt %}<p><time datetime="{{ article.publishedAt|article_iso }}">{{ article.publishedAt|article_date(article.lang) }}</time></p>{% endif %}
+                            {% if result.excerpt %}<p>{{ result.excerpt|raw }}</p>{% elseif article.teaser %}<p>{{ article.teaser }}</p>{% endif %}
+                        </li>
+                    {% endfor %}
+                </ol>
+            {% else %}
+                <p>Try other words, or fewer of them.</p>
+            {% endif %}
+            {% if last_page > 1 %}
+                <nav aria-label="Pages">
+                    {% if page > 1 %}<a rel="prev" href="/search?q={{ query|url_encode }}{% if page > 2 %}&amp;page={{ page - 1 }}{% endif %}">Better matches</a>{% endif %}
+                    Page {{ page }} of {{ last_page }}
+                    {% if page < last_page %}<a rel="next" href="/search?q={{ query|url_encode }}&amp;page={{ page + 1 }}">More results</a>{% endif %}
+                </nav>
+            {% endif %}
+        {% endif %}
+    </main>
+{% endblock %}
