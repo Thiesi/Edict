@@ -68,13 +68,35 @@ final readonly class BodyRenderer
         if (($found['kind'] ?? null) === 'audio' && isset($variants['aac'])) {
             $file = Body::escape($variants['aac']['url']);
 
-            return "<figure class=\"media-audio\">\n"
+            return '<figure class="media-audio"' . self::waveform($found) . ">\n"
                 . '<audio controls preload="metadata" src="' . $file . '"><a href="' . $file . "\">Download this recording</a></audio>\n"
                 . self::caption($attrs)
                 . "</figure>\n";
         }
 
         return '';
+    }
+
+    /**
+     * What the site's player draws: the length, and the loudness along it. Numbers only.
+     *
+     * @param array<mixed> $media
+     */
+    private static function waveform(array $media): string
+    {
+        $data = '';
+        if (is_float($media['seconds'] ?? null) || is_int($media['seconds'] ?? null)) {
+            $data .= ' data-seconds="' . round((float) $media['seconds'], 2) . '"';
+        }
+        $peaks = [];
+        foreach (is_array($media['peaks'] ?? null) ? $media['peaks'] : [] as $peak) {
+            if (is_int($peak) || is_float($peak)) {
+                // Percent of the loudest moment.
+                $peaks[] = (string) max(0, min(100, (int) round((float) $peak)));
+            }
+        }
+
+        return $peaks === [] ? $data : $data . ' data-peaks="' . implode(' ', $peaks) . '"';
     }
 
     /**
