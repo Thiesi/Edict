@@ -28,6 +28,9 @@ final readonly class Config
         public string $vipsheaderBin = 'vipsheader',
         public string $ffmpegBin = 'ffmpeg',
         public string $ffprobeBin = 'ffprobe',
+        public ?string $alertEmail = null,
+        public ?string $mailFrom = null,
+        public string $sendmailBin = '/usr/sbin/sendmail',
     ) {}
 
     /**
@@ -66,7 +69,28 @@ final readonly class Config
             vipsheaderBin: self::str($env, 'VIPSHEADER_BIN') ?? 'vipsheader',
             ffmpegBin: self::str($env, 'FFMPEG_BIN') ?? 'ffmpeg',
             ffprobeBin: self::str($env, 'FFPROBE_BIN') ?? 'ffprobe',
+            alertEmail: self::email($env, 'ALERT_EMAIL'),
+            mailFrom: self::email($env, 'MAIL_FROM'),
+            sendmailBin: self::str($env, 'SENDMAIL_BIN') ?? '/usr/sbin/sendmail',
         );
+    }
+
+    /**
+     * An address, or nothing: a typo here must not become a header.
+     *
+     * @param array<string, mixed> $env
+     */
+    private static function email(array $env, string $name): ?string
+    {
+        $value = self::str($env, $name);
+        if ($value === null) {
+            return null;
+        }
+        if (filter_var($value, FILTER_VALIDATE_EMAIL) === false) {
+            throw new \InvalidArgumentException("$name must be an email address");
+        }
+
+        return $value;
     }
 
     /**

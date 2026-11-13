@@ -25,15 +25,22 @@ final class Command
      * @param string $tempDir where the tool may spill temp files: /tmp is a small RAM
      *                        disk on the host, and this directory gets cleaned up
      *
+     * @param string|null $input what the tool reads on standard input; small, such as a mail
+     *
      * @return string standard output
      *
      * @throws MediaError
      */
-    public static function run(array $command, int $timeoutSeconds, string $tempDir): string
+    public static function run(array $command, int $timeoutSeconds, string $tempDir, ?string $input = null): string
     {
-        $process = @proc_open($command, [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, null, ['TMPDIR' => $tempDir] + getenv());
+        $stdin = $input === null ? ['file', '/dev/null', 'r'] : ['pipe', 'r'];
+        $process = @proc_open($command, [0 => $stdin, 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, null, ['TMPDIR' => $tempDir] + getenv());
         if (!is_resource($process)) {
             throw new MediaError(self::COULD_NOT_START . basename($command[0]) . '.');
+        }
+        if ($input !== null) {
+            @fwrite($pipes[0], $input);
+            fclose($pipes[0]);
         }
 
         stream_set_blocking($pipes[1], false);
