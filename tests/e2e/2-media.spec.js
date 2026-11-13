@@ -199,6 +199,8 @@ test('typing right after inserting an image continues below it, not over it', as
     await page.locator('#media-panel button[data-media-id]').first().click();
     await page.locator('#media-panel').getByRole('button', { name: 'Insert' }).click();
     await expect(page.locator('.editor-media')).toHaveCount(1);
+    // Typing while the block was still loading its picture once lost the first letters in CI.
+    await expect(page.locator('.editor-media img')).toBeVisible();
 
     await page.keyboard.type('After the picture');
 
@@ -379,9 +381,9 @@ test('a published recording gets the site player with waveform, time and speed',
     await expect(player.getByRole('button', { name: 'Playback speed' })).toHaveText('1.25×');
     expect(await page.locator('figure.media-audio audio').evaluate((audio) => audio.playbackRate)).toBe(1.25);
 
-    await player.getByRole('button', { name: 'Play' }).click();
-    await expect(player.getByRole('button', { name: 'Pause' })).toBeVisible();
+    await player.getByRole('button', { name: 'Play', exact: true }).click();
+    await expect(player.getByRole('button', { name: 'Pause', exact: true })).toBeVisible();
     await expect.poll(() => page.locator('figure.media-audio audio').evaluate((audio) => audio.currentTime)).toBeGreaterThan(3.2);
-    await player.getByRole('button', { name: 'Pause' }).click();
-    await expect(player.getByRole('button', { name: 'Play' })).toBeVisible();
+    await player.getByRole('button', { name: 'Pause', exact: true }).click();
+    await expect(player.getByRole('button', { name: 'Play', exact: true })).toBeVisible();
 });
