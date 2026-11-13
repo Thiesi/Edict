@@ -284,7 +284,10 @@ test('a recording becomes an audio player, and the library offers it', async ({ 
     await expect(page.locator('.editor-media')).toHaveCount(0);
 
     await page.locator('#media-toggle').click();
-    await page.locator('#media-panel button[data-media-id]', { hasText: 'song.wav' }).click();
+    const tile = page.locator('#media-panel button[data-media-id]', { hasText: 'song.wav' });
+    await expect(tile).toHaveClass(/is-audio/);
+    await expect(tile.locator('svg.tile-icon')).toBeVisible();
+    await tile.click();
     await page.locator('#media-panel').getByRole('button', { name: 'Insert' }).click();
     await expect(page.locator('.editor-media audio')).toBeAttached();
 });
