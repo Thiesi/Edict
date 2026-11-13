@@ -72,6 +72,32 @@ final readonly class ArticleInput
     }
 
     /**
+     * Whether readers would see something different. The address doesn't count: a draft
+     * leaves it empty to keep the published one.
+     */
+    public function sameContentAs(self $other): bool
+    {
+        return $this->title === $other->title
+            && $this->lang === $other->lang
+            && $this->teaser === $other->teaser
+            && $this->body === $other->body
+            && $this->cover === $other->cover
+            && $this->coverAlt === $other->coverAlt
+            && self::tagNames($this) === self::tagNames($other);
+    }
+
+    /**
+     * @return list<string> in a fixed order: the order they were typed in doesn't matter
+     */
+    private static function tagNames(self $input): array
+    {
+        $names = array_column($input->tagList(), 'name');
+        sort($names);
+
+        return $names;
+    }
+
+    /**
      * @return array<string, string> messages by field
      */
     public function errors(): array
