@@ -317,13 +317,13 @@ final class ArticleFlowTest extends DbTestCase
 
     public function testSearchExcerptsAreEscaped(): void
     {
-        $this->published(['slug' => 'risky', 'body' => json_decode(Doc::text('Beware <script>alert(1)</script> the dragon here.'), true)]);
+        $this->published(['slug' => 'risky', 'body' => json_decode(Doc::text('Beware: 1 < 2 & <script>alert(1)</script> the dragon here.'), true)]);
 
         $response = $this->get('/search?q=dragon');
         $html = (string) $response->getBody();
 
-        self::assertStringContainsString('&lt;script&gt;', $html);
-        self::assertStringNotContainsString('<script>alert', $html);
+        self::assertStringContainsString('1 &lt; 2 &amp;', $html, 'the text is escaped around the marks');
+        self::assertStringNotContainsString('<script>alert', $html, 'PostgreSQL drops tag-like text from excerpts anyway');
         self::assertStringContainsString('<mark>dragon</mark>', $html);
         self::assertSame('noindex', $response->getHeaderLine('X-Robots-Tag'));
         self::assertSame(200, $this->get('/search?q=')->getStatusCode());
