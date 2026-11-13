@@ -80,10 +80,25 @@ final readonly class ArticleInput
         return $this->title === $other->title
             && $this->lang === $other->lang
             && $this->teaser === $other->teaser
-            && $this->body === $other->body
+            && self::sorted(Body::decode($this->body)) === self::sorted(Body::decode($other->body))
             && $this->cover === $other->cover
             && $this->coverAlt === $other->coverAlt
             && self::tagNames($this) === self::tagNames($other);
+    }
+
+    /**
+     * The database hands JSON back with its keys reordered; the content is the same.
+     */
+    private static function sorted(mixed $value): mixed
+    {
+        if (!is_array($value)) {
+            return $value;
+        }
+        if (!array_is_list($value)) {
+            ksort($value);
+        }
+
+        return array_map(self::sorted(...), $value);
     }
 
     /**
