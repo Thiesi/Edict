@@ -77,7 +77,7 @@ final class SiteFlowTest extends DbTestCase
         self::assertSame(303, $response->getStatusCode(), (string) $response->getBody());
 
         foreach (['/', '/archive'] as $path) {
-            $html = (string) $this->get($path)->getBody();
+            $html = self::tight((string) $this->get($path)->getBody());
             self::assertStringContainsString('<a href="/">My &lt;Realm&gt;</a>', $html, $path);
             self::assertStringContainsString('<p class="site-description">Decrees &amp; musings</p>', $html);
             self::assertStringContainsString('<li><a href="/about">About</a></li><li><a href="https://github.com/example">Code</a></li><li><a href="/archive">Archive</a></li>', $html);
@@ -87,6 +87,14 @@ final class SiteFlowTest extends DbTestCase
         $form = (string) $this->get('/admin/site', $this->admin)->getBody();
         self::assertStringContainsString("About | /about\nCode | https://github.com/example</textarea>", $form);
         self::assertStringContainsString('<option value="impressum" selected>', $form);
+    }
+
+    /**
+     * The markup without the whitespace between tags, which templates are free to change.
+     */
+    private static function tight(string $html): string
+    {
+        return (string) preg_replace('~>\s+<~', '><', $html);
     }
 
     public function testDangerousLinksAreRefusedAndNothingIsSaved(): void
