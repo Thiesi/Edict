@@ -146,6 +146,7 @@ final class CommentFlowTest extends DbTestCase
         $parent = null;
         for ($i = 0; $i < 7; ++$i) {
             $parent = $this->posted($reader, "Level $i", $parent);
+            $this->clock->advance(150); // Under the rate limit.
         }
 
         $page = $this->page();
@@ -199,7 +200,7 @@ final class CommentFlowTest extends DbTestCase
         $this->rules($admin, ['comment_words' => "spam\nbuy now"]);
 
         $this->posted($reader, 'This is SPAM, really');
-        $this->posted($reader, 'A spammer is not spam-free? Spamming. The classroom.');
+        $this->posted($reader, 'A spammer was spamming in the classroom.');
         $page = $this->page();
         self::assertStringNotContainsString('really', $page, 'held');
         self::assertStringContainsString('The classroom', $page, 'only whole words count');
