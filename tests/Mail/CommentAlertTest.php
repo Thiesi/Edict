@@ -121,8 +121,9 @@ final class CommentAlertTest extends DbTestCase
         $mail = (string) file_get_contents($this->dir . '/mail');
         self::assertStringContainsString("To: sovereign@example.org\r\n", $mail);
         self::assertStringContainsString("From: Edict <edict@localhost>\r\n", $mail);
-        self::assertMatchesRegularExpression('~^Subject: =\?UTF-8\?Q\?.+$~m', $mail);
-        self::assertStringNotContainsString("\nBcc:", $mail, 'a title is one line in a header');
+        [$headers] = explode("\r\n\r\n", $mail, 2);
+        self::assertStringContainsString("\r\nSubject: [Edict] New comment on \"Talk Bcc: victim@example.org\"\r\n", $headers, 'a title is one line in a header');
+        self::assertStringNotContainsString("\nBcc:", $headers);
         self::assertStringContainsString("Alice commented on \"Talk\r\nBcc: victim@example.org\":", str_replace("\r\n\r\n", "\r\n", $mail), 'the body may show it as it is');
         self::assertStringContainsString("Hello there,\r\nfine article.", $mail);
         self::assertMatchesRegularExpression('~See it, or remove it: http://localhost:8080/talk#comment-[0-9]+~', $mail);
