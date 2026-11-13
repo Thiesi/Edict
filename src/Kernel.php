@@ -10,6 +10,7 @@ use Dotenv\Dotenv;
 use Edict\Http\ErrorPage;
 use Edict\Http\Middleware\CsrfMiddleware;
 use Edict\Http\Middleware\RawCookieMiddleware;
+use Edict\Http\Middleware\SecurityHeadersMiddleware;
 use Edict\Http\Middleware\SessionMiddleware;
 use Edict\Http\Middleware\SitePreviewMiddleware;
 use Psr\Http\Message\ResponseInterface;
@@ -52,6 +53,7 @@ final class Kernel
 
         // Slim runs the last-added middleware first: errors, routing, body parsing, raw cookies, session, CSRF.
         $app->add(SitePreviewMiddleware::class);
+        $app->add(SecurityHeadersMiddleware::class);
         $app->add(CsrfMiddleware::class);
         $app->add(SessionMiddleware::class);
         $app->add(RawCookieMiddleware::class);

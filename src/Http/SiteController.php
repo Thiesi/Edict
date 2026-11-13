@@ -6,6 +6,7 @@ namespace Edict\Http;
 
 use Edict\Auth\Session;
 use Edict\Content\Articles;
+use Edict\Content\LegalTemplates;
 use Edict\Http\Middleware\CsrfMiddleware;
 use Edict\Http\Middleware\SessionMiddleware;
 use Edict\Site\Settings;
@@ -68,6 +69,20 @@ final readonly class SiteController
         }
 
         return $this->form($request, $response->withStatus(422), $form, $errors, false);
+    }
+
+    /**
+     * @param array<string, string> $args
+     */
+    public function legalDraft(ServerRequestInterface $request, ResponseInterface $response, array $args): ResponseInterface
+    {
+        $template = LegalTemplates::get($args['which'] ?? '');
+        if ($template === null) {
+            return $response->withStatus(404);
+        }
+        $id = $this->articles->createPageFrom($template['title'], $template['slug'], $template['body']);
+
+        return $response->withStatus(303)->withHeader('Location', '/admin/articles/' . $id);
     }
 
     /**

@@ -59,6 +59,20 @@ final readonly class Articles
     }
 
     /**
+     * A new page whose draft starts from a template, such as the legal pages.
+     *
+     * @param array<string, mixed> $body
+     */
+    public function createPageFrom(string $title, string $slug, array $body): int
+    {
+        $id = $this->createEmpty('page');
+        $draft = new ArticleInput($title, $slug, 'de', '', Body::encode(Body::clean($body)), '');
+        $this->pdo->prepare('UPDATE article SET draft = ?::jsonb, draft_version = draft_version + 1 WHERE id = ?')->execute([$draft->toJson(), $id]);
+
+        return $id;
+    }
+
+    /**
      * Autosave. Never touches the live columns.
      *
      * @return int|null the new version, or null if another editor saved in between or the article is in the trash

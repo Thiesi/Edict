@@ -8,6 +8,14 @@
         <p>Signed in as {{ display_name }}.</p>
         {% if held_comments %}<p role="status"><a href="/admin/comments">{{ held_comments }} {{ held_comments == 1 ? 'comment waits' : 'comments wait' }} for approval</a></p>{% endif %}
         <p><a href="/admin/articles">Articles</a> · <a href="/admin/articles?kind=page">Pages</a> · <a href="/admin/tags">Tags</a> · <a href="/admin/comments">Comments</a> · <a href="/admin/site">Site</a> · <a href="/admin/themes">Themes</a> · <a href="/admin/passkeys">Passkeys</a> · <a href="/admin/export">Export everything (JSON)</a></p>
+        <h2>Storage</h2>
+        {% set gb = 1000000000 %}
+        <p{% if storage.low %} role="alert"{% endif %}>
+            Media: {{ (storage.usedBytes / gb)|number_format(1) }} of {{ (storage.maxBytes / gb)|number_format(1) }} GB,
+            {{ storage.files|number_format }} of {{ storage.maxFiles|number_format }} files.
+            {% if storage.freeBytes is not null %}Free disk: {{ (storage.freeBytes / gb)|number_format(1) }} GB (uploads stop below {{ (storage.minFreeBytes / gb)|number_format(1) }} GB).{% endif %}
+            {% if storage.low %}<strong>Running low.</strong> Ask Ops for room, or remove media nobody needs.{% endif %}
+        </p>
         <form method="post" action="/admin/logout">
             <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
             <button type="submit">Sign out</button>

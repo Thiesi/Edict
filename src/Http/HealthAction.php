@@ -47,6 +47,12 @@ final readonly class HealthAction
             $healthy = false;
         }
 
+        // Reported, but not a failed health check: a full disk mustn't stop a deploy that frees space.
+        if ($this->config->dataDir !== null && is_dir($this->config->dataDir)) {
+            $free = @disk_free_space($this->config->dataDir);
+            $checks['disk'] = $free !== false && $free < 2 * $this->config->mediaMinFreeBytes ? 'low' : 'ok';
+        }
+
         $response->getBody()->write((string) json_encode([
             'status' => $healthy ? 'ok' : 'degraded',
             'release' => $this->config->release(),

@@ -504,6 +504,35 @@ final readonly class MediaLibrary
     }
 
     /**
+     * How full the media storage is, for the dashboard and the health check.
+     *
+     * @return array{usedBytes: int, maxBytes: int, files: int, maxFiles: int, freeBytes: int|null, minFreeBytes: int, low: bool}
+     */
+    public function usage(): array
+    {
+        $stmt = $this->pdo->query(
+            'SELECT (SELECT coalesce(sum(bytes), 0) FROM media) + (SELECT coalesce(sum(bytes), 0) FROM media_variant) AS used,
+                    (SELECT count(*) FROM media) + (SELECT count(*) FROM media_variant) AS files',
+        );
+        $row = $stmt === false ? false : $stmt->fetch();
+        $used = is_array($row) ? Row::int($row, 'used') : 0;
+        $files = is_array($row) ? Row::int($row, 'files') : 0;
+        $free = $this->store->isConfigured() ? $this->store->freeBytes() : null;
+        $min = $this->config->mediaMinFreeBytes;
+
+        return [
+            'usedBytes' => $used,
+            'maxBytes' => $this->config->mediaMaxBytes,
+            'files' => $files,
+            'maxFiles' => $this->config->mediaMaxFiles,
+            'freeBytes' => $free,
+            'minFreeBytes' => $min,
+            // Warn well before uploads start failing.
+            'low' => ($free !== null && $free < 2 * $min) || $used > 0.9 * $this->config->mediaMaxBytes || $files > 0.9 * $this->config->mediaMaxFiles,
+        ];
+    }
+
+    /**
      * Fails loudly before anything is written: over the cap, too many files, or too
      * little free disk for what else lives on it. Unfinished uploads count for their
      * full size, so several at once can't each pass and then overfill the disk.

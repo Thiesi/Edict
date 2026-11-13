@@ -37,7 +37,7 @@ final readonly class ErrorPage implements ErrorRendererInterface
             return $this->services->get(Environment::class)->render('public/error.html.twig', ['status' => $status, 'title' => $title, 'text' => $text]);
         } catch (\Throwable) {
             return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
-                . '<title>' . $title . '</title></head><body style="font-family:system-ui,sans-serif;max-width:36rem;margin:3rem auto;padding:0 1rem">'
+                . '<title>' . $title . '</title></head><body>'
                 . '<h1>' . $title . '</h1><p>' . $text . '</p><p><a href="/">To the home page</a></p></body></html>';
         }
     }

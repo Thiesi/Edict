@@ -97,6 +97,7 @@ return static function (App $app): void {
         $group->post('/themes', [SiteController::class, 'applyTheme']);
         $group->get('/site', [SiteController::class, 'show']);
         $group->post('/site', [SiteController::class, 'save']);
+        $group->post('/site/legal/{which:imprint|privacy}', [SiteController::class, 'legalDraft']);
     })->add(RequireAdmin::class);
 
     // Apache serves /media/ directly when deployed. This is for local development.
