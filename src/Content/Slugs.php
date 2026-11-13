@@ -14,7 +14,7 @@ final class Slugs
 
     private const RESERVED = [
         'account', 'admin', 'archive', 'assets', 'auth', 'comments', 'favicon', 'feed', 'healthz', 'index',
-        'login', 'logout', 'media', 'page', 'robots', 'sitemap', 'tag', 'tags', 'votes',
+        'login', 'logout', 'media', 'page', 'robots', 'search', 'sitemap', 'tag', 'tags', 'votes',
     ];
 
     private const TRANSLITERATION = [

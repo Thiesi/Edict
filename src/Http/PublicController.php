@@ -23,29 +23,72 @@ final readonly class PublicController
 {
     private const HOME_ARTICLES = 10;
     private const PER_PAGE = 20;
+    private const MAX_QUERY = 200;
 
     public function __construct(private Environment $twig, private Articles $articles, private Votes $votes, private Comments $comments) {}
 
     public function home(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
     {
+        $lang = self::lang($request);
+
         return $this->render($request, $response, 'public/home.html.twig', [
-            'articles' => $this->articles->publicList(self::HOME_ARTICLES, 0),
-            'has_more' => $this->articles->publicCount() > self::HOME_ARTICLES,
+            'articles' => $this->articles->publicList(self::HOME_ARTICLES, 0, $lang),
+            'has_more' => $this->articles->publicCount($lang) > self::HOME_ARTICLES,
+            'lang_filter' => $lang,
+            'base_path' => '/',
         ]);
     }
 
     public function archive(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
     {
-        $total = $this->articles->publicCount();
+        $lang = self::lang($request);
+        $total = $this->articles->publicCount($lang);
         $page = self::page($request, $total);
 
         return $this->render($request, $response, 'public/list.html.twig', [
             'heading' => 'Archive',
             'base_path' => '/archive',
-            'articles' => $this->articles->publicList(self::PER_PAGE, ($page - 1) * self::PER_PAGE),
+            'articles' => $this->articles->publicList(self::PER_PAGE, ($page - 1) * self::PER_PAGE, $lang),
             'page' => $page,
             'last_page' => self::lastPage($total),
+            'lang_filter' => $lang,
         ]);
+    }
+
+    public function search(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
+    {
+        $raw = $request->getQueryParams()['q'] ?? '';
+        $query = is_string($raw) ? trim(mb_substr(str_replace("\0", '', $raw), 0, self::MAX_QUERY)) : '';
+        $total = $query === '' ? 0 : $this->articles->searchCount($query);
+        $page = self::page($request, $total);
+
+        return $this->render($request, $response, 'public/search.html.twig', [
+            'query' => $query,
+            'total' => $total,
+            'results' => $query === '' ? [] : array_map(
+                static fn(array $result): array => ['article' => $result['article'], 'excerpt' => self::excerpt($result['excerpt'])],
+                $this->articles->search($query, self::PER_PAGE, ($page - 1) * self::PER_PAGE),
+            ),
+            'page' => $page,
+            'last_page' => self::lastPage($total),
+        ])->withHeader('X-Robots-Tag', 'noindex');
+    }
+
+    /**
+     * The database marks the matches; everything else is the article's text, escaped.
+     */
+    private static function excerpt(string $marked): string
+    {
+        $html = htmlspecialchars($marked, ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5, 'UTF-8');
+
+        return str_replace(["\x01", "\x02", "\x03"], ['<mark>', '</mark>', ' … '], $html);
+    }
+
+    private static function lang(ServerRequestInterface $request): ?string
+    {
+        $lang = $request->getQueryParams()['lang'] ?? null;
+
+        return $lang === 'de' || $lang === 'en' ? $lang : null;
     }
 
     /**

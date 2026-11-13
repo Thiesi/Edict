@@ -21,6 +21,7 @@ use Slim\Routing\RouteCollectorProxy;
 return static function (App $app): void {
     $app->get('/', [PublicController::class, 'home']);
     $app->get('/archive', [PublicController::class, 'archive']);
+    $app->get('/search', [PublicController::class, 'search']);
     $app->get('/tag/{slug:[a-z0-9-]+}', [PublicController::class, 'tag']);
     $app->get('/healthz', HealthAction::class);
 

@@ -286,6 +286,66 @@ final class ArticleFlowTest extends DbTestCase
         self::assertSame(303, $this->get('/admin/export')->getStatusCode(), 'admins only');
     }
 
+    public function testSearchStemsEachArticleInItsOwnLanguage(): void
+    {
+        $this->published(['title' => 'Am See', 'lang' => 'de', 'slug' => 'am-see', 'body' => json_decode(Doc::text('Die Häuser stehen am Ufer.'), true)]);
+        $this->published(['title' => 'Morning', 'lang' => 'en', 'slug' => 'morning', 'body' => json_decode(Doc::text('I was running along the shore.'), true)]);
+
+        $german = (string) $this->get('/search?q=Haus')->getBody();
+        self::assertStringContainsString('href="/am-see"', $german, 'Häuser is a form of Haus');
+        self::assertStringNotContainsString('href="/morning"', $german);
+        self::assertStringContainsString('<mark>Häuser</mark>', $german);
+
+        $english = (string) $this->get('/search?q=run')->getBody();
+        self::assertStringContainsString('href="/morning"', $english);
+        self::assertStringContainsString('1 result for “run”', $english);
+    }
+
+    public function testSearchFindsCaptionsButNeverDrafts(): void
+    {
+        $this->published(['slug' => 'captioned', 'body' => ['type' => 'doc', 'content' => [
+            ['type' => 'image', 'attrs' => ['mediaId' => 1, 'alt' => 'A lighthouse', 'caption' => 'Seen from the pier']],
+        ]]]);
+        $draft = $this->saved(['title' => 'Secret pier plans', 'slug' => 'secret']);
+        self::assertGreaterThan(0, $draft);
+
+        $html = (string) $this->get('/search?q=pier')->getBody();
+        self::assertStringContainsString('href="/captioned"', $html);
+        self::assertStringNotContainsString('Secret', $html);
+        self::assertStringContainsString('href="/captioned"', (string) $this->get('/search?q=lighthouse')->getBody());
+    }
+
+    public function testSearchExcerptsAreEscaped(): void
+    {
+        $this->published(['slug' => 'risky', 'body' => json_decode(Doc::text('Beware: 1 < 2 & <script>alert(1)</script> the dragon here.'), true)]);
+
+        $response = $this->get('/search?q=dragon');
+        $html = (string) $response->getBody();
+
+        self::assertStringContainsString('1 &lt; 2 &amp;', $html, 'the text is escaped around the marks');
+        self::assertStringNotContainsString('<script>alert', $html, 'PostgreSQL drops tag-like text from excerpts anyway');
+        self::assertStringContainsString('<mark>dragon</mark>', $html);
+        self::assertSame('noindex', $response->getHeaderLine('X-Robots-Tag'));
+        self::assertSame(200, $this->get('/search?q=')->getStatusCode());
+        self::assertSame(200, $this->get('/search?q=%22unclosed+OR+-')->getStatusCode(), 'odd queries are just words');
+    }
+
+    public function testHomeAndArchiveFilterByLanguage(): void
+    {
+        $this->published(['title' => 'Deutsch hier', 'lang' => 'de', 'slug' => 'deutsch']);
+        $this->published(['title' => 'English here', 'lang' => 'en', 'slug' => 'english']);
+
+        foreach (['/?lang=de', '/archive?lang=de'] as $path) {
+            $html = (string) $this->get($path)->getBody();
+            self::assertStringContainsString('href="/deutsch"', $html, $path);
+            self::assertStringNotContainsString('href="/english"', $html, $path);
+            self::assertStringContainsString('aria-current="page" lang="de">Deutsch', $html);
+        }
+        $all = (string) $this->get('/?lang=fr')->getBody();
+        self::assertStringContainsString('href="/english"', $all, 'an unknown language shows everything');
+        self::assertStringContainsString('href="/deutsch"', $all);
+    }
+
     public function testEveryApplicationPathIsReservedFromSlugs(): void
     {
         foreach ($this->app->getRouteCollector()->getRoutes() as $route) {
