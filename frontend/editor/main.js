@@ -441,6 +441,26 @@ const noteIcon = () => {
     return svg;
 };
 
+// A turning arc while the server works on a file.
+const spinnerIcon = () => {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.classList.add('tile-icon', 'tile-spinner');
+    const track = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    const arc = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    for (const circle of [track, arc]) {
+        circle.setAttribute('cx', '12');
+        circle.setAttribute('cy', '12');
+        circle.setAttribute('r', '9');
+    }
+    track.classList.add('spinner-track');
+    arc.classList.add('spinner-arc');
+    svg.append(track, arc);
+
+    return svg;
+};
+
 // Placed where the newest belong, unless the library already shows it.
 const placeTile = (tile, first) => {
     if (first) {
@@ -460,8 +480,9 @@ const waitingTile = (media, first) => {
     tile.classList.add('is-processing');
     const status = document.createElement('span');
     const name = document.createElement('span');
+    name.className = 'tile-name';
     name.textContent = media.name;
-    tile.append(status, name);
+    tile.append(spinnerIcon(), status, name);
     placeTile(tile, first);
     whenReady(media.id, status, media.kind, 'Processing…', () => !tile.isConnected, (ready) => {
         const before = tile.nextSibling;
