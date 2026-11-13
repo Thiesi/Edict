@@ -184,7 +184,11 @@ final readonly class AvProcessor
         try {
             $file = $this->store->variantPath($sha256, 'h264', 'mp4');
             $poster = $dir . '/poster.jpg';
-            $this->takeFrame($file, $poster, $seconds, $dir);
+            try {
+                $this->takeFrame($file, $poster, $seconds, $dir);
+            } catch (MediaError) {
+                // ffmpeg calls an empty result an error. The next lines decide.
+            }
             // Past the last frame's start there is nothing to seek to. The end is what was meant.
             if (!is_file($poster) || filesize($poster) === 0) {
                 $this->takeLastFrame($file, $poster, $dir);
