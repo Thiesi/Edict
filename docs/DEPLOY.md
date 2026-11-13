@@ -104,9 +104,9 @@ TWITCH_OIDC_CLIENT_SECRET=
 DATA_DIR=/home/edictstg/data
 FFMPEG_BIN=/usr/pkg/bin/ffmpeg8   # pkgsrc installs them under versioned names
 FFPROBE_BIN=/usr/pkg/bin/ffprobe8
-ALERT_EMAIL=         # comment alerts; empty sends none (S10b, pending the Postfix check)
-# MAIL_FROM=         # defaults to edict@<host of APP_URL>
-# SENDMAIL_BIN=/usr/sbin/sendmail
+ALERT_EMAIL=         # comment alerts go here; with MAIL_FROM empty, none are sent
+MAIL_FROM=           # a real mailbox @NetWorkXXIII.de: DMARC is p=reject, bounces go here
+# SENDMAIL_BIN=/usr/sbin/sendmail   # mailwrapper → pkgsrc Postfix, which relays via Mail
 ```
 
 Secrets are put in place directly on the host, never through chats or commits. A provider with empty values just isn't offered, so the provider values can follow later. Changing `APP_SECRET` makes stored authenticator secrets unreadable, so run `admin:reset` afterwards.

@@ -18,9 +18,13 @@ final readonly class Mailer
 
     public function __construct(private Config $config) {}
 
+    /**
+     * Both addresses, or nothing is sent. There is deliberately no default sender: a
+     * made-up one fails the domain's DMARC policy, and the mail vanishes unseen.
+     */
     public function isConfigured(): bool
     {
-        return $this->config->alertEmail !== null;
+        return $this->config->alertEmail !== null && $this->config->mailFrom !== null;
     }
 
     /**
@@ -29,10 +33,10 @@ final readonly class Mailer
     public function toOwner(string $subject, string $text): void
     {
         $to = $this->config->alertEmail;
-        if ($to === null) {
+        $from = $this->config->mailFrom;
+        if ($to === null || $from === null) {
             return;
         }
-        $from = $this->config->mailFrom ?? 'edict@' . (parse_url($this->config->appUrl, PHP_URL_HOST) ?: 'localhost');
 
         $message = implode("\r\n", [
             'From: Edict <' . $from . '>',
@@ -49,6 +53,7 @@ final readonly class Mailer
         ]);
 
         // -t would trust addresses in the headers; the recipient is given here instead.
+        // -f makes bounces go to the sender, which must be a mailbox that exists.
         Command::run([$this->config->sendmailBin, '-i', '-f', $from, '--', $to], self::SECONDS, sys_get_temp_dir(), $message);
     }
 

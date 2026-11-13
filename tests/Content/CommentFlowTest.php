@@ -203,7 +203,7 @@ final class CommentFlowTest extends DbTestCase
         $this->posted($reader, 'A spammer was spamming in the classroom.');
         $page = $this->page();
         self::assertStringNotContainsString('really', $page, 'held');
-        self::assertStringContainsString('The classroom', $page, 'only whole words count');
+        self::assertStringContainsString('spamming in the classroom', $page, 'only whole words count');
 
         $this->rules($admin, ['comment_words' => 'buy now', 'comment_word_action' => 'reject']);
         $response = $this->comment($reader, 'Buy   now? No: buy now!');

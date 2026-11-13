@@ -101,7 +101,7 @@ final readonly class Articles
 
             $now = $this->clock->now();
             // Changed after its first publish: readers see "Updated on". The same text again isn't a change.
-            $revised = $article->publishedAt !== null && $article->liveInput()->toJson() !== $input->toJson();
+            $revised = $article->publishedAt !== null && !$article->liveInput()->sameContentAs($input);
             $update = $this->pdo->prepare(
                 // A cover that isn't an image, or no longer exists, is simply none.
                 "UPDATE article SET slug = ?, lang = ?, title = ?, teaser = ?, body_json = ?, status = 'published',
