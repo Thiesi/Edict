@@ -24,6 +24,8 @@ final readonly class Article
         public array $tags,
         public ?string $draftJson,
         public int $draftVersion,
+        public ?int $coverMediaId = null,
+        public string $coverAlt = '',
     ) {}
 
     /**
@@ -42,6 +44,8 @@ final readonly class Article
             $this->teaser,
             $this->bodyJson,
             implode(', ', array_column($this->tags, 'name')),
+            $this->coverMediaId,
+            $this->coverAlt,
         );
     }
 
@@ -87,6 +91,8 @@ final readonly class Article
             $input->tagList(),
             $this->draftJson,
             $this->draftVersion,
+            $input->cover,
+            $input->coverAlt,
         );
     }
 }

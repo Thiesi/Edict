@@ -14,6 +14,7 @@ final readonly class BodyRenderer
 {
     private const COLUMN_SIZES = '(max-width: 42rem) 100vw, 42rem';
     private const GALLERY_SIZES = '(max-width: 42rem) 50vw, 21rem';
+    private const SUMMARY_SIZES = '8rem';
 
     public function __construct(private MediaLibrary $library) {}
 
@@ -40,6 +41,25 @@ final readonly class BodyRenderer
                 . self::caption($attrs)
                 . "</figure>\n";
         });
+    }
+
+    /**
+     * An article's cover: across the column above the text, where it's the first thing
+     * seen and so isn't lazy, or small beside it in listings.
+     */
+    public function cover(Article $article, bool $inListing = false): string
+    {
+        $id = $article->coverMediaId;
+        $image = $id === null ? null : ($this->library->ready([$id])[$id] ?? null);
+        if ($image === null || $image['kind'] !== 'image') {
+            return '';
+        }
+
+        if ($inListing) {
+            return '<div class="article-cover-thumb">' . self::picture($image, '', self::SUMMARY_SIZES, link: false) . "</div>\n";
+        }
+
+        return "<figure class=\"article-cover\">\n" . self::picture($image, $article->coverAlt, self::COLUMN_SIZES, lazy: false) . "</figure>\n";
     }
 
     /**
@@ -154,7 +174,7 @@ final readonly class BodyRenderer
      *
      * @param array<string, mixed> $image
      */
-    private static function picture(array $image, string $alt, string $sizes): string
+    private static function picture(array $image, string $alt, string $sizes, bool $lazy = true, bool $link = true): string
     {
         /** @var list<array{preset: string, format: string, width: int, height: int, url: string}> $variants */
         $variants = $image['variants'] ?? [];
@@ -188,12 +208,18 @@ final readonly class BodyRenderer
         }
 
         $src = $fallback[min(1, count($fallback) - 1)];
+        $loading = $lazy ? ' loading="lazy" decoding="async"' : ' fetchpriority="high"';
+        $picture = "<picture>\n$sources"
+            . '<img src="' . Body::escape($src['url']) . '" srcset="' . self::srcset($fallback) . '" sizes="' . $sizes . '"'
+            . ' width="' . $src['width'] . '" height="' . $src['height'] . '" alt="' . Body::escape($alt) . '"' . $loading . ">\n"
+            . "</picture>\n";
+
+        if (!$link) {
+            return $picture;
+        }
 
         return '<a class="lightbox" href="' . Body::escape($full['url']) . '" data-width="' . $full['width'] . '" data-height="' . $full['height'] . "\">\n"
-            . "<picture>\n$sources"
-            . '<img src="' . Body::escape($src['url']) . '" srcset="' . self::srcset($fallback) . '" sizes="' . $sizes . '"'
-            . ' width="' . $src['width'] . '" height="' . $src['height'] . '" alt="' . Body::escape($alt) . '" loading="lazy" decoding="async">' . "\n"
-            . "</picture>\n</a>\n";
+            . $picture . "</a>\n";
     }
 
     /**

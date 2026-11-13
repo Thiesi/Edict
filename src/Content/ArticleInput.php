@@ -20,6 +20,7 @@ final readonly class ArticleInput
     private const MAX_BODY_BYTES = 2_000_000;
     private const MAX_TAGS = 20;
     private const MAX_TAG_LENGTH = 64;
+    private const MAX_COVER_ALT = 500;
 
     public function __construct(
         public string $title,
@@ -28,6 +29,8 @@ final readonly class ArticleInput
         public string $teaser,
         public string $body,
         public string $tags,
+        public ?int $cover = null,
+        public string $coverAlt = '',
     ) {}
 
     /**
@@ -42,6 +45,8 @@ final readonly class ArticleInput
             trim(self::field($data, 'teaser')),
             Body::encode(Body::clean($data['body'] ?? null)),
             self::field($data, 'tags'),
+            self::mediaId($data['cover'] ?? null),
+            trim(self::field($data, 'coverAlt')),
         );
     }
 
@@ -61,6 +66,8 @@ final readonly class ArticleInput
             'teaser' => $this->teaser,
             'body' => json_decode($this->body),
             'tags' => $this->tags,
+            'cover' => $this->cover,
+            'coverAlt' => $this->coverAlt,
         ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
     }
 
@@ -83,6 +90,9 @@ final readonly class ArticleInput
         }
         if (mb_strlen($this->teaser) > self::MAX_TEASER) {
             $errors['teaser'] = 'The teaser can have up to ' . self::MAX_TEASER . ' characters.';
+        }
+        if (mb_strlen($this->coverAlt) > self::MAX_COVER_ALT) {
+            $errors['coverAlt'] = 'The cover description can have up to ' . self::MAX_COVER_ALT . ' characters.';
         }
         if (strlen($this->body) > self::MAX_BODY_BYTES) {
             $errors['body'] = 'The text is too long.';
@@ -117,6 +127,18 @@ final readonly class ArticleInput
         }
 
         return array_values($tags);
+    }
+
+    /**
+     * The editor keeps it in a form field, so it arrives as text.
+     */
+    private static function mediaId(mixed $value): ?int
+    {
+        if (is_string($value) && preg_match('~^[1-9][0-9]{0,17}$~D', $value) === 1) {
+            $value = (int) $value;
+        }
+
+        return is_int($value) && $value > 0 ? $value : null;
     }
 
     /**

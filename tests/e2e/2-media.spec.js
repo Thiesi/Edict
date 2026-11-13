@@ -102,6 +102,48 @@ test('the media library reuses an uploaded image', async ({ page }) => {
     await expect(page.locator('.editor-media img')).toBeVisible();
 });
 
+test('a cover image is chosen from the library and shows above the article and in the list', async ({ page }) => {
+    await newArticle(page);
+    await page.getByLabel('Title').fill('With a cover');
+
+    await page.getByRole('button', { name: 'Choose a cover image…' }).click();
+    const panel = page.locator('#media-panel');
+    await expect(panel).toBeVisible();
+    const tiles = panel.locator('button[data-media-id]');
+    await expect(tiles.first()).toBeVisible();
+    await expect(panel.locator('button.is-audio, button.is-video')).toHaveCount(0);
+    // One cover: choosing another replaces the choice.
+    await tiles.nth(1).click();
+    await tiles.first().click();
+    await expect(panel.locator('[aria-pressed="true"]')).toHaveCount(1);
+    await panel.getByRole('button', { name: 'Use as cover' }).click();
+
+    await expect(panel).toBeHidden();
+    await expect(page.getByRole('img', { name: 'Cover image' })).toBeVisible();
+    await expect(page.locator('.editor-media'), 'the text is left alone').toHaveCount(0);
+    await page.getByLabel(/Cover description/).fill('The view');
+    await saved(page);
+
+    await page.reload();
+    await expect(page.getByRole('img', { name: 'Cover image' })).toBeVisible();
+    await expect(page.getByLabel(/Cover description/)).toHaveValue('The view');
+
+    await page.locator('#publish').click();
+    await expect(page.getByRole('link', { name: 'View', exact: true })).toBeVisible();
+    await page.waitForLoadState('load');
+
+    await page.goto('/with-a-cover');
+    await expect(page.locator('figure.article-cover img')).toHaveAttribute('alt', 'The view');
+    await page.goto('/');
+    await expect(page.locator('li', { hasText: 'With a cover' }).locator('.article-cover-thumb img')).toBeVisible();
+
+    await page.goto('/admin/articles');
+    await page.getByRole('link', { name: 'With a cover' }).click();
+    await page.getByRole('button', { name: 'Remove the cover' }).click();
+    await expect(page.getByRole('img', { name: 'Cover image' })).toBeHidden();
+    await expect(page.getByLabel(/Cover description/)).toBeHidden();
+});
+
 test('an upload lands where it was started and replaces nothing', async ({ page }) => {
     await newArticle(page);
     await page.locator('.ProseMirror').click();

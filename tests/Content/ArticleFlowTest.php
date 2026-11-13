@@ -129,6 +129,97 @@ final class ArticleFlowTest extends DbTestCase
         return (int) $stmt->fetchColumn();
     }
 
+    private function imageRow(string $kind = 'image'): int
+    {
+        $stmt = $this->pdo->prepare(
+            "INSERT INTO media (sha256, kind, extension, bytes, original_name, width, height, status, created_at)
+             VALUES (?, ?, 'jpg', 1000, 'x.jpg', 1600, 900, 'ready', now()) RETURNING id",
+        );
+        $stmt->execute([hash('sha256', random_bytes(8)), $kind]);
+        $id = (int) $stmt->fetchColumn();
+        $insert = $this->pdo->prepare('INSERT INTO media_variant (media_id, preset, format, width, height, bytes) VALUES (?, ?, ?, ?, ?, 10)');
+        foreach (['avif', 'webp', 'jpg'] as $format) {
+            $insert->execute([$id, "w480-$format", $format, 480, 270]);
+            $insert->execute([$id, "w960-$format", $format, 960, 540]);
+        }
+        $insert->execute([$id, 'full', 'jpg', 1600, 900]);
+
+        return $id;
+    }
+
+    private function coverOf(int $articleId): ?int
+    {
+        $stmt = $this->pdo->prepare('SELECT cover_media_id FROM article WHERE id = ?');
+        $stmt->execute([$articleId]);
+        $cover = $stmt->fetchColumn();
+
+        return $cover === null ? null : (int) (is_numeric($cover) ? $cover : 0);
+    }
+
+    public function testTheCoverGoesLiveWithPublishing(): void
+    {
+        $cover = $this->imageRow();
+        $id = $this->published();
+        self::assertSame(200, $this->save($id, ['cover' => (string) $cover, 'coverAlt' => 'A <view>'])->getStatusCode());
+
+        self::assertStringNotContainsString('article-cover', (string) $this->get('/hello-world')->getBody(), 'still a draft');
+        $preview = (string) $this->get("/admin/articles/$id/preview", $this->admin)->getBody();
+        self::assertStringContainsString('<figure class="article-cover">', $preview);
+        $editor = (string) $this->get("/admin/articles/$id", $this->admin)->getBody();
+        self::assertStringContainsString('<input type="hidden" id="cover" value="' . $cover . '">', $editor);
+        self::assertStringContainsString('value="A &lt;view&gt;"', $editor);
+
+        self::assertSame(200, $this->publish($id)->getStatusCode());
+
+        $page = (string) $this->get('/hello-world')->getBody();
+        self::assertStringContainsString('<figure class="article-cover">', $page);
+        self::assertStringContainsString('alt="A &lt;view&gt;" fetchpriority="high"', $page, 'the first thing seen is not lazy');
+        self::assertLessThan(strpos($page, 'class="teaser"'), strpos($page, 'article-cover'));
+
+        $home = (string) $this->get('/')->getBody();
+        self::assertStringContainsString('<div class="article-cover-thumb">', $home);
+        self::assertStringContainsString('alt="" loading="lazy"', $home, 'beside the title it is decoration');
+        self::assertStringNotContainsString('lightbox', $home);
+    }
+
+    public function testACoverThatIsNotAnImageIsNone(): void
+    {
+        $id = $this->published(['cover' => '999999']);
+        self::assertNull($this->coverOf($id), 'a missing picture is no cover');
+
+        $video = $this->imageRow('video');
+        self::assertSame(200, $this->republish($id, ['cover' => $video])->getStatusCode());
+        self::assertNull($this->coverOf($id));
+
+        self::assertSame(200, $this->save($id, ['cover' => '1; DROP TABLE article'])->getStatusCode());
+        self::assertNull($this->service(Articles::class)->find($id)?->input()->cover);
+    }
+
+    public function testDeletingTheCoverImageLeavesTheArticle(): void
+    {
+        $cover = $this->imageRow();
+        $id = $this->published(['cover' => (string) $cover]);
+        self::assertSame($cover, $this->coverOf($id));
+
+        $this->pdo->prepare('DELETE FROM media WHERE id = ?')->execute([$cover]);
+
+        self::assertNull($this->coverOf($id));
+        self::assertSame(200, $this->get('/hello-world')->getStatusCode());
+    }
+
+    public function testATooLongCoverDescriptionIsReported(): void
+    {
+        $id = $this->saved(['coverAlt' => str_repeat('x', 501)]);
+
+        $response = $this->publish($id);
+
+        self::assertSame(422, $response->getStatusCode());
+        $data = json_decode((string) $response->getBody(), true);
+        self::assertIsArray($data);
+        self::assertIsArray($data['errors']);
+        self::assertSame(['coverAlt'], array_keys($data['errors']));
+    }
+
     public function testEveryApplicationPathIsReservedFromSlugs(): void
     {
         foreach ($this->app->getRouteCollector()->getRoutes() as $route) {
