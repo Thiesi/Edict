@@ -1,0 +1,202 @@
+/*
+ * Zine: loud. Big type, high contrast, an asymmetrical layout, unapologetic colour.
+ */
+@import '@fontsource/archivo-black/latin-400.css';
+@import '@fontsource/space-grotesk/latin-400.css';
+@import '@fontsource/space-grotesk/latin-700.css';
+
+:root {
+    --font-body: 'Space Grotesk', 'Helvetica Neue', Arial, sans-serif;
+    --font-heading: 'Archivo Black', 'Arial Black', sans-serif;
+    --bg: #fffdf2;
+    --fg: #0d0d0d;
+    --muted: #3d3d3d;
+    --accent: #c4005a;
+    --accent-fg: #fff;
+    --pop: #ffe600;
+    --border: #0d0d0d;
+    --surface: #ffe600;
+    --header-bg: #0d0d0d;
+    --header-fg: #fffdf2;
+    --measure: 44rem;
+    --wide: 70rem;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #0d0d0d;
+        --fg: #fffdf2;
+        --muted: #d8d6cb;
+        --accent: #ff5fa2;
+        --accent-fg: #0d0d0d;
+        --pop: #ffe600;
+        --border: #fffdf2;
+        --surface: #2a2600;
+        --header-bg: #ffe600;
+        --header-fg: #0d0d0d;
+    }
+}
+
+body {
+    font-size: 1.1rem;
+}
+
+.site-header {
+    padding: 1.5rem var(--gutter);
+}
+
+.site-header-inner {
+    max-width: var(--wide);
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: end;
+    gap: 0.5rem 2rem;
+}
+
+.site-title {
+    font-size: clamp(2.4rem, 9vw, 5.5rem);
+    line-height: 0.9;
+    letter-spacing: -0.03em;
+    text-transform: uppercase;
+}
+
+.site-description {
+    grid-column: 1;
+    color: var(--header-fg);
+    font-weight: 700;
+}
+
+.site-nav {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+}
+
+.site-nav ul {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.15rem;
+}
+
+.site-nav a {
+    font-weight: 700;
+    text-decoration: none;
+    text-transform: uppercase;
+}
+
+.site-nav a:hover {
+    background: var(--accent);
+    color: var(--accent-fg);
+}
+
+@media (max-width: 40rem) {
+    .site-header-inner {
+        grid-template-columns: 1fr;
+    }
+
+    .site-nav {
+        grid-column: 1;
+        grid-row: auto;
+    }
+
+    .site-nav ul {
+        flex-direction: row;
+        align-items: center;
+    }
+}
+
+/* Off-centre: the column leans left, and the margin on the right breathes. */
+.site-content {
+    max-width: var(--wide);
+    padding-right: max(var(--gutter), calc(100% - var(--measure) - 6rem));
+}
+
+h1,
+h2,
+h3 {
+    font-family: var(--font-heading);
+    font-weight: 400;
+    letter-spacing: -0.02em;
+}
+
+article > h1 {
+    margin-left: -0.05em;
+    font-size: clamp(2.5rem, 8vw, 4.5rem);
+    line-height: 0.95;
+}
+
+.home-heading {
+    display: inline-block;
+    padding: 0.1rem 0.6rem;
+    background: var(--pop);
+    color: #0d0d0d;
+    font-size: 1.4rem;
+    transform: rotate(-2deg);
+}
+
+.articles > li {
+    margin-bottom: 2.5rem;
+}
+
+.articles > li:nth-child(even) {
+    margin-left: clamp(0rem, 8vw, 6rem);
+}
+
+.articles h2 {
+    margin-bottom: 0.25rem;
+    font-size: clamp(1.6rem, 4vw, 2.4rem);
+    line-height: 1;
+}
+
+.articles h2 a {
+    color: var(--fg);
+    text-decoration: none;
+    background-image: linear-gradient(var(--pop), var(--pop));
+    background-position: 0 85%;
+    background-repeat: no-repeat;
+    background-size: 100% 0.3em;
+}
+
+@media (prefers-color-scheme: dark) {
+    .articles h2 a {
+        background-image: linear-gradient(var(--accent), var(--accent));
+        background-size: 100% 0.12em;
+        background-position: 0 100%;
+    }
+}
+
+.article-cover-thumb img {
+    border: 3px solid var(--border);
+    box-shadow: 6px 6px 0 var(--accent);
+}
+
+a {
+    text-decoration-thickness: 2px;
+}
+
+.teaser {
+    font-size: 1.35rem;
+    font-style: normal;
+    font-weight: 700;
+}
+
+blockquote {
+    border-left: 8px solid var(--accent);
+    color: var(--fg);
+    font-family: var(--font-heading);
+    font-size: 1.5rem;
+    line-height: 1.2;
+}
+
+.file-card,
+.like-button {
+    border: 3px solid var(--border);
+    border-radius: 0;
+    box-shadow: 4px 4px 0 var(--accent);
+}
+
+.site-footer {
+    max-width: var(--wide);
+    border-top: 6px solid var(--border);
+    color: var(--fg);
+    font-weight: 700;
+}

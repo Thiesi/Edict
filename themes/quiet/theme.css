@@ -1,0 +1,126 @@
+/*
+ * Quiet: minimal. One column, lots of white space, nothing competes with the text.
+ * The reader's own system fonts, so there is nothing to load.
+ */
+:root {
+    --font-body: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --font-heading: var(--font-body);
+    --bg: #fff;
+    --fg: #222;
+    --muted: #6b6b6b;
+    --accent: #222;
+    --accent-fg: #fff;
+    --border: #e6e6e6;
+    --surface: #f6f6f6;
+    --focus: #2563eb;
+    --measure: 36rem;
+    --gutter: 1.5rem;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #141414;
+        --fg: #dedede;
+        --muted: #9a9a9a;
+        --accent: #dedede;
+        --accent-fg: #141414;
+        --border: #2c2c2c;
+        --surface: #1c1c1c;
+        --focus: #7aa7ff;
+    }
+}
+
+body {
+    font-size: 1.125rem;
+    line-height: 1.75;
+}
+
+.site-header {
+    padding-top: 3rem;
+}
+
+.site-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.site-description {
+    font-size: 0.95rem;
+}
+
+.site-nav a {
+    color: var(--muted);
+    font-size: 0.95rem;
+    text-decoration: none;
+}
+
+.site-nav a:hover {
+    color: var(--fg);
+}
+
+a {
+    text-decoration-color: var(--muted);
+    text-decoration-thickness: 1px;
+}
+
+.site-content {
+    padding-top: 2rem;
+}
+
+h1,
+h2,
+h3 {
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+article > h1 {
+    margin-bottom: 0.25rem;
+    font-size: 2rem;
+}
+
+.home-heading {
+    color: var(--muted);
+    font-size: 0.95rem;
+    font-weight: 400;
+}
+
+.articles > li {
+    margin-bottom: 2.5rem;
+}
+
+.articles h2 {
+    margin-bottom: 0.25rem;
+    font-size: 1.3rem;
+}
+
+.articles h2 a {
+    text-decoration: none;
+}
+
+.articles h2 a:hover {
+    text-decoration: underline;
+}
+
+.article-cover-thumb {
+    display: none;
+}
+
+.teaser {
+    color: var(--muted);
+    font-style: normal;
+}
+
+blockquote {
+    border-left-width: 2px;
+}
+
+.site-footer {
+    margin-top: 5rem;
+    border-top: 0;
+}
+
+.like-button[aria-pressed='true'] {
+    border-color: var(--fg);
+    background: var(--fg);
+}

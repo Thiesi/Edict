@@ -1,0 +1,178 @@
+/*
+ * Terminal: monospace and retro. Phosphor green on black in dark mode, the site's
+ * natural state; ink on green-grey paper in light mode, for daylight readers.
+ */
+@import '@fontsource/ibm-plex-mono/latin-400.css';
+@import '@fontsource/ibm-plex-mono/latin-400-italic.css';
+@import '@fontsource/ibm-plex-mono/latin-600.css';
+
+:root {
+    --font-body: 'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace;
+    --font-heading: var(--font-body);
+    --font-mono: var(--font-body);
+    --bg: #e9efe6;
+    --fg: #14321e;
+    --muted: #3f5f48;
+    --accent: #0b5a2a;
+    --accent-fg: #e9efe6;
+    --border: #9fb6a4;
+    --surface: #dbe5d7;
+    --glow: none;
+    --measure: 46rem;
+    --radius: 0;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #050805;
+        --fg: #7dff9b;
+        --muted: #4fc46c;
+        --accent: #c8ffd4;
+        --accent-fg: #050805;
+        --border: #1f5a2e;
+        --surface: #0c160e;
+        --glow: 0 0 6px rgb(125 255 155 / 45%);
+    }
+}
+
+body {
+    font-size: 0.95rem;
+    line-height: 1.65;
+    text-shadow: var(--glow);
+}
+
+.site-header {
+    border-bottom: 1px dashed var(--border);
+}
+
+.site-title::before {
+    content: '$ ';
+    color: var(--muted);
+}
+
+.site-title a::after {
+    content: '_';
+    animation: terminal-blink 1.1s steps(1) infinite;
+}
+
+@keyframes terminal-blink {
+    50% {
+        opacity: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .site-title a::after {
+        animation: none;
+    }
+}
+
+.site-title {
+    font-size: 1.3rem;
+}
+
+.site-description::before {
+    content: '# ';
+}
+
+.site-nav a {
+    text-decoration: none;
+}
+
+.site-nav a::before {
+    content: '[';
+    color: var(--muted);
+}
+
+.site-nav a::after {
+    content: ']';
+    color: var(--muted);
+}
+
+.site-nav a:hover {
+    background: var(--fg);
+    color: var(--bg);
+    text-shadow: none;
+}
+
+h1,
+h2,
+h3 {
+    font-size: 1.15rem;
+    font-weight: 600;
+}
+
+h1::before {
+    content: '# ';
+    color: var(--muted);
+}
+
+h2::before {
+    content: '## ';
+    color: var(--muted);
+}
+
+h3::before {
+    content: '### ';
+    color: var(--muted);
+}
+
+article > h1 {
+    font-size: 1.45rem;
+}
+
+.teaser {
+    font-style: normal;
+}
+
+.teaser::before {
+    content: '> ';
+}
+
+.articles > li {
+    margin-bottom: 1.25rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px dashed var(--border);
+}
+
+.articles h2 {
+    margin-bottom: 0.25rem;
+}
+
+.article-cover-thumb {
+    display: none;
+}
+
+img,
+video {
+    filter: grayscale(0.35) contrast(1.05);
+}
+
+blockquote {
+    border-left: 0;
+    color: var(--fg);
+}
+
+blockquote::before {
+    content: '> ';
+    float: left;
+    color: var(--muted);
+}
+
+pre {
+    border: 1px dashed var(--border);
+}
+
+.like-button,
+.file-card {
+    border-radius: 0;
+    border-style: dashed;
+}
+
+.site-footer {
+    border-top: 1px dashed var(--border);
+}
+
+.site-colophon::before {
+    content: '-- ';
+}
