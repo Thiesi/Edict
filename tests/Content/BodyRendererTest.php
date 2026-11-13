@@ -197,6 +197,56 @@ final class BodyRendererTest extends DbTestCase
         self::assertStringContainsString('<audio controls preload="metadata"', $html);
     }
 
+    private function fileRow(string $format, bool $preview = false): int
+    {
+        $stmt = $this->pdo->prepare(
+            "INSERT INTO media (sha256, kind, extension, bytes, original_name, status, created_at)
+             VALUES (?, 'file', ?, 1234567, 'Big \"plan\" <v2>.' || ?, 'ready', now()) RETURNING id",
+        );
+        $stmt->execute([hash('sha256', random_bytes(8)), $format, $format]);
+        $id = (int) $stmt->fetchColumn();
+        $insert = $this->pdo->prepare('INSERT INTO media_variant (media_id, preset, format, width, height, bytes) VALUES (?, ?, ?, ?, ?, 10)');
+        $insert->execute([$id, 'file', $format, 0, 0]);
+        if ($preview) {
+            $insert->execute([$id, 'preview', 'jpg', 640, 905]);
+        }
+
+        return $id;
+    }
+
+    public function testAFileBecomesADownloadCardUnderItsOwnName(): void
+    {
+        $html = $this->render(['type' => 'file', 'attrs' => ['mediaId' => $this->fileRow('zip'), 'caption' => 'All of it']]);
+
+        self::assertStringContainsString('<figure class="media-file">', $html);
+        self::assertMatchesRegularExpression('~<a class="file-card" href="/media/[^"]+-file\.zip" download="Big &quot;plan&quot; &lt;v2&gt;\.zip">~', $html);
+        self::assertStringContainsString('<span class="file-about">ZIP · 1.2 MB</span>', $html);
+        self::assertStringContainsString('class="file-icon"', $html);
+        self::assertStringContainsString('<figcaption>All of it</figcaption>', $html);
+    }
+
+    public function testAPdfOpensInTheBrowserWithItsFirstPageAndCanStillBeDownloaded(): void
+    {
+        $html = $this->render(['type' => 'file', 'attrs' => ['mediaId' => $this->fileRow('pdf', preview: true)]]);
+
+        self::assertMatchesRegularExpression('~<a class="file-card" href="/media/[^"]+-file\.pdf" type="application/pdf"><img src="/media/[^"]+-preview\.jpg" width="640" height="905" alt=""~', $html);
+        self::assertMatchesRegularExpression('~<a class="file-download" href="/media/[^"]+-file\.pdf" download="[^"]+">Download</a>~', $html);
+    }
+
+    public function testAnUnknownTypeIsJustAFile(): void
+    {
+        self::assertStringContainsString('<span class="file-about">File · 1.2 MB</span>', $this->render(['type' => 'file', 'attrs' => ['mediaId' => $this->fileRow('bin')]]));
+    }
+
+    public function testAFileNotYetPublishedShowsNothing(): void
+    {
+        $id = $this->fileRow('zip');
+        $this->pdo->prepare('DELETE FROM media_variant WHERE media_id = ?')->execute([$id]);
+
+        self::assertSame('', trim($this->render(['type' => 'file', 'attrs' => ['mediaId' => $id]])));
+        self::assertSame('', trim($this->render(['type' => 'file', 'attrs' => ['mediaId' => $this->mediaRow()]])), 'an image is not a file');
+    }
+
     public function testPlayersWaitUntilTheyAreReady(): void
     {
         self::assertSame('', trim($this->render(['type' => 'player', 'attrs' => ['mediaId' => $this->playerRow('video', 'processing')]])));
@@ -212,9 +262,13 @@ final class BodyRendererTest extends DbTestCase
         $clean = Body::clean(['type' => 'doc', 'content' => [
             ['type' => 'player', 'attrs' => ['mediaId' => 7, 'caption' => 'ok', 'onclick' => 'x']],
             ['type' => 'player', 'attrs' => ['mediaId' => 'nope']],
+            ['type' => 'file', 'attrs' => ['mediaId' => 8, 'caption' => 'f', 'href' => 'javascript:x']],
         ]]);
 
-        self::assertSame([['type' => 'player', 'attrs' => ['mediaId' => 7, 'caption' => 'ok']]], $clean['content']);
-        self::assertSame([7], Body::mediaIds($clean));
+        self::assertSame([
+            ['type' => 'player', 'attrs' => ['mediaId' => 7, 'caption' => 'ok']],
+            ['type' => 'file', 'attrs' => ['mediaId' => 8, 'caption' => 'f']],
+        ], $clean['content']);
+        self::assertSame([7, 8], Body::mediaIds($clean));
     }
 }

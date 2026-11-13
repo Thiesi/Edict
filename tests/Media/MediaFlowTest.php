@@ -174,7 +174,7 @@ final class MediaFlowTest extends DbTestCase
         self::assertSame('file', $done['kind']);
         self::assertSame('notes.txt', $done['name']);
         self::assertSame(1500, $done['bytes']);
-        self::assertSame('ready', $done['status']);
+        self::assertSame('processing', $done['status'], 'its public copy is a job');
 
         $sha = hash('sha256', $bytes);
         self::assertSame([sprintf('private/%s/%s/%s', substr($sha, 0, 2), substr($sha, 2, 2), $sha)], $this->files());
@@ -265,7 +265,9 @@ final class MediaFlowTest extends DbTestCase
         self::assertSame('image', $image['kind']);
         self::assertSame('processing', $image['status']);
         self::assertSame('file', $text['kind']);
-        self::assertSame(1, $this->rows('job'));
+        $types = $this->pdo->query('SELECT type FROM job ORDER BY id');
+        self::assertNotFalse($types);
+        self::assertSame(['image', 'file'], $types->fetchAll(\PDO::FETCH_COLUMN));
     }
 
     /**
@@ -1330,6 +1332,120 @@ final class MediaFlowTest extends DbTestCase
 
         self::assertSame('ready', $media['status'], (string) json_encode($media['error']));
         self::assertFalse($media['animated']);
+    }
+
+    /**
+     * @return iterable<string, array{string, string, string}>
+     */
+    public static function publicExtensions(): iterable
+    {
+        yield 'a pdf, by its content' => ["%PDF-1.7\nrest", 'anything.txt', 'pdf'];
+        yield 'not a pdf, whatever its name' => ['plain text', 'fake.pdf', 'bin'];
+        yield 'a harmless type keeps its extension' => ['a,b', 'Table.CSV', 'csv'];
+        yield 'an office document' => ["PK\x03\x04rest", 'Letter.docx', 'docx'];
+        yield 'html never' => ['<p>hi</p>', 'page.html', 'bin'];
+        yield 'svg never' => ['<svg/>', 'logo.svg', 'bin'];
+        yield 'xml never' => ['<x/>', 'feed.xml', 'bin'];
+        yield 'php never' => ['<?php', 'shell.php', 'bin'];
+        yield 'no extension' => ['data', 'README', 'bin'];
+        yield 'only the last extension counts' => ['x', 'archive.html.zip', 'zip'];
+        yield 'a hidden html behind a harmless one' => ['x', 'notes.txt.html', 'bin'];
+    }
+
+    #[DataProvider('publicExtensions')]
+    public function testAFileIsPublishedUnderAHarmlessExtension(string $bytes, string $name, string $extension): void
+    {
+        $media = $this->processedUpload($name, $bytes);
+
+        self::assertSame('ready', $media['status'], (string) json_encode($media['error']));
+        $file = $this->variant($media, 'file');
+        self::assertSame($extension, $file['format']);
+        self::assertIsString($file['path']);
+        self::assertSame($bytes, file_get_contents($file['path']), 'exactly as uploaded');
+        self::assertSame($name, $media['name'], 'the card offers it under its own name');
+    }
+
+    public function testAFileUploadedBeforeFilesWerePublishedIsPublishedOnReupload(): void
+    {
+        $media = $this->upload('old.txt', 'from before');
+        $this->pdo->exec("DELETE FROM job; UPDATE media SET status = 'ready'");
+
+        $this->upload('old.txt', 'from before');
+        self::assertTrue($this->service(JobRunner::class)->runNext(true), 'the images worker takes files too');
+
+        $done = $this->service(MediaLibrary::class)->find(self::id($media));
+        self::assertNotNull($done);
+        $this->variant($done, 'file');
+    }
+
+    public function testAPdfGetsItsFirstPageOnItsCard(): void
+    {
+        $this->requireTools();
+        if (!str_contains((string) shell_exec('vips -l 2>/dev/null'), 'pdfload')) {
+            self::markTestSkipped('libvips here cannot read PDFs');
+        }
+        // vips writes PDFs only with extra libraries, so this one is written by hand.
+        $media = $this->processedUpload('Report 2026.pdf', self::onePagePdf());
+
+        self::assertSame('ready', $media['status'], (string) json_encode($media['error']));
+        self::assertSame('pdf', $this->variant($media, 'file')['format']);
+        $preview = $this->variant($media, 'preview');
+        self::assertSame('jpg', $preview['format']);
+        self::assertGreaterThan(0, $preview['width']);
+        self::assertGreaterThan($preview['width'], $preview['height'], 'portrait, like the page');
+    }
+
+    public function testAPdfThatWontRenderStillGetsItsCard(): void
+    {
+        $this->requireTools();
+
+        $media = $this->processedUpload('broken.pdf', "%PDF-1.4\nnot really a pdf");
+
+        self::assertSame('ready', $media['status'], (string) json_encode($media['error']));
+        $this->variant($media, 'file');
+        self::assertSame([], array_filter((array) $media['variants'], static fn($variant): bool => is_array($variant) && $variant['preset'] === 'preview'));
+    }
+
+    public function testTheDevelopmentRouteServesFilesAsDownloads(): void
+    {
+        $media = $this->processedUpload('notes.txt', 'just notes');
+        $url = $this->variant($media, 'file')['url'];
+        self::assertIsString($url);
+
+        $response = $this->get($url);
+
+        self::assertSame(200, $response->getStatusCode());
+        self::assertSame('application/octet-stream', $response->getHeaderLine('Content-Type'));
+        self::assertSame('attachment', $response->getHeaderLine('Content-Disposition'));
+        self::assertSame('nosniff', $response->getHeaderLine('X-Content-Type-Options'));
+    }
+
+    /**
+     * A minimal valid PDF: one A4-shaped page with a filled rectangle.
+     */
+    private static function onePagePdf(): string
+    {
+        $objects = [
+            '<< /Type /Catalog /Pages 2 0 R >>',
+            '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+            '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R >>',
+        ];
+        $content = "0 0 1 rg 100 100 395 642 re f\n";
+        $objects[] = '<< /Length ' . strlen($content) . " >>\nstream\n" . $content . 'endstream';
+
+        $pdf = "%PDF-1.4\n";
+        $offsets = [];
+        foreach ($objects as $i => $object) {
+            $offsets[] = strlen($pdf);
+            $pdf .= ($i + 1) . " 0 obj\n" . $object . "\nendobj\n";
+        }
+        $xref = strlen($pdf);
+        $pdf .= 'xref' . "\n0 " . (count($objects) + 1) . "\n0000000000 65535 f \n";
+        foreach ($offsets as $offset) {
+            $pdf .= sprintf("%010d 00000 n \n", $offset);
+        }
+
+        return $pdf . 'trailer' . "\n<< /Size " . (count($objects) + 1) . " /Root 1 0 R >>\nstartxref\n" . $xref . "\n%%EOF\n";
     }
 
     public function testWhileAVideoRunsTheNextWorkerOnlyDoesImagesAndNoHousekeeping(): void

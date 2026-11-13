@@ -204,6 +204,7 @@ final readonly class MediaLibrary
             throw new MediaError('Audio files can be up to ' . self::human(self::MAX_AUDIO_BYTES) . '.');
         }
         $this->assertRoomFor($bytes, $id);
+        $extension = $type['kind'] === 'file' ? FileType::publicExtension($type['extension'], Row::str($upload, 'original_name')) : $type['extension'];
 
         // ON CONFLICT: the same file finishing at the same moment in another upload.
         $stmt = $this->pdo->prepare(
@@ -213,10 +214,10 @@ final readonly class MediaLibrary
         $stmt->execute([
             $sha256,
             $type['kind'],
-            $type['extension'],
+            $extension,
             $bytes,
             Row::str($upload, 'original_name'),
-            $type['kind'] === 'file' ? 'ready' : 'processing',
+            'processing',
             $this->clock->now(),
         ]);
         $inserted = $stmt->fetchColumn();
@@ -233,9 +234,7 @@ final readonly class MediaLibrary
         $mediaId = Row::int(['id' => $inserted], 'id');
         $original = $this->store->originalPath($sha256);
         $this->store->install($path, $original);
-        if ($type['kind'] !== 'file') {
-            $this->jobs->enqueue($type['kind'] === 'image' ? ImageProcessor::JOB : AvProcessor::JOB, ['media_id' => $mediaId]);
-        }
+        $this->jobs->enqueue(self::jobFor($type['kind']), ['media_id' => $mediaId]);
 
         return [$mediaId, $original];
     }
@@ -253,18 +252,28 @@ final readonly class MediaLibrary
     {
         // Also what's stuck in "processing" with no job left, which a rollback to a release
         // that doesn't know the job type can cause. Nothing else would ever get it moving.
+        // And files stored before they were published at all.
         $stmt = $this->pdo->prepare(
             "UPDATE media SET status = 'processing', error = NULL
              WHERE id = ? AND (status = 'failed' OR (status = 'processing' AND NOT EXISTS (
                  SELECT 1 FROM job WHERE state IN ('queued', 'running') AND (payload->>'media_id')::bigint = media.id
-             )))
+             )) OR (kind = 'file' AND status = 'ready' AND NOT EXISTS (SELECT 1 FROM media_variant WHERE media_id = media.id)))
              RETURNING kind",
         );
         $stmt->execute([$mediaId]);
         $kind = $stmt->fetchColumn();
-        if ($kind !== false) {
-            $this->jobs->enqueue($kind === 'image' ? ImageProcessor::JOB : AvProcessor::JOB, ['media_id' => $mediaId]);
+        if (is_string($kind)) {
+            $this->jobs->enqueue(self::jobFor($kind), ['media_id' => $mediaId]);
         }
+    }
+
+    private static function jobFor(string $kind): string
+    {
+        return match ($kind) {
+            'image' => ImageProcessor::JOB,
+            'file' => FileProcessor::JOB,
+            default => AvProcessor::JOB,
+        };
     }
 
     /**

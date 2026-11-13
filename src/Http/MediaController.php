@@ -20,7 +20,7 @@ use Slim\Psr7\Stream;
 final readonly class MediaController
 {
     private const PAGE_SIZE = 60;
-    private const CONTENT_TYPES = ['avif' => 'image/avif', 'gif' => 'image/gif', 'jpg' => 'image/jpeg', 'm4a' => 'audio/mp4', 'mp4' => 'video/mp4', 'png' => 'image/png', 'webp' => 'image/webp'];
+    private const CONTENT_TYPES = ['avif' => 'image/avif', 'gif' => 'image/gif', 'jpg' => 'image/jpeg', 'm4a' => 'audio/mp4', 'mp4' => 'video/mp4', 'png' => 'image/png', 'webp' => 'image/webp', 'pdf' => 'application/pdf'];
 
     public function __construct(private MediaLibrary $library, private MediaStore $store, private Config $config) {}
 
@@ -128,7 +128,6 @@ final readonly class MediaController
         if (
             !$this->config->debug
             || preg_match('~^[0-9a-f]{2}/[0-9a-f]{2}/([0-9a-f]{64})-([a-z0-9-]+)\.([a-z0-9]+)$~D', $path, $match) !== 1
-            || !isset(self::CONTENT_TYPES[$match[3]])
         ) {
             throw new HttpNotFoundException($request);
         }
@@ -139,7 +138,11 @@ final readonly class MediaController
             throw new HttpNotFoundException($request);
         }
 
-        return $response->withBody(new Stream($stream))->withHeader('Content-Type', self::CONTENT_TYPES[$match[3]]);
+        // As the host's Apache does: other files only ever as downloads.
+        $response = $response->withBody(new Stream($stream))->withHeader('X-Content-Type-Options', 'nosniff')
+            ->withHeader('Content-Type', self::CONTENT_TYPES[$match[3]] ?? 'application/octet-stream');
+
+        return isset(self::CONTENT_TYPES[$match[3]]) ? $response : $response->withHeader('Content-Disposition', 'attachment');
     }
 
     /**

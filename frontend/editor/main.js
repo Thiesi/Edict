@@ -12,7 +12,7 @@ import { Placeholder } from '@tiptap/extensions';
 import { TextSelection } from '@tiptap/pm/state';
 import StarterKit from '@tiptap/starter-kit';
 
-import { MediaGallery, MediaImage, MediaPlayer, preview, whenReady } from './media.js';
+import { aboutFile, documentIcon, MediaFile, MediaGallery, MediaImage, MediaPlayer, preview, whenReady } from './media.js';
 import { SlashCommands } from './slash.js';
 import { Uploader } from './uploads.js';
 
@@ -56,6 +56,7 @@ const editor = new Editor({
         MediaImage,
         MediaGallery,
         MediaPlayer.configure({ csrf: () => state.csrf, refreshCsrf: () => refreshToken() }),
+        MediaFile,
         SlashCommands.configure({
             actions: {
                 chooseFiles: () => field('file-input').click(),
@@ -338,7 +339,7 @@ editor.on('transaction', ({ transaction }) => {
     });
 });
 
-const canBeInserted = (media) => ['image', 'audio', 'video'].includes(media?.kind);
+const canBeInserted = (media) => ['image', 'audio', 'video', 'file'].includes(media?.kind);
 
 // In the order given. Images next to each other become a gallery, each recording a player.
 const blocksFor = (media) => {
@@ -357,7 +358,7 @@ const blocksFor = (media) => {
             images.push(id);
         } else {
             endImages();
-            blocks.push({ type: 'player', attrs: { mediaId: id } });
+            blocks.push({ type: kind === 'file' ? 'file' : 'player', attrs: { mediaId: id } });
         }
     });
     endImages();
@@ -396,13 +397,6 @@ const uploadAll = async (files, spot) => {
     landingSpots.delete(spot);
 
     const usable = uploaded.filter(canBeInserted);
-    if (usable.length < uploaded.filter(Boolean).length) {
-        const note = document.createElement('li');
-        note.setAttribute('role', 'alert');
-        note.textContent = 'Only images, audio and video can go into an article so far. The other files were kept in the library.';
-        field('upload-tray').append(note);
-        field('upload-tray').hidden = false;
-    }
     if (usable.length > 0) {
         insertMedia(usable, spot.position);
     }
@@ -522,7 +516,7 @@ const addToLibrary = (media, { first = false, before = undefined } = {}) => {
         return;
     }
     const url = preview(media);
-    if (media.status !== 'ready' || (url === null && media.kind !== 'audio')) {
+    if (media.status !== 'ready' || (url === null && !['audio', 'file'].includes(media.kind))) {
         return;
     }
     const button = document.createElement('button');
@@ -531,11 +525,14 @@ const addToLibrary = (media, { first = false, before = undefined } = {}) => {
     button.title = media.name;
     button.setAttribute('aria-pressed', 'false');
     if (url === null) {
-        button.classList.add('is-audio');
+        button.classList.add(media.kind === 'file' ? 'is-file' : 'is-audio');
         const name = document.createElement('span');
         name.className = 'tile-name';
         name.textContent = media.name;
-        button.append(noteIcon(), name);
+        button.append(media.kind === 'file' ? documentIcon() : noteIcon(), name);
+        if (media.kind === 'file') {
+            button.title = `${media.name} (${aboutFile(media)})`;
+        }
     } else {
         const image = document.createElement('img');
         image.src = url;

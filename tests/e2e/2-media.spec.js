@@ -211,15 +211,35 @@ test('a pasted reference to a missing image says so and stops asking', async ({ 
     await expect(page.locator('.editor-media')).toContainText('no longer exists');
 });
 
-test('a file that is not an image says so and adds nothing', async ({ page }, info) => {
+test('any other file becomes a download card under its own name', async ({ page, request }, info) => {
     await newArticle(page);
-    const path = info.outputPath('notes.txt');
+    await page.getByLabel('Title').fill('With notes');
+    const path = info.outputPath('Meeting notes.txt');
     execFileSync('sh', ['-c', `echo notes > "${path}"`]);
 
     await page.locator('#file-input').setInputFiles(path);
 
-    await expect(page.locator('#upload-tray')).toContainText('Only images');
-    await expect(page.locator('.editor-media')).toHaveCount(0);
+    const block = page.locator('.editor-media');
+    await expect(block.locator('.editor-file')).toContainText('Meeting notes.txt', { timeout: 60_000 });
+    await expect(block.locator('.editor-file')).toContainText('TXT · 6 bytes');
+    await expect(block.locator('.editor-file')).toContainText('Published exactly as uploaded');
+    await saved(page);
+
+    await page.locator('#publish').click();
+    await expect(page.getByRole('link', { name: 'View', exact: true })).toBeVisible();
+    await page.waitForLoadState('load');
+
+    await page.goto('/with-notes');
+    const card = page.locator('a.file-card');
+    await expect(card).toHaveAttribute('download', 'Meeting notes.txt');
+    await expect(card).toContainText('TXT · 6 bytes');
+    const file = await request.get(await card.getAttribute('href'));
+    expect(await file.text()).toBe('notes\n');
+
+    await page.goto('/admin/articles');
+    await page.getByRole('button', { name: 'New article' }).click();
+    await page.locator('#media-toggle').click();
+    await expect(page.locator('#media-panel button.is-file', { hasText: 'Meeting notes.txt' })).toBeVisible();
 });
 
 test('removing an image block only removes the block', async ({ page }) => {
