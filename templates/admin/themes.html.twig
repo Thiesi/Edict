@@ -1,0 +1,33 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Themes · Edict{% endblock %}
+
+{% block head %}<link rel="stylesheet" href="/assets/admin/themes.css?v={{ asset_version }}">{% endblock %}
+
+{% block body %}
+    <main class="theme-picker">
+        <h1>Themes</h1>
+        <p><a href="/admin">Back to admin</a> · <a href="/admin/site">Site name, menu and footer</a></p>
+        {% if applied %}<p role="status">Done. Readers now see {{ theme_name(current) }}.</p>{% endif %}
+        <p>Each preview is the real site, shown only to you. Applying takes effect at once.</p>
+        <ul class="theme-list">
+            {% for id, theme in themes %}
+                <li class="theme-card{% if id == current %} is-current{% endif %}">
+                    <iframe src="/?theme={{ id }}" title="Preview of {{ theme.name }}" loading="lazy" tabindex="-1"></iframe>
+                    <h2>{{ theme.name }}{% if id == current %} <small>(in use)</small>{% endif %}</h2>
+                    <p>{{ theme.character }}</p>
+                    <p>
+                        <a href="/?theme={{ id }}" target="_blank" rel="noopener">Open the preview</a>
+                        {% if id != current %}
+                            <form method="post" action="/admin/themes">
+                                <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                                <input type="hidden" name="theme" value="{{ id }}">
+                                <button type="submit">Use {{ theme.name }}</button>
+                            </form>
+                        {% endif %}
+                    </p>
+                </li>
+            {% endfor %}
+        </ul>
+    </main>
+{% endblock %}

@@ -12,6 +12,7 @@ use Edict\Http\Middleware\RequireLogin;
 use Edict\Http\OAuthController;
 use Edict\Http\PasskeyController;
 use Edict\Http\PublicController;
+use Edict\Http\SiteController;
 use Edict\Http\VoteController;
 use Slim\App;
 use Slim\Routing\RouteCollectorProxy;
@@ -73,6 +74,11 @@ return static function (App $app): void {
         $group->post('/articles/{id:[0-9]+}/restore', [ArticleAdminController::class, 'restore']);
         $group->post('/articles/{id:[0-9]+}/delete', [ArticleAdminController::class, 'delete']);
         $group->post('/articles/{id:[0-9]+}/votes', [VoteController::class, 'adjust']);
+
+        $group->get('/themes', [SiteController::class, 'themes']);
+        $group->post('/themes', [SiteController::class, 'applyTheme']);
+        $group->get('/site', [SiteController::class, 'show']);
+        $group->post('/site', [SiteController::class, 'save']);
     })->add(RequireAdmin::class);
 
     // Apache serves /media/ directly when deployed. This is for local development.

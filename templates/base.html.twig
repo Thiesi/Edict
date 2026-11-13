@@ -9,7 +9,7 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png">
     {% block head %}{% endblock %}
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
 {% block body %}{% endblock %}
 {% if tested_commit %}<small><a href="https://github.com/Thiesi/Edict/commit/{{ tested_commit }}" rel="noopener">{{ tested_commit|slice(0, 7) }}</a></small>{% endif %}
 </body>

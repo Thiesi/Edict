@@ -1,23 +1,211 @@
-/* Placeholder theme until the design track (S9): readable, nothing more. */
-body {
-    margin: 0 auto;
-    max-width: 42rem;
-    padding: 1rem;
-    font-family: Georgia, serif;
-    line-height: 1.6;
+/*
+ * The base every theme builds on: structure, the media and reader components, and
+ * accessibility. Colours, type and layout come from the tokens below, which each
+ * theme in themes/ sets for light and dark. On its own, this is plain and readable.
+ */
+:root {
+    color-scheme: light dark;
+    --font-body: Georgia, 'Times New Roman', serif;
+    --font-heading: var(--font-body);
+    --font-mono: ui-monospace, 'Cascadia Mono', Menlo, Consolas, monospace;
+    --bg: #fff;
+    --fg: #1b1b1b;
+    --muted: #555;
+    --accent: #1a56db;
+    --accent-fg: #fff;
+    --border: #d4d4d4;
+    --surface: #f4f4f4;
+    --header-bg: var(--bg);
+    --header-fg: var(--fg);
+    --header-accent: var(--accent);
+    --focus: var(--accent);
+    --measure: 42rem;
+    --wide: 64rem;
+    --gutter: 1rem;
+    --radius: 4px;
 }
 
-nav a {
-    margin-right: 1rem;
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #121212;
+        --fg: #e8e8e8;
+        --muted: #aaa;
+        --accent: #8ab4f8;
+        --accent-fg: #121212;
+        --border: #3a3a3a;
+        --surface: #1e1e1e;
+    }
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-body);
+    font-size: 1.0625rem;
+    line-height: 1.6;
+    overflow-wrap: break-word;
+}
+
+a {
+    color: var(--accent);
+    text-underline-offset: 0.15em;
+}
+
+:focus-visible {
+    outline: 3px solid var(--focus);
+    outline-offset: 2px;
+}
+
+.skip-link {
+    position: absolute;
+    top: -10rem;
+    left: var(--gutter);
+    z-index: 10;
+    padding: 0.5rem 0.75rem;
+    background: var(--accent);
+    color: var(--accent-fg);
+}
+
+.skip-link:focus {
+    top: 0.5rem;
+}
+
+h1,
+h2,
+h3,
+h4 {
+    font-family: var(--font-heading);
+    line-height: 1.2;
+}
+
+code,
+pre,
+kbd {
+    font-family: var(--font-mono);
+}
+
+pre {
+    overflow-x: auto;
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius);
+    background: var(--surface);
+}
+
+blockquote {
+    margin: 1.5rem 0;
+    padding: 0.25rem 0 0.25rem 1rem;
+    border-left: 4px solid var(--border);
+    color: var(--muted);
+}
+
+table {
+    border-collapse: collapse;
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+th,
+td {
+    padding: 0.35rem 0.6rem;
+    border: 1px solid var(--border);
+    text-align: left;
+}
+
+hr {
+    border: 0;
+    border-top: 1px solid var(--border);
+}
+
+/* The frame: header, content, footer. Themes can rearrange it freely. */
+.site-header {
+    padding: 1rem var(--gutter);
+    background: var(--header-bg);
+    color: var(--header-fg);
+}
+
+.site-header-inner,
+.site-content,
+.site-footer {
+    max-width: var(--measure);
+    margin: 0 auto;
+}
+
+.site-content {
+    padding: 0 var(--gutter);
+}
+
+.site-title {
+    margin: 0;
+    font-family: var(--font-heading);
+    font-size: 1.6rem;
+    font-weight: 700;
+}
+
+.site-title a {
+    color: inherit;
+    text-decoration: none;
+}
+
+.site-description {
+    margin: 0.25rem 0 0;
+    color: var(--muted);
+}
+
+.site-nav ul,
+.site-footer ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 1.25rem;
+    margin: 0.75rem 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.site-nav a {
+    color: inherit;
+}
+
+.site-footer {
+    margin-top: 3rem;
+    padding: 1.5rem var(--gutter) 2rem;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 0.9rem;
+}
+
+.site-footer a {
+    color: inherit;
+}
+
+.site-colophon {
+    margin: 0.75rem 0 0;
 }
 
 article {
     hyphens: auto;
 }
 
+article img,
+article video {
+    max-width: 100%;
+}
+
 .articles {
     list-style: none;
     padding: 0;
+}
+
+.articles time,
+article > p:has(> time) {
+    color: var(--muted);
 }
 
 .teaser {
@@ -78,8 +266,8 @@ figure.media-audio audio {
     padding: 0;
     border: 0;
     border-radius: 50%;
-    background: var(--accent, #1a56db);
-    color: #fff;
+    background: var(--accent);
+    color: var(--accent-fg);
     cursor: pointer;
 }
 
@@ -99,7 +287,7 @@ figure.media-audio audio {
 }
 
 .audio-wave:focus-visible {
-    outline: 2px solid var(--accent, #1a56db);
+    outline: 2px solid var(--accent);
     outline-offset: 3px;
 }
 
@@ -116,7 +304,7 @@ figure.media-audio audio {
 }
 
 .audio-played {
-    fill: var(--accent, #1a56db);
+    fill: var(--accent);
     clip-path: inset(0 100% 0 0);
 }
 
@@ -262,7 +450,7 @@ figure.media-file {
 
 .file-card:hover,
 .file-card:focus-visible {
-    border-color: var(--accent, #1a56db);
+    border-color: var(--accent);
 }
 
 .file-card img,
@@ -315,9 +503,9 @@ figure.media-file {
 }
 
 .like-button[aria-pressed='true'] {
-    border-color: var(--accent, #1a56db);
-    background: var(--accent, #1a56db);
-    color: #fff;
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--accent-fg);
 }
 
 .like-admin {

@@ -1,0 +1,169 @@
+/*
+ * Decree: Edict's own identity. Heraldic, deep colour with a gold accent, formal serif headings.
+ */
+@import '@fontsource/cormorant-garamond/latin-600.css';
+@import '@fontsource/source-serif-4/latin-400.css';
+@import '@fontsource/source-serif-4/latin-400-italic.css';
+@import '@fontsource/source-serif-4/latin-600.css';
+
+:root {
+    --font-body: 'Source Serif 4', Georgia, serif;
+    --font-heading: 'Cormorant Garamond', Georgia, serif;
+    --bg: #f7f3ea;
+    --fg: #1d1a2e;
+    --muted: #5b556b;
+    --accent: #6b1f2e;
+    --accent-fg: #fff;
+    --gold: #8a6a12;
+    --border: #d6ccb5;
+    --surface: #efe8d8;
+    --header-bg: #1d1a2e;
+    --header-fg: #f3ead2;
+    --header-accent: #d9b44a;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #14121f;
+        --fg: #ece6d6;
+        --muted: #b3aac2;
+        --accent: #e0b84f;
+        --accent-fg: #14121f;
+        --gold: #e0b84f;
+        --border: #3a3550;
+        --surface: #1e1b2e;
+        --header-bg: #0c0b14;
+        --header-fg: #ece6d6;
+        --header-accent: #e0b84f;
+    }
+}
+
+.site-header {
+    border-bottom: 3px double var(--header-accent);
+    background: var(--header-bg);
+    color: var(--header-fg);
+    text-align: center;
+}
+
+.site-header a {
+    color: var(--header-fg);
+}
+
+.site-title {
+    font-family: var(--font-heading);
+    font-size: 2.4rem;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.site-title a::before,
+.site-title a::after {
+    content: '❦';
+    margin: 0 0.6em;
+    color: var(--header-accent);
+    font-size: 0.6em;
+    vertical-align: middle;
+}
+
+.site-description {
+    color: var(--header-fg);
+    font-style: italic;
+    opacity: 0.85;
+}
+
+.site-nav ul {
+    justify-content: center;
+}
+
+.site-nav a {
+    font-variant: small-caps;
+    letter-spacing: 0.06em;
+    text-decoration: none;
+}
+
+.site-nav a:hover {
+    text-decoration: underline;
+}
+
+.site-nav a:hover,
+.site-nav a[aria-current='page'] {
+    color: var(--header-accent);
+}
+
+h1,
+h2,
+h3 {
+    font-family: var(--font-heading);
+    font-weight: 600;
+    letter-spacing: 0.01em;
+}
+
+article > h1 {
+    font-size: 2.6rem;
+    line-height: 1.1;
+    text-align: center;
+}
+
+article > h1::after {
+    content: '';
+    display: block;
+    width: 4rem;
+    margin: 0.75rem auto 0;
+    border-bottom: 2px solid var(--gold);
+}
+
+.teaser {
+    color: var(--muted);
+    font-size: 1.15rem;
+    text-align: center;
+}
+
+.articles > li {
+    padding-bottom: 1.25rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.articles h2 {
+    margin-bottom: 0.25rem;
+    font-size: 1.7rem;
+}
+
+.articles h2 a {
+    text-decoration: none;
+}
+
+.articles h2 a:hover {
+    text-decoration: underline;
+}
+
+article > p:has(> time) {
+    text-align: center;
+    font-variant: small-caps;
+    letter-spacing: 0.04em;
+}
+
+@media (max-width: 40rem) {
+    .site-title {
+        font-size: 1.6rem;
+    }
+
+    .site-title a::before,
+    .site-title a::after {
+        display: none;
+    }
+}
+
+blockquote {
+    border-left-color: var(--gold);
+}
+
+.site-footer {
+    border-top: 3px double var(--gold);
+    text-align: center;
+}
+
+.site-footer ul {
+    justify-content: center;
+}

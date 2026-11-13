@@ -6,7 +6,7 @@
     <main>
         <h1>Admin</h1>
         <p>Signed in as {{ display_name }}.</p>
-        <p><a href="/admin/articles">Articles</a> · <a href="/admin/articles?kind=page">Pages</a> · <a href="/admin/passkeys">Passkeys</a></p>
+        <p><a href="/admin/articles">Articles</a> · <a href="/admin/articles?kind=page">Pages</a> · <a href="/admin/site">Site</a> · <a href="/admin/themes">Themes</a> · <a href="/admin/passkeys">Passkeys</a></p>
         <form method="post" action="/admin/logout">
             <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
             <button type="submit">Sign out</button>

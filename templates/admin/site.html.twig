@@ -1,0 +1,51 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Site · Edict{% endblock %}
+
+{% block body %}
+    <main>
+        <h1>Site</h1>
+        <p><a href="/admin">Back to admin</a> · <a href="/admin/themes">Themes</a></p>
+        {% if saved %}<p role="status">Saved.</p>{% endif %}
+        {% if errors %}<p role="alert">Please check the marked fields. Nothing was saved.</p>{% endif %}
+        <form method="post" action="/admin/site">
+            <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+            <p>
+                <label for="title">Site name</label><br>
+                <input id="title" name="title" value="{{ values.title|default('') }}" maxlength="100" required{% if errors.title is defined %} aria-invalid="true" aria-describedby="title-error"{% endif %}>
+                {% if errors.title is defined %}<br><small id="title-error">{{ errors.title }}</small>{% endif %}
+            </p>
+            <p>
+                <label for="description">Description, under the name</label><br>
+                <input id="description" name="description" value="{{ values.description|default('') }}" maxlength="300" size="60"{% if errors.description is defined %} aria-invalid="true" aria-describedby="description-error"{% endif %}>
+                {% if errors.description is defined %}<br><small id="description-error">{{ errors.description }}</small>{% endif %}
+            </p>
+            <p>
+                <label for="menu">Menu links</label><br>
+                <textarea id="menu" name="menu" rows="5" cols="60" aria-describedby="menu-help{% if errors.menu is defined %} menu-error{% endif %}"{% if errors.menu is defined %} aria-invalid="true"{% endif %}>{{ values.menu|default('') }}</textarea><br>
+                <small id="menu-help">One per line, as <code>Label | address</code>, for example <code>About | /about</code>. Up to {{ max_links }}. Archive and sign-in come after them.</small>
+                {% if errors.menu is defined %}<br><small id="menu-error">{{ errors.menu }}</small>{% endif %}
+            </p>
+            <p>
+                <label for="footer">Footer links</label><br>
+                <textarea id="footer" name="footer" rows="4" cols="60" aria-describedby="footer-help{% if errors.footer is defined %} footer-error{% endif %}"{% if errors.footer is defined %} aria-invalid="true"{% endif %}>{{ values.footer|default('') }}</textarea><br>
+                <small id="footer-help">The same way. Impressum and Datenschutz come after them.</small>
+                {% if errors.footer is defined %}<br><small id="footer-error">{{ errors.footer }}</small>{% endif %}
+            </p>
+            {% for name, label in {imprint: 'Impressum page', privacy: 'Datenschutz page'} %}
+                <p>
+                    <label for="{{ name }}">{{ label }}</label><br>
+                    <select id="{{ name }}" name="{{ name }}"{% if errors[name] is defined %} aria-invalid="true"{% endif %}>
+                        <option value="">None yet</option>
+                        {% for page in pages %}
+                            <option value="{{ page.slug }}"{% if values[name]|default('') == page.slug %} selected{% endif %}>{{ page.title }} (/{{ page.slug }})</option>
+                        {% endfor %}
+                    </select>
+                    {% if errors[name] is defined %}<br><small>{{ errors[name] }}</small>{% endif %}
+                </p>
+            {% endfor %}
+            {% if not pages %}<p><small>Write and publish the Impressum and Datenschutz as <a href="/admin/articles?kind=page">pages</a>, then choose them here. A German site can't go live without them.</small></p>{% endif %}
+            <p><button type="submit">Save</button></p>
+        </form>
+    </main>
+{% endblock %}

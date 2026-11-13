@@ -1,8 +1,10 @@
 {% extends 'public/layout.html.twig' %}
 
+{% block title %}{{ site().title }}{% endblock %}
+
 {% block main %}
     <main>
-        <h1>Hello, Edict</h1>
+        <h1 class="home-heading">Latest</h1>
         {% if articles %}
             <ul class="articles">
                 {% for article in articles %}{% include 'public/_summary.html.twig' %}{% endfor %}

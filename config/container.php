@@ -13,6 +13,9 @@ use Edict\Content\BodyRenderer;
 use Edict\Database\ConnectionFactory;
 use Edict\Database\Migrator;
 use Edict\Services;
+use Edict\Site\Settings;
+use Edict\Site\SiteSettings;
+use Edict\Site\Themes;
 use Edict\SystemClock;
 use Psr\Http\Message\ResponseFactoryInterface;
 use Slim\Psr7\Factory\ResponseFactory;
@@ -54,6 +57,10 @@ return [
             'autoescape' => 'html',
         ]);
         $twig->addGlobal('tested_commit', $config->testedCommit());
+        $twig->addGlobal('asset_version', $config->release());
+        // The theme, name, menu and footer. Read only by pages that show them.
+        $twig->addFunction(new TwigFunction('site', static fn(): SiteSettings => $services->get(Settings::class)->site()));
+        $twig->addFunction(new TwigFunction('theme_name', static fn(string $id): string => Themes::ALL[$id]['name'] ?? $id));
         $twig->addFilter(new TwigFilter('article_date', ArticleDate::format(...)));
         $twig->addFilter(new TwigFilter('article_iso', ArticleDate::iso(...)));
         // Safe because BodyRenderer and Body build HTML from fixed tags and escape all values.

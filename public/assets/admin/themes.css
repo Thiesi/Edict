@@ -1,0 +1,39 @@
+/* The theme picker: each theme's real home page, scaled down. */
+.theme-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+    gap: 1.5rem;
+    padding: 0;
+    list-style: none;
+}
+
+.theme-card {
+    padding: 0.75rem;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+}
+
+.theme-card.is-current {
+    border: 3px solid #1a56db;
+}
+
+.theme-card iframe {
+    display: block;
+    width: 200%;
+    height: 36rem;
+    margin-bottom: -18rem;
+    border: 1px solid #ddd;
+    transform: scale(0.5);
+    transform-origin: 0 0;
+    pointer-events: none;
+}
+
+.theme-card h2 {
+    margin: 0.5rem 0 0;
+    font-size: 1.2rem;
+}
+
+.theme-card form {
+    display: inline;
+    margin-left: 0.75rem;
+}

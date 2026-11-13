@@ -1,6 +1,6 @@
 {% extends 'public/layout.html.twig' %}
 
-{% block title %}{{ article.title }} · Edict{% endblock %}
+{% block title %}{{ article.title }} · {{ site().title }}{% endblock %}
 
 {% block main %}
     {% if preview %}
