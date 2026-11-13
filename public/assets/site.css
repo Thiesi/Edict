@@ -29,10 +29,15 @@ figure.media-image {
 }
 
 figure.media-image img,
-.media-gallery img {
+.media-gallery img,
+video.media-loop {
     display: block;
     max-width: 100%;
     height: auto;
+}
+
+video.media-loop {
+    cursor: pointer;
 }
 
 figure.media-video,

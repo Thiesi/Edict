@@ -589,7 +589,16 @@ final readonly class MediaLibrary
             'seconds' => is_numeric($meta['seconds'] ?? null) ? (float) $meta['seconds'] : null,
             'peaks' => is_array($meta['peaks'] ?? null) ? $meta['peaks'] : [],
             'posterError' => is_string($meta['poster_error'] ?? null) ? $meta['poster_error'] : null,
+            'animated' => $this->hasLoop($id),
         ];
+    }
+
+    private function hasLoop(int $mediaId): bool
+    {
+        $stmt = $this->pdo->prepare("SELECT 1 FROM media_variant WHERE media_id = ? AND preset = 'loop'");
+        $stmt->execute([$mediaId]);
+
+        return $stmt->fetchColumn() !== false;
     }
 
     private static function human(int $bytes): string

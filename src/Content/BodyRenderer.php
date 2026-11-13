@@ -161,9 +161,12 @@ final readonly class BodyRenderer
 
         $byFormat = [];
         $full = null;
+        $loop = null;
         foreach ($variants as $variant) {
             if ($variant['preset'] === 'full') {
                 $full = $variant;
+            } elseif ($variant['preset'] === 'loop') {
+                $loop = $variant;
             } else {
                 $byFormat[$variant['format']][] = $variant;
             }
@@ -171,6 +174,10 @@ final readonly class BodyRenderer
         $fallback = $byFormat['jpg'] ?? [];
         if ($full === null || $fallback === []) {
             return '';
+        }
+
+        if ($loop !== null) {
+            return self::loop($loop, $fallback[min(1, count($fallback) - 1)], $alt);
         }
 
         $sources = '';
@@ -187,6 +194,21 @@ final readonly class BodyRenderer
             . '<img src="' . Body::escape($src['url']) . '" srcset="' . self::srcset($fallback) . '" sizes="' . $sizes . '"'
             . ' width="' . $src['width'] . '" height="' . $src['height'] . '" alt="' . Body::escape($alt) . '" loading="lazy" decoding="async">' . "\n"
             . "</picture>\n</a>\n";
+    }
+
+    /**
+     * An animated GIF, as the video made from it. Muted, so browsers let it play by itself.
+     * The site's script pauses it for readers who asked for less motion, and on a tap.
+     *
+     * @param array{preset: string, format: string, width: int, height: int, url: string} $loop
+     * @param array{preset: string, format: string, width: int, height: int, url: string} $still
+     */
+    private static function loop(array $loop, array $still, string $alt): string
+    {
+        $label = $alt === '' ? ' aria-hidden="true"' : ' role="img" aria-label="' . Body::escape($alt) . '"';
+
+        return '<video class="media-loop" src="' . Body::escape($loop['url']) . '" poster="' . Body::escape($still['url']) . '"'
+            . ' width="' . $loop['width'] . '" height="' . $loop['height'] . '" autoplay loop muted playsinline disablepictureinpicture' . $label . "></video>\n";
     }
 
     /**

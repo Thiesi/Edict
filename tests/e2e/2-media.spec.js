@@ -304,6 +304,40 @@ test('a recording becomes an audio player, and the library offers it', async ({ 
     await expect(page.locator('.editor-media audio')).toBeAttached();
 });
 
+// Chromium here can't decode the H.264 loop, so this checks the markup and the controls around it.
+test('an animated GIF becomes a looping video on the page, and a GIF tile in the library', async ({ page }, info) => {
+    test.setTimeout(180_000);
+    const path = info.outputPath('dance.gif');
+    execFileSync('ffmpeg', ['-nostdin', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=size=160x120:rate=10:duration=1', path]);
+
+    await newArticle(page);
+    await page.getByLabel('Title').fill('With a dance');
+    await page.locator('#file-input').setInputFiles(path);
+    const block = page.locator('.editor-media');
+    await expect(block.locator('img')).toBeVisible({ timeout: 120_000 });
+    await block.getByLabel(/Description/).fill('A test pattern');
+
+    await page.locator('#media-toggle').click();
+    await expect(page.locator('#media-panel button[data-media-id]').first()).toHaveClass(/is-animated/);
+    await page.locator('#media-toggle').click();
+
+    await saved(page);
+    await page.locator('#publish').click();
+    await expect(page.getByRole('link', { name: 'View', exact: true })).toBeVisible();
+    await page.waitForLoadState('load');
+
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto('/with-a-dance');
+    const loop = page.getByRole('img', { name: 'A test pattern' });
+    await expect(loop).toHaveJSProperty('tagName', 'VIDEO');
+    await expect(loop).toHaveJSProperty('muted', true);
+    await expect(loop).toHaveJSProperty('loop', true);
+    await expect(loop).toHaveAttribute('tabindex', '0');
+    await expect(loop).toHaveAttribute('src', /-loop\.mp4$/);
+    await expect(loop).toHaveJSProperty('paused', true);
+    await expect(page.locator('a.lightbox')).toHaveCount(0);
+});
+
 test('an upload shows up in the open library without reopening it', async ({ page }, info) => {
     test.setTimeout(180_000);
     await newArticle(page);

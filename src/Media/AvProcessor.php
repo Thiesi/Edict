@@ -30,7 +30,7 @@ final readonly class AvProcessor
     private const QUIET = ['-nostdin', '-hide_banner', '-loglevel', 'error', '-y'];
 
     /** Portrait or landscape, at most 1080p, never enlarged, even sizes as H.264 needs. */
-    private const SCALE = "scale=w='min(iw,if(gt(iw,ih),1920,1080))':h='min(ih,if(gt(iw,ih),1080,1920))'"
+    public const SCALE = "scale=w='min(iw,if(gt(iw,ih),1920,1080))':h='min(ih,if(gt(iw,ih),1080,1920))'"
         . ':force_original_aspect_ratio=decrease:force_divisible_by=2';
 
     /**

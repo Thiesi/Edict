@@ -525,6 +525,9 @@ const addToLibrary = (media, { first = false, before = undefined } = {}) => {
     if (media.kind === 'video') {
         button.classList.add('is-video');
     }
+    if (media.animated) {
+        button.classList.add('is-animated');
+    }
     button.addEventListener('click', () => {
         const selected = chosen.includes(media);
         chosen = selected ? chosen.filter((other) => other !== media) : [...chosen, media];
