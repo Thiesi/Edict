@@ -391,7 +391,8 @@ final class ArticleFlowTest extends DbTestCase
     {
         foreach ($this->app->getRouteCollector()->getRoutes() as $route) {
             $first = explode('/', $route->getPattern())[1] ?? '';
-            if ($first !== '' && !str_starts_with($first, '{')) {
+            // feed.atom, robots.txt and the like can't be slugs: those never have a dot.
+            if ($first !== '' && !str_starts_with($first, '{') && !str_contains($first, '.')) {
                 self::assertTrue(Slugs::isReserved($first), "/$first must be reserved");
             }
         }
