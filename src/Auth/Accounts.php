@@ -247,6 +247,7 @@ final readonly class Accounts
     {
         $this->pdo->prepare('DELETE FROM user_identity WHERE user_id = ?')->execute([$userId]);
         $this->pdo->prepare('DELETE FROM session WHERE user_id = ?')->execute([$userId]);
+        $this->pdo->prepare('DELETE FROM vote WHERE user_id = ?')->execute([$userId]);
         $this->pdo->prepare('UPDATE app_user SET display_name = ?, deleted_at = to_timestamp(?) WHERE id = ?')
             ->execute([self::DELETED_NAME, $this->clock->now(), $userId]);
     }

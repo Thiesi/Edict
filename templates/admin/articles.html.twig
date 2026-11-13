@@ -26,7 +26,7 @@
 
         {% if articles %}
             <table>
-                <thead><tr><th>Title</th><th>Status</th><th>Language</th><th>Address</th>{% if trash %}<th>Actions</th>{% endif %}</tr></thead>
+                <thead><tr><th>Title</th><th>Status</th><th>Language</th><th>Address</th>{% if likes %}<th>Likes</th>{% endif %}{% if trash %}<th>Actions</th>{% endif %}</tr></thead>
                 <tbody>
                     {% for article in articles %}
                         <tr>
@@ -34,6 +34,10 @@
                             <td>{{ article.status }}{% if article.hasPendingChanges %}, changes pending{% endif %}</td>
                             <td>{{ article.lang|upper }}</td>
                             <td>/{{ article.slug }}</td>
+                            {% if likes %}
+                                {% set count = likes[article.id] ?? {real: 0, adjustment: 0, shown: 0} %}
+                                <td>{{ count.shown }}{% if count.adjustment != 0 %} <small>({{ count.real }} real, {{ count.adjustment > 0 ? '+' : '' }}{{ count.adjustment }})</small>{% endif %}</td>
+                            {% endif %}
                             {% if trash %}
                                 <td>
                                     <form method="post" action="/admin/articles/{{ article.id }}/restore">

@@ -1,0 +1,29 @@
+<section class="likes" id="likes" aria-label="Likes">
+    {% if not session %}
+        <p><span class="like-count" aria-label="{{ likes.shown }} likes">♥ {{ likes.shown }}</span> · <a href="/login?next={{ ('/' ~ article.slug)|url_encode }}">Log in to like</a></p>
+    {% elseif banned %}
+        <p><span class="like-count" aria-label="{{ likes.shown }} likes">♥ {{ likes.shown }}</span></p>
+    {% else %}
+        <form class="like-form" method="post" action="/votes/{{ article.id }}">
+            <input type="hidden" name="{{ csrf_field }}" value="{{ session.csrfToken }}">
+            <input type="hidden" name="like" value="{{ likes.mine ? '0' : '1' }}">
+            <button type="submit" class="like-button" aria-pressed="{{ likes.mine ? 'true' : 'false' }}">♥ Like</button>
+            <span class="like-count" aria-live="polite">{{ likes.shown }} {{ likes.shown == 1 ? 'like' : 'likes' }}</span>
+        </form>
+    {% endif %}
+    {% if session and session.isAdmin %}
+        <div class="like-admin">
+            <p>Real likes: <strong>{{ likes.real }}</strong> · adjustment: <strong>{{ likes.adjustment >= 0 ? '+' : '' }}{{ likes.adjustment }}</strong></p>
+            <form method="post" action="/admin/articles/{{ article.id }}/votes">
+                <input type="hidden" name="{{ csrf_field }}" value="{{ session.csrfToken }}">
+                <label>Adjustment <input type="number" name="adjustment" value="{{ likes.adjustment }}" min="-1000000000" max="1000000000" step="1"></label>
+                <button type="submit">Set</button>
+            </form>
+            <form method="post" action="/admin/articles/{{ article.id }}/votes">
+                <input type="hidden" name="{{ csrf_field }}" value="{{ session.csrfToken }}">
+                <input type="hidden" name="add" value="100">
+                <button type="submit">+100</button>
+            </form>
+        </div>
+    {% endif %}
+</section>

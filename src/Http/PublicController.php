@@ -6,6 +6,8 @@ namespace Edict\Http;
 
 use Edict\Auth\Session;
 use Edict\Content\Articles;
+use Edict\Content\Votes;
+use Edict\Http\Middleware\CsrfMiddleware;
 use Edict\Http\Middleware\SessionMiddleware;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -20,7 +22,7 @@ final readonly class PublicController
     private const HOME_ARTICLES = 10;
     private const PER_PAGE = 20;
 
-    public function __construct(private Environment $twig, private Articles $articles) {}
+    public function __construct(private Environment $twig, private Articles $articles, private Votes $votes) {}
 
     public function home(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
     {
@@ -74,7 +76,17 @@ final readonly class PublicController
         $slug = $args['slug'] ?? '';
         $article = $this->articles->findPublic($slug);
         if ($article !== null) {
-            return $this->render($request, $response, 'public/article.html.twig', ['article' => $article, 'preview' => false]);
+            $session = $request->getAttribute(SessionMiddleware::ATTRIBUTE);
+            $session = $session instanceof Session ? $session : null;
+
+            return $this->render($request, $response, 'public/article.html.twig', [
+                'article' => $article,
+                'preview' => false,
+                'likes' => $article->kind === 'article' ? $this->votes->tally($article->id, $session?->userId) : null,
+                'session' => $session,
+                'banned' => $session !== null && $this->votes->isBanned($session->userId),
+                'csrf_field' => CsrfMiddleware::FIELD,
+            ]);
         }
 
         $target = $this->articles->redirectTarget($slug);
@@ -90,11 +102,12 @@ final readonly class PublicController
      */
     private function render(ServerRequestInterface $request, ResponseInterface $response, string $template, array $data): ResponseInterface
     {
-        $response->getBody()->write($this->twig->render($template, $data + [
-            'signed_in' => $request->getAttribute(SessionMiddleware::ATTRIBUTE) instanceof Session,
-        ]));
+        $signedIn = $request->getAttribute(SessionMiddleware::ATTRIBUTE) instanceof Session;
+        $response->getBody()->write($this->twig->render($template, $data + ['signed_in' => $signedIn]));
+        $response = $response->withHeader('Content-Type', 'text/html; charset=utf-8');
 
-        return $response->withHeader('Content-Type', 'text/html; charset=utf-8');
+        // A signed-in page carries the reader's own like and token: never for a shared cache.
+        return $signedIn ? $response->withHeader('Cache-Control', 'private, no-store') : $response;
     }
 
     /**

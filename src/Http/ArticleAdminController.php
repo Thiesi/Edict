@@ -12,6 +12,7 @@ use Edict\Content\Articles;
 use Edict\Content\Body;
 use Edict\Content\SlugTaken;
 use Edict\Content\StaleDraft;
+use Edict\Content\Votes;
 use Edict\Http\Middleware\CsrfMiddleware;
 use Edict\Http\Middleware\SessionMiddleware;
 use Psr\Http\Message\ResponseInterface;
@@ -24,7 +25,7 @@ use Twig\Environment;
  */
 final readonly class ArticleAdminController
 {
-    public function __construct(private Environment $twig, private Articles $articles, private Config $config) {}
+    public function __construct(private Environment $twig, private Articles $articles, private Config $config, private Votes $votes) {}
 
     public function index(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
     {
@@ -35,8 +36,11 @@ final readonly class ArticleAdminController
             $this->articles->purgeTrash();
         }
 
+        $articles = $this->articles->adminList($kind, $trash);
+
         return $this->html($request, $response, 'admin/articles.html.twig', [
-            'articles' => $this->articles->adminList($kind, $trash),
+            'articles' => $articles,
+            'likes' => $kind === 'article' ? $this->votes->counts(array_map(static fn(Article $article): int => $article->id, $articles)) : [],
             'kind' => $kind,
             'trash' => $trash,
             'trash_days' => Articles::TRASH_DAYS,
