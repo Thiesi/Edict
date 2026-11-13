@@ -332,9 +332,24 @@ test('a published recording gets the site player with waveform, time and speed',
     await expect(page.getByRole('link', { name: 'View', exact: true })).toBeVisible();
     await page.waitForLoadState('load');
 
-    // The test browser has no AAC decoder, so it gets the same sound as WAV.
+    // The test browser has no AAC decoder, so it gets the same sound as WAV, served in
+    // ranges as Apache does: without them the browser can't seek.
     const wav = readFileSync(path);
-    await page.route('**/*-aac.m4a', (route) => route.fulfill({ status: 200, contentType: 'audio/wav', body: wav }));
+    await page.route('**/*-aac.m4a', (route) => {
+        const asked = /bytes=(\d+)-(\d*)/.exec(route.request().headers().range ?? '');
+        if (asked === null) {
+            return route.fulfill({ status: 200, contentType: 'audio/wav', headers: { 'Accept-Ranges': 'bytes' }, body: wav });
+        }
+        const from = Number(asked[1]);
+        const to = asked[2] === '' ? wav.length - 1 : Math.min(Number(asked[2]), wav.length - 1);
+
+        return route.fulfill({
+            status: 206,
+            contentType: 'audio/wav',
+            headers: { 'Accept-Ranges': 'bytes', 'Content-Range': `bytes ${from}-${to}/${wav.length}` },
+            body: wav.subarray(from, to + 1),
+        });
+    });
     await page.goto('/with-a-talk');
 
     const player = page.locator('.audio-player');
