@@ -281,6 +281,54 @@
     border-color: #1a56db;
 }
 
+.media-grid button {
+    position: relative;
+}
+
+.media-grid button.is-audio {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    height: calc(6rem + 6px);
+    padding: 0.25rem;
+    background: #eef2fb;
+    color: #1a3a7a;
+    font-size: 0.75rem;
+}
+
+.tile-icon {
+    width: 2.5rem;
+    height: 2.5rem;
+    fill: none;
+    stroke: currentcolor;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.tile-name {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* A video's poster looks like a photo without this. */
+.media-grid button.is-video::after {
+    content: '▶';
+    position: absolute;
+    left: 0.35rem;
+    bottom: 0.35rem;
+    padding: 0.1rem 0.35rem;
+    border-radius: 3px;
+    background: rgb(0 0 0 / 65%);
+    color: #fff;
+    font-size: 0.7rem;
+    line-height: 1.2;
+}
+
 .media-grid button.is-processing {
     display: flex;
     flex-direction: column;

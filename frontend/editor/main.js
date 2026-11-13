@@ -428,6 +428,19 @@ const moreButton = field('media-more');
 let libraryPage = 1;
 let chosen = [];
 
+// A music note, so a recording stands out among the photos.
+const noteIcon = () => {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.classList.add('tile-icon');
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', 'M9 18V5l12-2v13M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm12-2a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z');
+    svg.append(path);
+
+    return svg;
+};
+
 // Placed where the newest belong, unless the library already shows it.
 const placeTile = (tile, first) => {
     if (first) {
@@ -476,7 +489,11 @@ const addToLibrary = (media, { first = false, before = undefined } = {}) => {
     button.title = media.name;
     button.setAttribute('aria-pressed', 'false');
     if (url === null) {
-        button.textContent = `♪ ${media.name}`;
+        button.classList.add('is-audio');
+        const name = document.createElement('span');
+        name.className = 'tile-name';
+        name.textContent = media.name;
+        button.append(noteIcon(), name);
     } else {
         const image = document.createElement('img');
         image.src = url;
