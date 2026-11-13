@@ -12,6 +12,7 @@
             {% if article.kind == 'article' and article.publishedAt %}
                 <p><time datetime="{{ article.publishedAt|article_iso }}">{{ article.publishedAt|article_date(article.lang) }}</time></p>
             {% endif %}
+            {{ article_cover(article) }}
             {% if article.teaser %}<p class="teaser">{{ article.teaser }}</p>{% endif %}
             {{ article.bodyJson|body_html }}
         </article>

@@ -18,7 +18,7 @@ final readonly class Articles
     private const PLACEHOLDER_TITLE = 'Untitled';
 
     private const COLUMNS = "a.id, a.kind, a.slug, a.lang, a.title, a.teaser, a.body_json::text AS body_json, a.status,
-        a.draft::text AS draft, a.draft_version,
+        a.draft::text AS draft, a.draft_version, a.cover_media_id, a.cover_alt,
         EXTRACT(EPOCH FROM a.published_at)::bigint AS published_at,
         EXTRACT(EPOCH FROM a.updated_at)::bigint AS updated_at,
         EXTRACT(EPOCH FROM a.deleted_at)::bigint AS deleted_at,
@@ -96,12 +96,17 @@ final readonly class Articles
 
             $now = $this->clock->now();
             $update = $this->pdo->prepare(
+                // A cover that isn't an image, or no longer exists, is simply none.
                 "UPDATE article SET slug = ?, lang = ?, title = ?, teaser = ?, body_json = ?, status = 'published',
+                        cover_media_id = (SELECT id FROM media WHERE id = ? AND kind = 'image'), cover_alt = ?,
                         published_at = coalesce(published_at, to_timestamp(?)), updated_at = to_timestamp(?),
                         draft = NULL, draft_version = draft_version + 1, draft_writer = NULL
                  WHERE id = ? AND draft_version = ? AND deleted_at IS NULL",
             );
-            $update->execute([$slug, $input->lang, $input->title, $input->teaser, $input->body, $now, $now, $article->id, $article->draftVersion]);
+            $update->execute([
+                $slug, $input->lang, $input->title, $input->teaser, $input->body, $input->cover, $input->coverAlt,
+                $now, $now, $article->id, $article->draftVersion,
+            ]);
             if ($update->rowCount() !== 1) {
                 throw new StaleDraft();
             }
@@ -367,6 +372,8 @@ final readonly class Articles
             $tags,
             is_string($draft) ? $draft : null,
             Row::int($row, 'draft_version'),
+            Row::intOrNull($row, 'cover_media_id'),
+            Row::str($row, 'cover_alt'),
         );
     }
 

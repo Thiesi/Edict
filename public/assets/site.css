@@ -215,3 +215,30 @@ figcaption {
     top: 50%;
     right: 0.5rem;
 }
+
+figure.article-cover {
+    margin: 1rem 0 1.5rem;
+}
+
+figure.article-cover img,
+.article-cover-thumb img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+}
+
+/* Beside the summary in listings. Themes (S9) will do more with it. */
+.article-cover-thumb {
+    float: right;
+    width: 8rem;
+    margin: 0 0 0.5rem 1rem;
+}
+
+.article-cover-thumb img {
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+}
+
+.articles > li {
+    display: flow-root;
+}

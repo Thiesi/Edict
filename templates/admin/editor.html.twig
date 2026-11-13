@@ -44,6 +44,15 @@
             <input id="title" class="editor-title" value="{{ input.title }}" placeholder="Title" autocomplete="off">
             <label class="editor-label" for="teaser">Teaser</label>
             <textarea id="teaser" class="editor-teaser" rows="2" placeholder="Teaser (optional)">{{ input.teaser }}</textarea>
+            <div class="editor-cover">
+                <input type="hidden" id="cover" value="{{ input.cover }}">
+                <img id="cover-preview" alt="Cover image" hidden>
+                <button type="button" id="cover-choose">Choose a cover image…</button>
+                <button type="button" id="cover-remove" hidden>Remove the cover</button>
+                <label id="cover-alt-field" hidden>Cover description (for screen readers)
+                    <input id="cover-alt" value="{{ input.coverAlt }}" maxlength="500" autocomplete="off">
+                </label>
+            </div>
 
             <div id="bubble-menu" class="bubble-menu" role="toolbar" aria-label="Text formatting">
                 <button type="button" data-command="bold"><strong>B</strong></button>

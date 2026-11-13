@@ -33,6 +33,8 @@ const fields = {
     lang: field('lang'),
     teaser: field('teaser'),
     tags: field('tags'),
+    cover: field('cover'),
+    coverAlt: field('cover-alt'),
 };
 
 const statusLine = field('save-status');
@@ -82,6 +84,8 @@ const draft = () => ({
     lang: fields.lang.value,
     teaser: fields.teaser.value,
     tags: fields.tags ? fields.tags.value : '',
+    cover: fields.cover.value,
+    coverAlt: fields.coverAlt.value,
     body: editor.getJSON(),
 });
 
@@ -309,6 +313,7 @@ field('restore-yes').addEventListener('click', () => {
         }
     });
     editor.commands.setContent(offered.draft.body);
+    showCover();
     removeBackup(offered.key);
     changed();
     offerNextBackup();
@@ -414,9 +419,23 @@ function receiveFiles(list, position) {
 }
 
 field('file-input').addEventListener('change', (event) => {
-    receiveFiles(event.target.files, editor.state.selection.to);
+    if (pickingCover) {
+        uploadForLibrary([...event.target.files]);
+    } else {
+        receiveFiles(event.target.files, editor.state.selection.to);
+    }
     event.target.value = '';
 });
+
+// While choosing a cover: the uploads only go into the open library, to be chosen there.
+async function uploadForLibrary(files) {
+    for (const file of files) {
+        const media = await uploader.upload(file);
+        if (media !== null && !panel.hidden) {
+            addToLibrary(media, { first: true });
+        }
+    }
+}
 
 /* The media library */
 
@@ -427,6 +446,8 @@ const insertButton = field('media-insert');
 const moreButton = field('media-more');
 let libraryPage = 1;
 let chosen = [];
+// The library also picks the cover: one image, which goes into the cover field instead.
+let pickingCover = false;
 
 // A music note, so a recording stands out among the photos.
 const noteIcon = () => {
@@ -492,7 +513,7 @@ const waitingTile = (media, first) => {
 };
 
 const addToLibrary = (media, { first = false, before = undefined } = {}) => {
-    if (!canBeInserted(media) || grid.querySelector(`[data-media-id="${media.id}"], [data-waiting-id="${media.id}"]`) !== null) {
+    if (!canBeInserted(media) || (pickingCover && media.kind !== 'image') || grid.querySelector(`[data-media-id="${media.id}"], [data-waiting-id="${media.id}"]`) !== null) {
         return;
     }
     if (media.status === 'processing') {
@@ -530,6 +551,10 @@ const addToLibrary = (media, { first = false, before = undefined } = {}) => {
     }
     button.addEventListener('click', () => {
         const selected = chosen.includes(media);
+        if (pickingCover && !selected) {
+            grid.querySelectorAll('[aria-pressed="true"]').forEach((other) => other.setAttribute('aria-pressed', 'false'));
+            chosen = [];
+        }
         chosen = selected ? chosen.filter((other) => other !== media) : [...chosen, media];
         button.setAttribute('aria-pressed', String(!selected));
         insertButton.disabled = chosen.length === 0;
@@ -554,7 +579,9 @@ const loadLibrary = async () => {
     libraryPage += 1;
 };
 
-function openLibrary() {
+function openLibrary(forCover = false) {
+    pickingCover = forCover;
+    insertButton.textContent = forCover ? 'Use as cover' : 'Insert';
     panel.hidden = false;
     toggle.setAttribute('aria-expanded', 'true');
     grid.replaceChildren();
@@ -565,6 +592,8 @@ function openLibrary() {
 }
 
 function closeLibrary() {
+    pickingCover = false;
+    insertButton.textContent = 'Insert';
     panel.hidden = true;
     toggle.setAttribute('aria-expanded', 'false');
     // Ends the waiting tiles' polling, which stops once a tile is gone.
@@ -584,6 +613,15 @@ toggle.addEventListener('click', () => {
 moreButton.addEventListener('click', loadLibrary);
 field('media-upload').addEventListener('click', () => field('file-input').click());
 insertButton.addEventListener('click', () => {
+    if (pickingCover) {
+        if (chosen.length > 0) {
+            setCover(chosen[0]);
+        }
+        closeLibrary();
+        field('cover-alt').focus();
+
+        return;
+    }
     if (chosen.length > 0) {
         insertMedia(chosen, editor.state.selection.to);
     }
@@ -595,6 +633,48 @@ insertButton.addEventListener('click', () => {
         closeLibrary();
     }
 });
+
+/* The cover image */
+
+const coverPreview = field('cover-preview');
+
+const showCoverMedia = (media) => {
+    const url = media === null ? null : preview(media);
+    coverPreview.src = url ?? '';
+    coverPreview.hidden = url === null;
+    field('cover-remove').hidden = fields.cover.value === '';
+    field('cover-alt-field').hidden = fields.cover.value === '';
+    field('cover-choose').textContent = fields.cover.value === '' ? 'Choose a cover image…' : 'Choose another…';
+};
+
+function showCover() {
+    const id = fields.cover.value;
+    showCoverMedia(null);
+    if (id === '') {
+        return;
+    }
+    fetch(`/admin/media/${id}`, { credentials: 'same-origin', redirect: 'manual' })
+        .then((response) => (response.ok ? response.json() : null))
+        .then((media) => {
+            if (fields.cover.value === id) {
+                showCoverMedia(media);
+            }
+        })
+        .catch(() => {});
+}
+
+function setCover(media) {
+    fields.cover.value = media === null ? '' : String(media.id);
+    showCoverMedia(media);
+    changed();
+}
+
+field('cover-choose').addEventListener('click', () => openLibrary(true));
+field('cover-remove').addEventListener('click', () => {
+    setCover(null);
+    field('cover-choose').focus();
+});
+showCover();
 
 /* Toolbar */
 

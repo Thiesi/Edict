@@ -7,6 +7,7 @@ use Edict\Auth\OAuth\StreamHttpClient;
 use Edict\Auth\SecretBox;
 use Edict\Clock;
 use Edict\Config;
+use Edict\Content\Article;
 use Edict\Content\ArticleDate;
 use Edict\Content\BodyRenderer;
 use Edict\Database\ConnectionFactory;
@@ -18,6 +19,7 @@ use Slim\Psr7\Factory\ResponseFactory;
 use Twig\Environment;
 use Twig\Loader\FilesystemLoader;
 use Twig\TwigFilter;
+use Twig\TwigFunction;
 
 return [
     Clock::class => DI\autowire(SystemClock::class),
@@ -59,6 +61,11 @@ return [
         $twig->addFilter(new TwigFilter(
             'body_html',
             static fn(string $json): string => $services->get(BodyRenderer::class)->html($json),
+            ['is_safe' => ['html']],
+        ));
+        $twig->addFunction(new TwigFunction(
+            'article_cover',
+            static fn(Article $article, bool $inListing = false): string => $services->get(BodyRenderer::class)->cover($article, $inListing),
             ['is_safe' => ['html']],
         ));
 
