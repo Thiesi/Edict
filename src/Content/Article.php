@@ -26,6 +26,7 @@ final readonly class Article
         public int $draftVersion,
         public ?int $coverMediaId = null,
         public string $coverAlt = '',
+        public ?int $revisedAt = null,
     ) {}
 
     /**
@@ -33,10 +34,14 @@ final readonly class Article
      */
     public function input(): ArticleInput
     {
-        if ($this->draftJson !== null) {
-            return ArticleInput::fromJson($this->draftJson);
-        }
+        return $this->draftJson !== null ? ArticleInput::fromJson($this->draftJson) : $this->liveInput();
+    }
 
+    /**
+     * What readers see now, as the editor's fields.
+     */
+    public function liveInput(): ArticleInput
+    {
         return new ArticleInput(
             $this->title,
             $this->slug,
@@ -93,6 +98,7 @@ final readonly class Article
             $this->draftVersion,
             $input->cover,
             $input->coverAlt,
+            $this->revisedAt,
         );
     }
 }

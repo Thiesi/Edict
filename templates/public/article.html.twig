@@ -10,7 +10,12 @@
         <article lang="{{ article.lang }}">
             <h1>{{ article.title }}</h1>
             {% if article.kind == 'article' and article.publishedAt %}
-                <p><time datetime="{{ article.publishedAt|article_iso }}">{{ article.publishedAt|article_date(article.lang) }}</time></p>
+                <p>
+                    <time datetime="{{ article.publishedAt|article_iso }}">{{ article.publishedAt|article_date(article.lang) }}</time>
+                    {% if article.revisedAt and article.revisedAt - article.publishedAt > 86400 %}
+                        · <span class="updated">{{ article.lang == 'de' ? 'Aktualisiert am' : 'Updated on' }} <time datetime="{{ article.revisedAt|article_iso }}">{{ article.revisedAt|article_date(article.lang) }}</time></span>
+                    {% endif %}
+                </p>
             {% endif %}
             {{ article_cover(article) }}
             {% if article.teaser %}<p class="teaser">{{ article.teaser }}</p>{% endif %}

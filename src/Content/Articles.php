@@ -15,6 +15,7 @@ use Edict\Database\Row;
 final readonly class Articles
 {
     public const TRASH_DAYS = 30;
+    public const KEEP_REVISIONS = 20;
     private const PLACEHOLDER_TITLE = 'Untitled';
 
     private const COLUMNS = "a.id, a.kind, a.slug, a.lang, a.title, a.teaser, a.body_json::text AS body_json, a.status,
@@ -22,6 +23,7 @@ final readonly class Articles
         EXTRACT(EPOCH FROM a.published_at)::bigint AS published_at,
         EXTRACT(EPOCH FROM a.updated_at)::bigint AS updated_at,
         EXTRACT(EPOCH FROM a.deleted_at)::bigint AS deleted_at,
+        EXTRACT(EPOCH FROM a.revised_at)::bigint AS revised_at,
         (SELECT coalesce(json_agg(json_build_object('slug', t.slug, 'name', t.name) ORDER BY t.name), '[]')::text
          FROM article_tag at JOIN tag t ON t.id = at.tag_id WHERE at.article_id = a.id) AS tags";
 
@@ -95,24 +97,122 @@ final readonly class Articles
             }
 
             $now = $this->clock->now();
+            // Changed after its first publish: readers see "Updated on". The same text again isn't a change.
+            $revised = $article->publishedAt !== null && !$article->liveInput()->sameContentAs($input);
             $update = $this->pdo->prepare(
                 // A cover that isn't an image, or no longer exists, is simply none.
                 "UPDATE article SET slug = ?, lang = ?, title = ?, teaser = ?, body_json = ?, status = 'published',
                         cover_media_id = (SELECT id FROM media WHERE id = ? AND kind = 'image'), cover_alt = ?,
                         published_at = coalesce(published_at, to_timestamp(?)), updated_at = to_timestamp(?),
+                        revised_at = CASE WHEN ?::boolean THEN to_timestamp(?) ELSE revised_at END,
                         draft = NULL, draft_version = draft_version + 1, draft_writer = NULL
                  WHERE id = ? AND draft_version = ? AND deleted_at IS NULL",
             );
             $update->execute([
                 $slug, $input->lang, $input->title, $input->teaser, $input->body, $input->cover, $input->coverAlt,
-                $now, $now, $article->id, $article->draftVersion,
+                $now, $now, $revised ? 'true' : 'false', $now, $article->id, $article->draftVersion,
             ]);
             if ($update->rowCount() !== 1) {
                 throw new StaleDraft();
             }
 
             $this->setTags($article->id, $input);
+            $this->keepRevision($article->id, $input, $now);
         });
+    }
+
+    /**
+     * The published versions, newest first.
+     *
+     * @return list<array{id: int, publishedAt: int, title: string}>
+     */
+    public function revisions(int $articleId): array
+    {
+        $stmt = $this->pdo->prepare(
+            "SELECT id, EXTRACT(EPOCH FROM published_at)::bigint AS published_at, content->>'title' AS title
+             FROM article_revision WHERE article_id = ? ORDER BY id DESC",
+        );
+        $stmt->execute([$articleId]);
+        $revisions = [];
+        foreach ($stmt->fetchAll() as $row) {
+            if (is_array($row)) {
+                $revisions[] = ['id' => Row::int($row, 'id'), 'publishedAt' => Row::int($row, 'published_at'), 'title' => is_string($row['title'] ?? null) ? $row['title'] : ''];
+            }
+        }
+
+        return $revisions;
+    }
+
+    /**
+     * Puts a published version into the draft, to be checked and published again.
+     * The live article stays as it is until then.
+     *
+     * @return bool false if there is no such version, or the article is in the trash
+     */
+    public function restoreRevision(int $articleId, int $revisionId): bool
+    {
+        $stmt = $this->pdo->prepare(
+            'UPDATE article a SET draft = r.content, draft_version = a.draft_version + 1, draft_writer = NULL, updated_at = to_timestamp(?)
+             FROM article_revision r WHERE r.id = ? AND r.article_id = a.id AND a.id = ? AND a.deleted_at IS NULL',
+        );
+        $stmt->execute([$this->clock->now(), $revisionId, $articleId]);
+
+        return $stmt->rowCount() === 1;
+    }
+
+    /**
+     * Everything written, for the JSON export: what readers see, the draft, and the tags.
+     *
+     * @return array{exported_at: string, articles: list<array<string, mixed>>, tags: list<array{slug: string, name: string}>}
+     */
+    public function export(): array
+    {
+        $articles = [];
+        $stmt = $this->pdo->query('SELECT ' . self::COLUMNS . ' FROM article a ORDER BY a.id');
+        foreach ($stmt === false ? [] : $stmt->fetchAll() as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $article = self::hydrate($row);
+            $articles[] = [
+                'id' => $article->id,
+                'kind' => $article->kind,
+                'status' => $article->status,
+                'slug' => $article->slug,
+                'lang' => $article->lang,
+                'title' => $article->title,
+                'teaser' => $article->teaser,
+                'body' => Body::decode($article->bodyJson),
+                'tags' => array_column($article->tags, 'name'),
+                'cover_media_id' => $article->coverMediaId,
+                'cover_alt' => $article->coverAlt,
+                'published_at' => $article->publishedAt === null ? null : gmdate(DATE_ATOM, $article->publishedAt),
+                'revised_at' => $article->revisedAt === null ? null : gmdate(DATE_ATOM, $article->revisedAt),
+                'updated_at' => gmdate(DATE_ATOM, $article->updatedAt),
+                'in_trash' => $article->deletedAt !== null,
+                'draft' => $article->draftJson === null ? null : json_decode($article->draftJson, true),
+            ];
+        }
+        $tags = [];
+        $stmt = $this->pdo->query('SELECT slug, name FROM tag ORDER BY name');
+        foreach ($stmt === false ? [] : $stmt->fetchAll() as $row) {
+            if (is_array($row)) {
+                $tags[] = ['slug' => Row::str($row, 'slug'), 'name' => Row::str($row, 'name')];
+            }
+        }
+
+        return ['exported_at' => gmdate(DATE_ATOM, $this->clock->now()), 'articles' => $articles, 'tags' => $tags];
+    }
+
+    private function keepRevision(int $articleId, ArticleInput $input, int $now): void
+    {
+        $this->pdo->prepare('INSERT INTO article_revision (article_id, content, published_at) VALUES (?, ?::jsonb, to_timestamp(?))')
+            ->execute([$articleId, $input->toJson(), $now]);
+        $this->pdo->prepare(
+            'DELETE FROM article_revision WHERE article_id = ? AND id NOT IN (
+                 SELECT id FROM article_revision WHERE article_id = ? ORDER BY id DESC LIMIT ?
+             )',
+        )->execute([$articleId, $articleId, self::KEEP_REVISIONS]);
     }
 
     public function unpublish(int $id): void
@@ -387,6 +487,7 @@ final readonly class Articles
             Row::int($row, 'draft_version'),
             Row::intOrNull($row, 'cover_media_id'),
             Row::str($row, 'cover_alt'),
+            Row::intOrNull($row, 'revised_at'),
         );
     }
 
