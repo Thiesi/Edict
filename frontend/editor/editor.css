@@ -332,15 +332,51 @@
 .media-grid button.is-processing {
     display: flex;
     flex-direction: column;
+    align-items: center;
     justify-content: center;
     gap: 0.25rem;
-    min-height: 6rem;
+    height: calc(6rem + 6px);
     padding: 0.25rem;
     border: 1px dashed #999;
-    overflow-wrap: anywhere;
+    background: #f6f6f6;
     color: #555;
     font-size: 0.75rem;
     cursor: progress;
+}
+
+.tile-spinner {
+    animation: tile-spin 1.1s linear infinite;
+}
+
+.spinner-track {
+    opacity: 0.2;
+}
+
+/* A quarter of the circle. */
+.spinner-arc {
+    stroke-dasharray: 14.14 56.55;
+}
+
+@keyframes tile-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .tile-spinner {
+        animation: none;
+    }
+}
+
+/* Failed: the message says why, and nothing should suggest it is still working. */
+.media-grid button.is-processing:has([role='alert']) .tile-spinner {
+    display: none;
+}
+
+.media-grid button.is-processing:has([role='alert']) {
+    overflow-wrap: anywhere;
+    cursor: default;
 }
 
 .media-grid img {
