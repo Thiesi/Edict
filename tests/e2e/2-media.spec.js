@@ -4,6 +4,7 @@ import { readFileSync, statSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 
 const CHUNK_BYTES = 8_388_608;
+// The library also holds recordings, videos and files by now. Picture tiles insert an image.
 
 const newArticle = async (page) => {
     await page.goto('/admin/articles');
@@ -95,8 +96,8 @@ test('the media library reuses an uploaded image', async ({ page }) => {
 
     await page.locator('#media-toggle').click();
     const panel = page.locator('#media-panel');
-    await expect(panel.locator('button[data-media-id]').first()).toBeVisible();
-    await panel.locator('button[data-media-id]').first().click();
+    await expect(panel.locator('button[data-media-id]:has(img):not(.is-video)').first()).toBeVisible();
+    await panel.locator('button[data-media-id]:has(img):not(.is-video)').first().click();
     await panel.getByRole('button', { name: 'Insert' }).click();
 
     await expect(page.locator('.editor-media img')).toBeVisible();
@@ -151,7 +152,7 @@ test('an upload lands where it was started and replaces nothing', async ({ page 
     await page.keyboard.press('Control+A');
 
     await page.locator('#media-toggle').click();
-    await page.locator('#media-panel button[data-media-id]').first().click();
+    await page.locator('#media-panel button[data-media-id]:has(img):not(.is-video)').first().click();
     await page.locator('#media-panel').getByRole('button', { name: 'Insert' }).click();
 
     await expect(page.locator('.editor-media')).toHaveCount(1);
@@ -161,7 +162,7 @@ test('an upload lands where it was started and replaces nothing', async ({ page 
 test('undo brings back a description and a removed block', async ({ page }) => {
     await newArticle(page);
     await page.locator('#media-toggle').click();
-    await page.locator('#media-panel button[data-media-id]').first().click();
+    await page.locator('#media-panel button[data-media-id]:has(img):not(.is-video)').first().click();
     await page.locator('#media-panel').getByRole('button', { name: 'Insert' }).click();
     const description = page.locator('.editor-media').getByLabel(/Description/);
     await expect(description).toBeVisible();
@@ -245,7 +246,7 @@ test('any other file becomes a download card under its own name', async ({ page,
 test('removing an image block only removes the block', async ({ page }) => {
     await newArticle(page);
     await page.locator('#media-toggle').click();
-    await page.locator('#media-panel button[data-media-id]').first().click();
+    await page.locator('#media-panel button[data-media-id]:has(img):not(.is-video)').first().click();
     await page.locator('#media-panel').getByRole('button', { name: 'Insert' }).click();
     await expect(page.locator('.editor-media')).toHaveCount(1);
 
@@ -258,7 +259,7 @@ test('removing an image block only removes the block', async ({ page }) => {
 test('typing right after inserting an image continues below it, not over it', async ({ page }) => {
     await newArticle(page);
     await page.locator('#media-toggle').click();
-    await page.locator('#media-panel button[data-media-id]').first().click();
+    await page.locator('#media-panel button[data-media-id]:has(img):not(.is-video)').first().click();
     await page.locator('#media-panel').getByRole('button', { name: 'Insert' }).click();
     await expect(page.locator('.editor-media')).toHaveCount(1);
     // Typing while the block was still loading its picture once lost the first letters in CI.
@@ -418,7 +419,7 @@ test('on a phone the library steps aside after inserting', async ({ page }) => {
     await page.setViewportSize({ width: 400, height: 800 });
     await newArticle(page);
     await page.locator('#media-toggle').click();
-    await page.locator('#media-panel button[data-media-id]').first().click();
+    await page.locator('#media-panel button[data-media-id]:has(img):not(.is-video)').first().click();
     await page.locator('#media-panel').getByRole('button', { name: 'Insert' }).click();
 
     await expect(page.locator('#media-panel')).toBeHidden();
