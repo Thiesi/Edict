@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Edict\Http;
 
 use Edict\Auth\Session;
+use Edict\Content\Article;
 use Edict\Content\Articles;
+use Edict\Content\Comments;
 use Edict\Content\Votes;
 use Edict\Http\Middleware\CsrfMiddleware;
 use Edict\Http\Middleware\SessionMiddleware;
@@ -22,7 +24,7 @@ final readonly class PublicController
     private const HOME_ARTICLES = 10;
     private const PER_PAGE = 20;
 
-    public function __construct(private Environment $twig, private Articles $articles, private Votes $votes) {}
+    public function __construct(private Environment $twig, private Articles $articles, private Votes $votes, private Comments $comments) {}
 
     public function home(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
     {
@@ -76,17 +78,7 @@ final readonly class PublicController
         $slug = $args['slug'] ?? '';
         $article = $this->articles->findPublic($slug);
         if ($article !== null) {
-            $session = $request->getAttribute(SessionMiddleware::ATTRIBUTE);
-            $session = $session instanceof Session ? $session : null;
-
-            return $this->render($request, $response, 'public/article.html.twig', [
-                'article' => $article,
-                'preview' => false,
-                'likes' => $article->kind === 'article' ? $this->votes->tally($article->id, $session?->userId) : null,
-                'session' => $session,
-                'banned' => $session !== null && $this->votes->isBanned($session->userId),
-                'csrf_field' => CsrfMiddleware::FIELD,
-            ]);
+            return $this->showArticle($request, $response, $article);
         }
 
         $target = $this->articles->redirectTarget($slug);
@@ -95,6 +87,47 @@ final readonly class PublicController
         }
 
         throw new HttpNotFoundException($request);
+    }
+
+    /**
+     * The article with its likes and comments. A refused comment comes back here, with
+     * the reader's text and what was wrong.
+     *
+     * @param array{error?: string, text?: string, parent?: int|null} $comment
+     */
+    public function showArticle(ServerRequestInterface $request, ResponseInterface $response, Article $article, array $comment = []): ResponseInterface
+    {
+        $session = $request->getAttribute(SessionMiddleware::ATTRIBUTE);
+        $session = $session instanceof Session ? $session : null;
+        $isArticle = $article->kind === 'article';
+        $query = $request->getQueryParams();
+        $isAdmin = $session !== null && $session->isAdmin;
+        $mode = $this->comments->modeOf($article->id);
+
+        return $this->render($request, $response, 'public/article.html.twig', [
+            'article' => $article,
+            'preview' => false,
+            'likes' => $isArticle ? $this->votes->tally($article->id, $session?->userId) : null,
+            'session' => $session,
+            'banned' => $session !== null && $this->votes->isBanned($session->userId),
+            'csrf_field' => CsrfMiddleware::FIELD,
+            'comments' => $isArticle ? [
+                'thread' => $this->comments->thread($article->id, $session?->userId, $isAdmin),
+                'count' => $this->comments->count($article->id),
+                'status' => $this->comments->status($article, $mode),
+                'mode' => $mode,
+                'reply' => self::id($comment['parent'] ?? $query['reply'] ?? null),
+                'edit' => $isAdmin ? self::id($query['edit'] ?? null) : null,
+                'error' => $comment['error'] ?? null,
+                'text' => $comment['text'] ?? '',
+                'posted' => self::id($query['posted'] ?? null),
+            ] : null,
+        ]);
+    }
+
+    private static function id(mixed $value): ?int
+    {
+        return (is_int($value) && $value > 0) || (is_string($value) && preg_match('~^[1-9][0-9]{0,17}$~D', $value) === 1) ? (int) $value : null;
     }
 
     /**

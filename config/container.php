@@ -10,6 +10,7 @@ use Edict\Config;
 use Edict\Content\Article;
 use Edict\Content\ArticleDate;
 use Edict\Content\BodyRenderer;
+use Edict\Content\CommentText;
 use Edict\Database\ConnectionFactory;
 use Edict\Database\Migrator;
 use Edict\Services;
@@ -63,6 +64,8 @@ return [
         $twig->addFunction(new TwigFunction('theme_name', static fn(string $id): string => Themes::ALL[$id]['name'] ?? $id));
         $twig->addFilter(new TwigFilter('article_date', ArticleDate::format(...)));
         $twig->addFilter(new TwigFilter('article_iso', ArticleDate::iso(...)));
+        // Safe: CommentText escapes everything and adds only <p>, <br> and links.
+        $twig->addFilter(new TwigFilter('comment_html', CommentText::html(...), ['is_safe' => ['html']]));
         // Safe because BodyRenderer and Body build HTML from fixed tags and escape all values.
         // Resolved only when used, so pages without an article open no database connection.
         $twig->addFilter(new TwigFilter(

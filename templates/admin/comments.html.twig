@@ -1,0 +1,97 @@
+{% extends 'base.html.twig' %}
+
+{% macro action(id, action, label, csrf_field, csrf_token) %}
+    <form method="post" action="/admin/comments/{{ id }}/{{ action }}" class="inline">
+        <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+        <input type="hidden" name="back" value="queue">
+        <button type="submit">{{ label }}</button>
+    </form>
+{% endmacro %}
+
+{% block title %}Comments · Edict{% endblock %}
+
+{% block body %}
+    {% import _self as self %}
+    <main>
+        <h1>Comments</h1>
+        <p><a href="/admin">Back to admin</a></p>
+
+        <h2>Waiting for approval ({{ held|length }})</h2>
+        {% if held %}
+            <ul>
+                {% for comment in held %}
+                    <li>
+                        <p><strong>{{ comment.author }}</strong> on <a href="/{{ comment.slug }}#comment-{{ comment.id }}">{{ comment.title }}</a>, {{ comment.createdAt|date('Y-m-d H:i') }}</p>
+                        <blockquote>{{ comment.body|comment_html }}</blockquote>
+                        {{ self.action(comment.id, 'approve', 'Approve', csrf_field, csrf_token) }}
+                        {{ self.action(comment.id, 'delete', 'Remove', csrf_field, csrf_token) }}
+                        {% if comment.authorId and not comment.trusted %}{{ self.action(comment.id, 'trust', 'Approve author', csrf_field, csrf_token) }}{% endif %}
+                        {% if comment.authorId %}{{ self.action(comment.id, 'ban', 'Ban author for 7 days', csrf_field, csrf_token) }}{% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>Nothing is waiting.</p>
+        {% endif %}
+
+        <h2>Latest comments</h2>
+        {% if recent %}
+            <ul>
+                {% for comment in recent %}
+                    <li>
+                        <p><strong>{{ comment.author }}</strong> on <a href="/{{ comment.slug }}#comment-{{ comment.id }}">{{ comment.title }}</a>, {{ comment.createdAt|date('Y-m-d H:i') }}</p>
+                        <blockquote>{{ comment.body|comment_html }}</blockquote>
+                        {{ self.action(comment.id, 'delete', 'Remove', csrf_field, csrf_token) }}
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>No comments yet.</p>
+        {% endif %}
+
+        <h2>Banned accounts</h2>
+        {% if banned %}
+            <ul>
+                {% for user in banned %}
+                    <li>
+                        {{ user.name }}, {{ user.until > 253000000000 ? 'for good' : 'until ' ~ user.until|date('Y-m-d H:i') }}
+                        <form method="post" action="/admin/users/{{ user.id }}/unban" class="inline">
+                            <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                            <button type="submit">Lift the ban</button>
+                        </form>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>Nobody is banned.</p>
+        {% endif %}
+
+        <h2>Rules</h2>
+        {% if saved %}<p role="status">Saved.</p>{% endif %}
+        {% if errors %}<p role="alert">Please check the marked fields. Nothing was saved.</p>{% endif %}
+        <form method="post" action="/admin/comments/rules">
+            <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+            <fieldset>
+                <legend>New comments, unless an article says otherwise</legend>
+                <label><input type="radio" name="comment_default" value="open"{% if rules.comment_default|default('open') != 'hold' %} checked{% endif %}> appear immediately</label><br>
+                <label><input type="radio" name="comment_default" value="hold"{% if rules.comment_default|default('') == 'hold' %} checked{% endif %}> wait for approval (approved authors skip this)</label>
+            </fieldset>
+            <p>
+                <label for="auto-close">Close comments this many days after publishing (0 for never)</label><br>
+                <input id="auto-close" name="comment_auto_close_days" inputmode="numeric" value="{{ rules.comment_auto_close_days|default('0') }}" size="5"{% if errors.comment_auto_close_days is defined %} aria-invalid="true"{% endif %}>
+                {% if errors.comment_auto_close_days is defined %}<br><small>{{ errors.comment_auto_close_days }}</small>{% endif %}
+            </p>
+            <p>
+                <label for="words">Word filter: one word or phrase per line</label><br>
+                <textarea id="words" name="comment_words" rows="6" cols="40"{% if errors.comment_words is defined %} aria-invalid="true"{% endif %}>{{ rules.comment_words|default('') }}</textarea>
+                {% if errors.comment_words is defined %}<br><small>{{ errors.comment_words }}</small>{% endif %}
+            </p>
+            <fieldset>
+                <legend>A comment with one of them</legend>
+                <label><input type="radio" name="comment_word_action" value="hold"{% if rules.comment_word_action|default('hold') != 'reject' %} checked{% endif %}> waits for approval</label><br>
+                <label><input type="radio" name="comment_word_action" value="reject"{% if rules.comment_word_action|default('') == 'reject' %} checked{% endif %}> is refused</label>
+            </fieldset>
+            <p><button type="submit">Save rules</button></p>
+        </form>
+    </main>
+{% endblock %}
