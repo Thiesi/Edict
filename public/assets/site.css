@@ -131,10 +131,15 @@ hr {
     color: var(--header-fg);
 }
 
-.site-header-inner,
+/* Their text lines up: the content and footer carry their gutters inside their width. */
+.site-header-inner {
+    max-width: var(--measure);
+    margin: 0 auto;
+}
+
 .site-content,
 .site-footer {
-    max-width: var(--measure);
+    max-width: calc(var(--measure) + 2 * var(--gutter));
     margin: 0 auto;
 }
 

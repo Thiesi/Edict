@@ -1,0 +1,133 @@
+/*
+ * Almanac: warm paper, a notebook feel, generous margins, friendly old-style type.
+ */
+@import '@fontsource/crimson-pro/latin-400.css';
+@import '@fontsource/crimson-pro/latin-400-italic.css';
+@import '@fontsource/crimson-pro/latin-600.css';
+@import '@fontsource/crimson-pro/latin-700.css';
+
+:root {
+    --font-body: 'Crimson Pro', 'Iowan Old Style', Georgia, serif;
+    --font-heading: var(--font-body);
+    --bg: #f5eedf;
+    --fg: #2b2620;
+    --muted: #6a5e4e;
+    --accent: #2f5d50;
+    --accent-fg: #fff;
+    --border: #d9ccb2;
+    --surface: #ece2cd;
+    --margin-line: #c8786a;
+    --measure: 38rem;
+    --gutter: 1.5rem;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #221e19;
+        --fg: #eadfca;
+        --muted: #b8aa92;
+        --accent: #8fcab6;
+        --accent-fg: #221e19;
+        --border: #4a4236;
+        --surface: #2c2720;
+        --margin-line: #b06a5d;
+    }
+}
+
+body {
+    font-size: 1.25rem;
+    line-height: 1.65;
+}
+
+.site-header {
+    padding: 2.5rem var(--gutter) 1rem;
+}
+
+.site-title {
+    font-size: 2.1rem;
+    font-style: italic;
+    font-weight: 600;
+}
+
+.site-description {
+    font-style: italic;
+}
+
+.site-nav a {
+    text-decoration: none;
+    border-bottom: 1px dotted currentColor;
+}
+
+/* A notebook page, with its red margin line. */
+.site-content {
+    padding: 1.5rem var(--gutter) 2rem calc(var(--gutter) + 1.25rem);
+    border-left: 2px solid var(--margin-line);
+}
+
+h1,
+h2,
+h3 {
+    font-weight: 600;
+}
+
+article > h1 {
+    font-size: 2.4rem;
+}
+
+article > p:has(> time) {
+    font-style: italic;
+}
+
+.home-heading {
+    font-size: 1.1rem;
+    font-style: italic;
+    font-weight: 400;
+    color: var(--muted);
+}
+
+.articles > li {
+    margin-bottom: 2rem;
+}
+
+.articles h2 {
+    margin-bottom: 0;
+    font-size: 1.6rem;
+}
+
+.articles h2 a {
+    color: var(--fg);
+    text-decoration: none;
+}
+
+.articles h2 a:hover {
+    color: var(--accent);
+}
+
+.article-cover-thumb img {
+    padding: 0.35rem 0.35rem 1rem;
+    background: #fff;
+    box-shadow: 0 1px 3px rgb(0 0 0 / 25%);
+    transform: rotate(2deg);
+}
+
+.teaser {
+    color: var(--muted);
+}
+
+blockquote {
+    border-left: 0;
+    font-style: italic;
+}
+
+blockquote::before {
+    content: '“';
+    float: left;
+    margin: -0.4rem 0.4rem 0 -0.2rem;
+    color: var(--margin-line);
+    font-size: 3rem;
+    line-height: 1;
+}
+
+.site-footer {
+    font-style: italic;
+}
