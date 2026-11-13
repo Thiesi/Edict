@@ -9,9 +9,11 @@ namespace Edict\Media;
  * lut3d filter applies. The host's ffmpeg has no zscale or libplacebo, the usual tools.
  *
  * The table maps BT.2020 RGB, encoded with PQ (HDR10, HDR10+) or HLG (iPhones), to BT.709
- * RGB for an ordinary screen. Brightness follows ITU-R BT.2390: the HDR reference white of
- * 203 nits (BT.2408) becomes the screen's white, and anything brighter is rolled off into
- * the top of the range instead of clipping. The curve follows each colour's brightest
+ * RGB for an ordinary screen. Brightness follows ITU-R BT.2390: 400 nits becomes the
+ * screen's white, and anything brighter is rolled off into the top of the range instead
+ * of clipping. That puts the HDR reference white of 203 nits (BT.2408), where white walls
+ * and paper sit, about a stop below the screen's white, leaving room for lamps and sky,
+ * close to how phones themselves turn their HDR footage into ordinary pictures. The curve follows each colour's brightest
  * channel, so bright colours keep their saturation, and colours the smaller gamut can't
  * show are desaturated towards their own grey.
  */
@@ -23,8 +25,11 @@ final class ToneMap
     public const PQ = 'smpte2084';
     public const HLG = 'arib-std-b67';
 
-    /** Nits that become the screen's white. */
-    private const TARGET_WHITE = 203.0;
+    /** Nits that become the screen's white. At 203, white walls and lamps came out the same white. */
+    private const TARGET_WHITE = 400.0;
+
+    /** BT.2408's reference white: paper, a white wall. */
+    public const REFERENCE_WHITE = 203.0;
 
     /** Brightest source nits kept apart; what most phones master to. Brighter is rolled off to white. */
     private const SOURCE_PEAK = 1000.0;
