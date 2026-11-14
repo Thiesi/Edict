@@ -47,5 +47,14 @@
             {% if not pages %}<p><small>Write and publish the Impressum and Datenschutz as <a href="/admin/articles?kind=page">pages</a>, then choose them here. A German site can't go live without them.</small></p>{% endif %}
             <p><button type="submit">Save</button></p>
         </form>
+
+        <h2>Start the legal pages from a template</h2>
+        <p>Each creates a page draft in German, written for how Edict works: no trackers, no fonts from elsewhere, sign-in through Google or Twitch with only an ID and a name, comments and likes. Fill in everything in [brackets] and check it before publishing. It's a starting point, not legal advice.</p>
+        {% for which, label in {imprint: 'Impressum draft', privacy: 'Datenschutz draft'} %}
+            <form method="post" action="/admin/site/legal/{{ which }}">
+                <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                <button type="submit">Create the {{ label }}</button>
+            </form>
+        {% endfor %}
     </main>
 {% endblock %}

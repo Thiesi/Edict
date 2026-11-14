@@ -10,6 +10,7 @@ use Dotenv\Dotenv;
 use Edict\Http\ErrorPage;
 use Edict\Http\Middleware\CsrfMiddleware;
 use Edict\Http\Middleware\RawCookieMiddleware;
+use Edict\Http\Middleware\SecurityHeadersMiddleware;
 use Edict\Http\Middleware\SessionMiddleware;
 use Edict\Http\Middleware\SitePreviewMiddleware;
 use Psr\Http\Message\ResponseInterface;
@@ -73,6 +74,9 @@ final class Kernel
                 fn(ServerRequestInterface $request, \Throwable $error, bool $display): ResponseInterface => $default($request, $error, $display, false, false),
             );
         }
+
+        // Outermost, so error pages get the headers too.
+        $app->add(SecurityHeadersMiddleware::class);
 
         return $app;
     }
