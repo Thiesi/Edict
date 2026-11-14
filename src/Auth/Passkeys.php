@@ -169,9 +169,31 @@ final readonly class Passkeys
         return $passkeys;
     }
 
-    public function remove(int $userId, int $id): void
+    /**
+     * @return bool false if the name isn't usable or the passkey isn't this user's
+     */
+    public function rename(int $userId, int $id, string $name): bool
     {
-        $this->pdo->prepare('DELETE FROM passkey WHERE id = ? AND user_id = ?')->execute([$id, $userId]);
+        $clean = self::cleanName($name);
+        if ($clean === null) {
+            return false;
+        }
+        $stmt = $this->pdo->prepare('UPDATE passkey SET name = ? WHERE id = ? AND user_id = ?');
+        $stmt->execute([$clean, $id, $userId]);
+
+        return $stmt->rowCount() === 1;
+    }
+
+    /**
+     * @return string|null the removed passkey's name
+     */
+    public function remove(int $userId, int $id): ?string
+    {
+        $stmt = $this->pdo->prepare('DELETE FROM passkey WHERE id = ? AND user_id = ? RETURNING name');
+        $stmt->execute([$id, $userId]);
+        $name = $stmt->fetchColumn();
+
+        return is_string($name) ? $name : null;
     }
 
     /**

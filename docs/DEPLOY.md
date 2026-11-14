@@ -104,7 +104,7 @@ TWITCH_OIDC_CLIENT_SECRET=
 DATA_DIR=/home/edictstg/data
 FFMPEG_BIN=/usr/pkg/bin/ffmpeg8   # pkgsrc installs them under versioned names
 FFPROBE_BIN=/usr/pkg/bin/ffprobe8
-ALERT_EMAIL=         # comment alerts go here; with MAIL_FROM empty, none are sent
+ALERT_EMAIL=         # optional fallback: the admin's address on /account wins; with MAIL_FROM empty, nothing is sent
 MAIL_FROM=           # a real mailbox @NetWorkXXIII.de: DMARC is p=reject, bounces go here
 # SENDMAIL_BIN=/usr/sbin/sendmail   # mailwrapper → pkgsrc Postfix, which relays via Mail
 ```

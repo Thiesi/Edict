@@ -9,6 +9,7 @@ use Edict\Content\Articles;
 use Edict\Content\Comments;
 use Edict\Http\Middleware\CsrfMiddleware;
 use Edict\Http\Middleware\SessionMiddleware;
+use Edict\Mail\Mailer;
 use Edict\Site\Settings;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -29,6 +30,7 @@ final readonly class CommentController
         private PublicController $public,
         private Settings $settings,
         private Environment $twig,
+        private Mailer $mailer,
     ) {}
 
     /**
@@ -151,7 +153,9 @@ final readonly class CommentController
                 'comment_auto_close_days' => (string) $rules->autoCloseDays,
                 'comment_words' => implode("\n", $rules->words),
                 'comment_word_action' => $rules->wordAction,
+                'comment_alerts' => $rules->alerts ? '1' : '',
             ],
+            'alert_to' => $this->mailer->isConfigured() ? $this->mailer->recipient() : null,
             'errors' => $errors,
             'saved' => ($request->getQueryParams()['saved'] ?? null) === '1',
             'csrf_field' => CsrfMiddleware::FIELD,

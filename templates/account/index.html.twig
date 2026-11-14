@@ -61,8 +61,22 @@
                 <button type="submit">Add {{ provider.label }} login</button>
             </form>
         {% endfor %}
-        {% if is_admin %}
-            <p>Logins for the admin account are managed on the command line.</p>
+        {% if is_admin and providers %}
+            <form method="post" action="/account/admin-logins">
+                <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                <p>Changing how the admin signs in needs your password and authenticator code. Removing a login ends every other admin session.</p>
+                <p><label>Password <input name="password" type="password" autocomplete="current-password" required></label></p>
+                <p><label>Authenticator code <input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required></label></p>
+                <p>
+                    {% for provider in providers %}
+                        {% if provider.name in identities|map(i => i.provider) %}
+                            <button type="submit" name="action" value="remove:{{ provider.name }}">Remove {{ provider.label }} login</button>
+                        {% else %}
+                            <button type="submit" name="action" value="add:{{ provider.name }}">Add {{ provider.label }} login</button>
+                        {% endif %}
+                    {% endfor %}
+                </p>
+            </form>
         {% endif %}
 
         {% if linkable and not welcome %}
@@ -74,6 +88,18 @@
                     <button type="submit">Combine with my {{ provider.label }} account</button>
                 </form>
             {% endfor %}
+        {% endif %}
+
+        {% if is_admin %}
+            <h2>Notifications</h2>
+            <form method="post" action="/account/admin-email">
+                <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                <p>Comment alerts and security notices (a login or passkey added or removed) go to this address. It is never used to sign in or to reset anything. Leave it empty to use <code>ALERT_EMAIL</code> from the server’s settings instead. Comment alerts can be switched off under <a href="/admin/comments">Comments</a>.</p>
+                <p><label>Email <input name="email" type="email" value="{{ admin_email }}" maxlength="254" autocomplete="email"></label></p>
+                <p><label>Password <input name="password" type="password" autocomplete="current-password" required></label></p>
+                <p><label>Authenticator code <input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required></label></p>
+                <p><button type="submit">Save address</button></p>
+            </form>
         {% endif %}
 
         <h2>Sessions</h2>

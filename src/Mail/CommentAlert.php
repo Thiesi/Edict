@@ -21,7 +21,7 @@ final readonly class CommentAlert
 
     public function send(int $commentId): void
     {
-        if (!$this->mailer->isConfigured()) {
+        if (!$this->settings->commentRules()->alerts || !$this->mailer->isConfigured()) {
             return;
         }
         $stmt = $this->pdo->prepare(
@@ -52,7 +52,7 @@ final readonly class CommentAlert
                 'Everything waiting: ' . $this->config->appUrl . '/admin/comments',
                 '',
                 '-- ',
-                'Sent by Edict because ALERT_EMAIL is set on ' . (parse_url($this->config->appUrl, PHP_URL_HOST) ?: 'this site') . '.',
+                'Sent by Edict on ' . (parse_url($this->config->appUrl, PHP_URL_HOST) ?: 'this site') . '. Switch these alerts off: ' . $this->config->appUrl . '/admin/comments',
             ]),
         );
     }

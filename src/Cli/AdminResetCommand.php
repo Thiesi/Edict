@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Edict\Cli;
 
 use Edict\Auth\AdminAccount;
+use Edict\Mail\SecurityNotice;
 use Edict\Services;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -29,6 +30,7 @@ final class AdminResetCommand extends Command
 
         $password = CredentialPrompt::newPassword($helper, $input, $output);
         $result = $this->services->get(AdminAccount::class)->reset($password);
+        $this->services->get(SecurityNotice::class)->record('The admin password and authenticator were reset on the command line; all passkeys were removed and all admin sessions ended');
 
         $output->writeln("Credentials for '{$result['username']}' reset; all passkeys removed and all admin sessions ended.");
         CredentialPrompt::showTotp($output, $result['secret'], $result['username']);

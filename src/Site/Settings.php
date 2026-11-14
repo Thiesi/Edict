@@ -65,6 +65,7 @@ final class Settings
             is_int($days) && $days > 0 ? $days : 0,
             $words,
             ($values['comment_word_action'] ?? null) === 'reject' ? 'reject' : 'hold',
+            ($values['comment_alerts'] ?? true) !== false,
         );
     }
 
@@ -103,6 +104,7 @@ final class Settings
                 'comment_auto_close_days' => (int) $days,
                 'comment_words' => $words,
                 'comment_word_action' => $action === 'reject' ? 'reject' : 'hold',
+                'comment_alerts' => self::field($form, 'comment_alerts') === '1',
             ]);
         }
 

@@ -45,6 +45,8 @@ return static function (App $app): void {
         $group->post('/link/{provider}', [OAuthController::class, 'startLink']);
         $group->post('/combine/{provider}', [OAuthController::class, 'startCombine']);
         $group->post('/unlink/{provider}', [AccountController::class, 'unlink']);
+        $group->post('/admin-logins', [OAuthController::class, 'adminLogins']);
+        $group->post('/admin-email', [AccountController::class, 'adminEmail']);
         $group->post('/logout', [AccountController::class, 'logout']);
         $group->post('/logout-everywhere', [AccountController::class, 'logoutEverywhere']);
         $group->post('/delete', [AccountController::class, 'delete']);
@@ -62,6 +64,7 @@ return static function (App $app): void {
         $group->get('/passkeys', [PasskeyController::class, 'manage']);
         $group->post('/passkeys', [PasskeyController::class, 'register']);
         $group->post('/passkeys/options', [PasskeyController::class, 'registerOptions']);
+        $group->post('/passkeys/{id}/rename', [PasskeyController::class, 'rename']);
         $group->post('/passkeys/{id}/remove', [PasskeyController::class, 'remove']);
 
         $group->post('/uploads', [MediaController::class, 'begin']);

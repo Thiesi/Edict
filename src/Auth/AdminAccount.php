@@ -100,6 +100,39 @@ final readonly class AdminAccount
         return ['username' => Row::str($row, 'username'), 'secret' => $secret];
     }
 
+    public function email(): ?string
+    {
+        $stmt = $this->pdo->query('SELECT c.email FROM admin_credential c JOIN app_user u ON u.id = c.user_id WHERE u.is_admin');
+        $row = $stmt === false ? false : $stmt->fetch();
+        $email = is_array($row) ? ($row['email'] ?? null) : null;
+
+        return is_string($email) ? $email : null;
+    }
+
+    /**
+     * Only for notifications: never used to sign in or to reset anything.
+     *
+     * @return string|null the stored address, null when removed
+     *
+     * @throws \InvalidArgumentException for an address that isn't one
+     * @throws \DomainException if there is no admin yet
+     */
+    public function setEmail(string $email): ?string
+    {
+        $email = trim($email);
+        $clean = $email === '' ? null : filter_var($email, FILTER_VALIDATE_EMAIL);
+        if ($clean === false || ($clean !== null && strlen($clean) > 254)) {
+            throw new \InvalidArgumentException('That is not a usable email address.');
+        }
+        $stmt = $this->pdo->prepare('UPDATE admin_credential SET email = ?, updated_at = now() WHERE user_id = (SELECT id FROM app_user WHERE is_admin)');
+        $stmt->execute([$clean]);
+        if ($stmt->rowCount() !== 1) {
+            throw new \DomainException('No admin exists yet. Use admin:create first.');
+        }
+
+        return $clean;
+    }
+
     public function usernameOf(int $userId): ?string
     {
         $stmt = $this->pdo->prepare('SELECT username FROM admin_credential WHERE user_id = ?');

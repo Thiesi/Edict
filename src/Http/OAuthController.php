@@ -16,6 +16,7 @@ use Edict\Auth\Session;
 use Edict\Auth\SessionStore;
 use Edict\Config;
 use Edict\Http\Middleware\SessionMiddleware;
+use Edict\Mail\SecurityNotice;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Slim\Exception\HttpNotFoundException;
@@ -37,6 +38,8 @@ final readonly class OAuthController
         private LoginThrottle $throttle,
         private Config $config,
         private LastProviderCookie $lastProvider,
+        private StepUp $stepUp,
+        private SecurityNotice $notices,
     ) {}
 
     public function showLogin(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
@@ -83,6 +86,48 @@ final readonly class OAuthController
         }
 
         return $this->leaveFor($provider, $this->flowCookie->begin($provider->name, '/account', $session->userId), $response);
+    }
+
+    /**
+     * Adds or removes a Google or Twitch login of the admin. Each change needs the
+     * password and authenticator code, so a stolen session alone can't leave a
+     * way in behind or lock the owner out. The command line (admin:allow,
+     * admin:disallow) stays as the way back.
+     */
+    public function adminLogins(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
+    {
+        $session = self::session($request);
+        if ($session === null || !$session->isAdmin) {
+            return self::redirect($response, '/account');
+        }
+        $body = $request->getParsedBody();
+        $action = AdminAuthController::credential($body, 'action');
+        [$verb, $name] = array_pad(explode(':', $action, 2), 2, '');
+        $provider = $this->providers->get($name);
+        if (!in_array($verb, ['add', 'remove'], true) || $provider === null) {
+            return self::redirect($response, '/account');
+        }
+
+        $confirmed = $this->stepUp->confirm($request, $session);
+        if ($confirmed !== 'ok') {
+            return self::redirect($response, '/account?notice=' . $confirmed);
+        }
+
+        if ($verb === 'add') {
+            return $this->leaveFor($provider, $this->flowCookie->begin($provider->name, '/account', $session->userId), $response);
+        }
+
+        $removed = false;
+        foreach ($this->accounts->identities($session->userId) as $identity) {
+            if ($identity['provider'] === $provider->name) {
+                $removed = $this->accounts->disallowForAdmin($identity['provider'], $identity['subject'], $session->tokenHash);
+            }
+        }
+        if ($removed) {
+            $this->notices->record("The admin's {$provider->label} login was removed, and every other admin session ended");
+        }
+
+        return self::redirect($response, '/account?notice=' . ($removed ? 'admin-unlinked' : 'not-linked'));
     }
 
     /**
@@ -176,9 +221,13 @@ final readonly class OAuthController
 
     private function link(ProviderIdentity $identity, int $linkUserId, bool $combine, ?Session $session, ResponseInterface $response): ResponseInterface
     {
-        // The account that asked must still be the one signed in, and never the admin.
-        if ($session === null || $session->userId !== $linkUserId || $session->isAdmin) {
+        // The account that asked must still be the one signed in.
+        if ($session === null || $session->userId !== $linkUserId || ($session->isAdmin && $combine)) {
             return self::redirect($response, ($session === null ? '/login' : '/account') . '?notice=expired');
+        }
+        if ($session->isAdmin) {
+            // Only adminLogins starts an admin flow, after checking the password and code.
+            return self::redirect($response, '/account?notice=' . $this->allowForAdmin($identity));
         }
         if (!$combine) {
             return self::redirect($response, '/account?notice=' . $this->accounts->link($linkUserId, $identity));
@@ -197,6 +246,25 @@ final readonly class OAuthController
         };
 
         return self::redirect($response, '/account?notice=' . $notice);
+    }
+
+    private function allowForAdmin(ProviderIdentity $identity): string
+    {
+        try {
+            $result = $this->accounts->allowForAdmin($identity->provider, $identity->subject);
+        } catch (\DomainException) {
+            return 'provider-in-use';
+        }
+        if ($result !== 'unchanged') {
+            $label = $this->providers->get($identity->provider)->label ?? $identity->provider;
+            $this->notices->record("A $label login was added to the admin account" . ($result === 'moved' ? ', taken from a reader account' : ''));
+        }
+
+        return match ($result) {
+            'added' => 'linked',
+            'moved' => 'admin-moved',
+            'unchanged' => 'already',
+        };
     }
 
     private function leaveFor(Provider $provider, FlowState $flow, ResponseInterface $response): ResponseInterface

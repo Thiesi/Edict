@@ -91,6 +91,11 @@
                 <label><input type="radio" name="comment_word_action" value="hold"{% if rules.comment_word_action|default('hold') != 'reject' %} checked{% endif %}> waits for approval</label><br>
                 <label><input type="radio" name="comment_word_action" value="reject"{% if rules.comment_word_action|default('') == 'reject' %} checked{% endif %}> is refused</label>
             </fieldset>
+            <fieldset>
+                <legend>Alerts</legend>
+                <label><input type="checkbox" name="comment_alerts" value="1"{% if rules.comment_alerts|default('') == '1' %} checked{% endif %}> Email me about each new comment, and each one waiting for approval</label>
+                <br><small>{% if alert_to %}They go to {{ alert_to }}.{% else %}Nothing can be sent yet: set your address on <a href="/account">your account</a>, and the server needs <code>MAIL_FROM</code>.{% endif %}</small>
+            </fieldset>
             <p><button type="submit">Save rules</button></p>
         </form>
     </main>

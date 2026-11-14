@@ -283,15 +283,16 @@ final readonly class Accounts
 
     /**
      * Removes an allow-listed account and ends all admin sessions, since one of
-     * them may have been opened with the account being removed.
+     * them may have been opened with the account being removed. A session that
+     * has just confirmed the password and code may stay.
      *
      * @return bool false if that account was not allow-listed
      *
      * @throws \DomainException if there is no admin yet
      */
-    public function disallowForAdmin(string $provider, string $subject): bool
+    public function disallowForAdmin(string $provider, string $subject, ?string $keepTokenHash = null): bool
     {
-        return $this->transaction(function () use ($provider, $subject): bool {
+        return $this->transaction(function () use ($provider, $subject, $keepTokenHash): bool {
             $adminId = $this->adminId();
 
             $stmt = $this->pdo->prepare('DELETE FROM user_identity WHERE provider = ? AND subject = ? AND user_id = ?');
@@ -300,7 +301,7 @@ final readonly class Accounts
                 return false;
             }
 
-            $this->pdo->prepare('DELETE FROM session WHERE user_id = ?')->execute([$adminId]);
+            $this->pdo->prepare('DELETE FROM session WHERE user_id = ? AND token_hash IS DISTINCT FROM ?')->execute([$adminId, $keepTokenHash]);
 
             return true;
         });
