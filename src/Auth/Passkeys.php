@@ -184,9 +184,16 @@ final readonly class Passkeys
         return $stmt->rowCount() === 1;
     }
 
-    public function remove(int $userId, int $id): void
+    /**
+     * @return string|null the removed passkey's name
+     */
+    public function remove(int $userId, int $id): ?string
     {
-        $this->pdo->prepare('DELETE FROM passkey WHERE id = ? AND user_id = ?')->execute([$id, $userId]);
+        $stmt = $this->pdo->prepare('DELETE FROM passkey WHERE id = ? AND user_id = ? RETURNING name');
+        $stmt->execute([$id, $userId]);
+        $name = $stmt->fetchColumn();
+
+        return is_string($name) ? $name : null;
     }
 
     /**

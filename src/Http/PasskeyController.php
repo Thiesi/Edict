@@ -13,6 +13,7 @@ use Edict\Auth\SessionStore;
 use Edict\Config;
 use Edict\Http\Middleware\CsrfMiddleware;
 use Edict\Http\Middleware\SessionMiddleware;
+use Edict\Mail\SecurityNotice;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Twig\Environment;
@@ -32,6 +33,7 @@ final readonly class PasskeyController
         private ChallengeCookie $challengeCookie,
         private LoginThrottle $throttle,
         private Config $config,
+        private SecurityNotice $notices,
     ) {}
 
     public function loginOptions(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
@@ -166,6 +168,7 @@ final readonly class PasskeyController
 
             return self::json($response->withStatus(400), ['error' => 'That passkey could not be added.']);
         }
+        $this->notices->record('A passkey named "' . (Passkeys::cleanName(AdminAuthController::credential($body, 'name')) ?? '') . '" was added to the admin account');
 
         return self::json($response, ['redirect' => '/admin/passkeys']);
     }
@@ -190,8 +193,9 @@ final readonly class PasskeyController
     public function remove(ServerRequestInterface $request, ResponseInterface $response, array $args): ResponseInterface
     {
         $id = $args['id'] ?? '';
-        if (ctype_digit($id)) {
-            $this->passkeys->remove(self::requireSession($request)->userId, (int) $id);
+        $name = ctype_digit($id) ? $this->passkeys->remove(self::requireSession($request)->userId, (int) $id) : null;
+        if ($name !== null) {
+            $this->notices->record('The passkey named "' . $name . '" was removed from the admin account');
         }
 
         return $response->withStatus(303)->withHeader('Location', '/admin/passkeys');

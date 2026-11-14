@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Edict\Http;
 
 use Edict\Auth\Accounts;
-use Edict\Auth\AdminAccount;
 use Edict\Auth\LoginThrottle;
 use Edict\Auth\OAuth\FlowState;
 use Edict\Auth\OAuth\OAuthClient;
@@ -17,6 +16,7 @@ use Edict\Auth\Session;
 use Edict\Auth\SessionStore;
 use Edict\Config;
 use Edict\Http\Middleware\SessionMiddleware;
+use Edict\Mail\SecurityNotice;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Slim\Exception\HttpNotFoundException;
@@ -38,7 +38,8 @@ final readonly class OAuthController
         private LoginThrottle $throttle,
         private Config $config,
         private LastProviderCookie $lastProvider,
-        private AdminAccount $admin,
+        private StepUp $stepUp,
+        private SecurityNotice $notices,
     ) {}
 
     public function showLogin(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
@@ -107,25 +108,10 @@ final readonly class OAuthController
             return self::redirect($response, '/account');
         }
 
-        $username = $this->admin->usernameOf($session->userId);
-        if ($username === null) {
-            return self::redirect($response, '/account?notice=admin-cli');
+        $confirmed = $this->stepUp->confirm($request, $session);
+        if ($confirmed !== 'ok') {
+            return self::redirect($response, '/account?notice=' . $confirmed);
         }
-        $ip = self::clientIp($request);
-        if ($this->throttle->isBlocked($ip, $username)) {
-            return self::redirect($response, '/account?notice=throttled');
-        }
-        // Recorded before the slow check, so parallel requests can't all pass the limit.
-        $this->throttle->recordFailure($ip, $username);
-        $verified = $this->admin->verify(
-            $username,
-            AdminAuthController::credential($body, 'password'),
-            AdminAuthController::credential($body, 'code'),
-        );
-        if ($verified !== $session->userId) {
-            return self::redirect($response, '/account?notice=admin-not-confirmed');
-        }
-        $this->throttle->clear($ip, $username);
 
         if ($verb === 'add') {
             return $this->leaveFor($provider, $this->flowCookie->begin($provider->name, '/account', $session->userId), $response);
@@ -138,7 +124,7 @@ final readonly class OAuthController
             }
         }
         if ($removed) {
-            $this->audit("removed the admin's {$provider->name} login; other admin sessions ended");
+            $this->notices->record("The admin's {$provider->label} login was removed, and every other admin session ended");
         }
 
         return self::redirect($response, '/account?notice=' . ($removed ? 'admin-unlinked' : 'not-linked'));
@@ -270,7 +256,8 @@ final readonly class OAuthController
             return 'provider-in-use';
         }
         if ($result !== 'unchanged') {
-            $this->audit("added a {$identity->provider} login to the admin" . ($result === 'moved' ? ', taken from a reader account' : ''));
+            $label = $this->providers->get($identity->provider)->label ?? $identity->provider;
+            $this->notices->record("A $label login was added to the admin account" . ($result === 'moved' ? ', taken from a reader account' : ''));
         }
 
         return match ($result) {
@@ -278,13 +265,6 @@ final readonly class OAuthController
             'moved' => 'admin-moved',
             'unchanged' => 'already',
         };
-    }
-
-    private function audit(string $what): void
-    {
-        if ($this->config->env !== 'test') {
-            error_log('Edict security: ' . $what);
-        }
     }
 
     private function leaveFor(Provider $provider, FlowState $flow, ResponseInterface $response): ResponseInterface

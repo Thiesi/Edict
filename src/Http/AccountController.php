@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace Edict\Http;
 
 use Edict\Auth\Accounts;
+use Edict\Auth\AdminAccount;
 use Edict\Auth\OAuth\ProviderRegistry;
 use Edict\Auth\Session;
 use Edict\Auth\SessionStore;
 use Edict\Http\Middleware\CsrfMiddleware;
 use Edict\Http\Middleware\SessionMiddleware;
+use Edict\Mail\SecurityNotice;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Twig\Environment;
@@ -26,6 +28,9 @@ final readonly class AccountController
         private SessionStore $sessions,
         private SessionCookie $cookie,
         private LastProviderCookie $lastProvider,
+        private AdminAccount $admin,
+        private StepUp $stepUp,
+        private SecurityNotice $notices,
     ) {}
 
     public function show(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
@@ -51,6 +56,7 @@ final readonly class AccountController
             'last_provider' => $last,
             'can_remove' => !$session->isAdmin && count($identities) > 1,
             'providers' => $this->providers->all(),
+            'admin_email' => $session->isAdmin ? $this->admin->email() : null,
             'csrf_field' => CsrfMiddleware::FIELD,
             'csrf_token' => $session->csrfToken,
         ]));
@@ -76,6 +82,34 @@ final readonly class AccountController
         }
 
         return self::redirect($response, '/account?notice=' . $this->accounts->unlink($session->userId, $args['provider'] ?? ''));
+    }
+
+    /**
+     * The admin's notification address. Confirmed like a login change: a stolen
+     * session mustn't be able to redirect the security notices.
+     */
+    public function adminEmail(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
+    {
+        $session = self::session($request);
+        if (!$session->isAdmin) {
+            return self::redirect($response, '/account');
+        }
+        $confirmed = $this->stepUp->confirm($request, $session);
+        if ($confirmed !== 'ok') {
+            return self::redirect($response, '/account?notice=' . $confirmed);
+        }
+        $old = $this->admin->email();
+        try {
+            $new = $this->admin->setEmail(self::field($request, 'email'));
+        } catch (\InvalidArgumentException) {
+            return self::redirect($response, '/account?notice=admin-email-invalid');
+        }
+        if ($new !== $old) {
+            // The old address hears about it too, in case it wasn't the owner.
+            $this->notices->record($new === null ? 'The admin notification address was removed' : "The admin notification address was changed to $new", $old);
+        }
+
+        return self::redirect($response, '/account?notice=admin-email-saved');
     }
 
     public function logout(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface

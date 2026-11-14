@@ -72,6 +72,7 @@ Set `DATA_DIR` in `.env` to a folder outside the repo, and install libvips (`vip
 | `php bin/edict admin:reset` | New password and authenticator secret; removes all passkeys, ends all admin sessions and lifts the username throttle. The recovery path if you are locked out |
 | `php bin/edict admin:revoke-sessions` | End all admin sessions, e.g. after losing a device |
 | `php bin/edict admin:allow <google\|twitch> <id>` | Let that account sign in as admin |
+| `php bin/edict admin:email <address>` | Set the admin's notification address (`""` removes it; also on `/account`) |
 | `php bin/edict admin:disallow <google\|twitch> <id>` | Remove it again; ends all admin sessions |
 | `php bin/edict admin:identities` | List the allow-listed accounts |
 

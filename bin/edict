@@ -6,6 +6,7 @@ declare(strict_types=1);
 use Edict\Cli\AdminAllowCommand;
 use Edict\Cli\AdminCreateCommand;
 use Edict\Cli\AdminDisallowCommand;
+use Edict\Cli\AdminEmailCommand;
 use Edict\Cli\AdminIdentitiesCommand;
 use Edict\Cli\AdminResetCommand;
 use Edict\Cli\AdminRevokeSessionsCommand;
@@ -30,6 +31,7 @@ $console->addCommands([
     $services->get(AdminRevokeSessionsCommand::class),
     $services->get(AdminAllowCommand::class),
     $services->get(AdminDisallowCommand::class),
+    $services->get(AdminEmailCommand::class),
     $services->get(AdminIdentitiesCommand::class),
 ]);
 exit($console->run());
