@@ -23,6 +23,38 @@
     --wide: 64rem;
     --gutter: 1rem;
     --radius: 4px;
+
+    /* The shared grammar. Themes change the voice (fonts, colours, borders), not these steps. */
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-5: 1.5rem;
+    --space-6: 2rem;
+    --space-7: 3rem;
+    --text-xs: 0.8rem;
+    --text-sm: 0.9rem;
+    --text-md: 1rem;
+    --text-lg: 1.25rem;
+
+    /* Buttons and fields. A theme may set any of them; the fallbacks follow its colours. */
+    --control-bg: var(--surface);
+    --control-fg: var(--fg);
+    --control-border: color-mix(in srgb, var(--fg) 45%, var(--bg));
+    --control-radius: var(--radius);
+    --control-pad-y: 0.35em;
+    --control-pad-x: 0.8em;
+    --field-bg: var(--bg);
+    --field-fg: var(--fg);
+
+    /* Marks for messages. They colour a rule or a border, never the text itself. */
+    --ok: #1f7a4d;
+    --danger: #b3261e;
+
+    /* Motion is short and never needed to understand the page. */
+    --motion-fast: 120ms;
+    --motion: 180ms;
+    --ease: cubic-bezier(0.2, 0, 0, 1);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -34,6 +66,15 @@
         --accent-fg: #121212;
         --border: #3a3a3a;
         --surface: #1e1e1e;
+        --ok: #6fcf97;
+        --danger: #ff8a80;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    :root {
+        --motion-fast: 0s;
+        --motion: 0s;
     }
 }
 
@@ -56,11 +97,17 @@ body {
 a {
     color: var(--accent);
     text-underline-offset: 0.15em;
+    transition: color var(--motion-fast) var(--ease), background-color var(--motion-fast) var(--ease);
 }
 
 :focus-visible {
     outline: 3px solid var(--focus);
     outline-offset: 2px;
+}
+
+/* The header has its own colours in some themes, so the ring takes the text's. */
+.site-header :focus-visible {
+    outline-color: currentcolor;
 }
 
 .skip-link {
@@ -122,6 +169,128 @@ td {
 hr {
     border: 0;
     border-top: 1px solid var(--border);
+}
+
+/*
+ * Buttons and fields, for every theme. Inside :where() these weigh nothing, so any
+ * component or theme rule wins without a fight. States: hover, pressed, focus (the
+ * ring above), disabled, busy.
+ */
+:where(button, input[type='submit'], input[type='button'], .button) {
+    display: inline-block;
+    margin: 0;
+    padding: var(--control-pad-y) var(--control-pad-x);
+    border: 1px solid var(--control-border);
+    border-radius: var(--control-radius);
+    background: var(--control-bg);
+    color: var(--control-fg);
+    font: inherit;
+    font-size: var(--text-sm);
+    line-height: 1.4;
+    text-decoration: none;
+    cursor: pointer;
+    transition:
+        background-color var(--motion-fast) var(--ease),
+        border-color var(--motion-fast) var(--ease),
+        color var(--motion-fast) var(--ease),
+        transform var(--motion-fast) var(--ease);
+}
+
+:where(button, input[type='submit'], input[type='button'], .button):where(:hover) {
+    border-color: var(--control-fg);
+    background: color-mix(in srgb, var(--control-fg) 10%, var(--control-bg));
+}
+
+:where(button, input[type='submit'], input[type='button'], .button):where(:active) {
+    background: color-mix(in srgb, var(--control-fg) 18%, var(--control-bg));
+    transform: translateY(1px);
+}
+
+/* The one main action on a page or in a form. */
+:where(.button-primary) {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--accent-fg);
+    font-weight: 600;
+}
+
+:where(.button-primary):where(:hover) {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 86%, var(--fg));
+}
+
+:where(.button-primary):where(:active) {
+    background: color-mix(in srgb, var(--accent) 76%, var(--fg));
+}
+
+/* Something that can't be undone. */
+:where(.button-danger) {
+    border-color: var(--danger);
+}
+
+:where(button, input, select, textarea):where(:disabled),
+:where(button[aria-disabled='true']) {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+}
+
+:where(button[aria-busy='true']) {
+    cursor: progress;
+}
+
+:where(input:not([type='checkbox'], [type='radio'], [type='file'], [type='color'], [type='range'], [type='submit'], [type='button'], [type='hidden']), select, textarea) {
+    max-width: 100%;
+    margin: 0;
+    padding: var(--control-pad-y) 0.6em;
+    border: 1px solid var(--control-border);
+    border-radius: var(--control-radius);
+    background: var(--field-bg);
+    color: var(--field-fg);
+    font: inherit;
+    font-size: var(--text-sm);
+    line-height: 1.4;
+    transition: border-color var(--motion-fast) var(--ease);
+}
+
+:where(input:not([type='checkbox'], [type='radio'], [type='file'], [type='color'], [type='range'], [type='submit'], [type='button'], [type='hidden']), select, textarea):where(:hover) {
+    border-color: var(--field-fg);
+}
+
+:where(input, select, textarea):where([aria-invalid='true']) {
+    border-color: var(--danger);
+    outline: 1px solid var(--danger);
+}
+
+:where(input[type='checkbox'], input[type='radio']) {
+    accent-color: var(--accent);
+}
+
+:where(input[type='file']) {
+    max-width: 100%;
+    font: inherit;
+    font-size: var(--text-sm);
+}
+
+:where(textarea) {
+    resize: vertical;
+}
+
+/* Messages after an action. The text keeps the page's colours; the rule says which kind. */
+.notice {
+    margin: var(--space-4) 0;
+    padding: var(--space-3) var(--space-4);
+    border-left: 4px solid var(--accent);
+    background: var(--surface);
+    color: var(--fg);
+}
+
+.notice-ok {
+    border-left-color: var(--ok);
+}
+
+.notice-error {
+    border-left-color: var(--danger);
 }
 
 /* The frame: header, content, footer. Themes can rearrange it freely. */
@@ -620,7 +789,9 @@ figure.media-file {
 
 .comment.is-held > .comment-body,
 .comment.is-removed > .comment-body {
-    opacity: 0.8;
+    /* Set apart by a dashed rule, not by fading: faded text falls below AA contrast. */
+    padding-left: 0.75rem;
+    border-left: 2px dashed var(--border);
 }
 
 .comment-removed {
@@ -648,7 +819,8 @@ figure.media-file {
 
 .comment-actions button,
 .comment-actions select {
-    font-size: 0.8rem;
+    padding: 0.15em 0.5em;
+    font-size: var(--text-xs);
 }
 
 .comment-replies > summary {
@@ -666,11 +838,7 @@ figure.media-file {
 .comment-form textarea {
     width: 100%;
     padding: 0.5rem;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--bg);
-    color: var(--fg);
-    font: inherit;
+    font-size: inherit;
 }
 
 .comment-form button {
@@ -707,17 +875,6 @@ figure.media-file {
 .site-search input {
     min-width: 0;
     max-width: 14rem;
-    padding: 0.25rem 0.5rem;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--bg);
-    color: var(--fg);
-    font: inherit;
-    font-size: 0.9rem;
-}
-
-.site-search button {
-    font-size: 0.9rem;
 }
 
 .lang-filter {
@@ -757,4 +914,93 @@ mark {
 
 .error-page {
     padding: 2rem 0;
+}
+
+/*
+ * On paper: the article and nothing around it. Black on white whatever the theme,
+ * with the addresses of links spelled out, since paper can't follow them.
+ */
+@media print {
+    html:root {
+        --bg: #fff;
+        --fg: #000;
+        --muted: #333;
+        --accent: #000;
+        --accent-fg: #fff;
+        --border: #999;
+        --surface: #fff;
+        --header-bg: #fff;
+        --header-fg: #000;
+    }
+
+    html body {
+        background: #fff;
+        color: #000;
+        font-size: 11pt;
+        text-shadow: none;
+    }
+
+    .skip-link,
+    .site-search,
+    .site-nav,
+    .site-footer nav,
+    .lang-filter,
+    .likes,
+    .comment-form,
+    .comment-actions,
+    .comment-mode,
+    .comments > p:has(a[href^='/login']),
+    .audio-player,
+    video,
+    audio,
+    nav[aria-label='Pages'] {
+        display: none;
+    }
+
+    .site-header,
+    .site-header-inner,
+    .site-content,
+    .site-footer {
+        max-width: none;
+        padding-right: 0;
+        padding-left: 0;
+        border: 0;
+        background: none;
+        color: #000;
+    }
+
+    .site-header a,
+    .site-footer a {
+        color: #000;
+    }
+
+    article a[href^='http']::after {
+        content: ' (' attr(href) ')';
+        font-size: 0.85em;
+        overflow-wrap: anywhere;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4 {
+        break-after: avoid;
+    }
+
+    figure,
+    pre,
+    blockquote,
+    table,
+    .comment-body {
+        break-inside: avoid;
+    }
+
+    table {
+        display: table;
+        overflow: visible;
+    }
+
+    .comment-replies > summary {
+        display: none;
+    }
 }

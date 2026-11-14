@@ -116,7 +116,7 @@
         </form>
     {% endif %}
 
-    {% if comments.posted %}<p role="status">Thanks, your comment is saved.</p>{% endif %}
+    {% if comments.posted %}<p class="notice notice-ok" role="status">Thanks, your comment is saved.</p>{% endif %}
 
     {% if comments.thread %}
         {{ self.thread(comments.thread, article, comments, session, csrf_field) }}
