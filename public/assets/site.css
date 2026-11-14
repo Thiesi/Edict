@@ -154,6 +154,20 @@ hr {
     font-weight: 700;
 }
 
+.site-title.has-logo a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.site-logo {
+    display: block;
+    width: auto;
+    max-width: 12rem;
+    height: auto;
+    max-height: 3rem;
+}
+
 .site-title a {
     color: inherit;
     text-decoration: none;

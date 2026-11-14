@@ -423,6 +423,64 @@ final readonly class MediaLibrary
     }
 
     /**
+     * Adds versions next to the ones an image has, such as its site icons. A version
+     * of the same name is replaced.
+     *
+     * @param list<array{preset: string, format: string, width: int, height: int, bytes: int, file: string}> $made
+     */
+    public function addVariants(int $mediaId, string $sha256, array $made): void
+    {
+        $this->assertRoomFor(array_sum(array_column($made, 'bytes')), null, true);
+        $this->pdo->beginTransaction();
+        try {
+            $upsert = $this->pdo->prepare(
+                'INSERT INTO media_variant (media_id, preset, format, width, height, bytes) VALUES (?, ?, ?, ?, ?, ?)
+                 ON CONFLICT (media_id, preset) DO UPDATE SET format = excluded.format, width = excluded.width, height = excluded.height, bytes = excluded.bytes',
+            );
+            foreach ($made as $variant) {
+                $upsert->execute([$mediaId, $variant['preset'], $variant['format'], $variant['width'], $variant['height'], $variant['bytes']]);
+                $this->store->install($variant['file'], $this->store->variantPath($sha256, $variant['preset'], $variant['format']));
+            }
+            $this->pdo->commit();
+        } catch (\Throwable $e) {
+            $this->pdo->rollBack();
+
+            throw $e;
+        }
+    }
+
+    /**
+     * Stores a file that arrived in one piece, such as a logo from a plain form,
+     * through the same checks as a chunked upload.
+     *
+     * @param resource $stream
+     *
+     * @return array<string, mixed> the media row
+     *
+     * @throws MediaError
+     */
+    public function importStream(string $name, int $bytes, $stream): array
+    {
+        $id = $this->beginUpload($name, $bytes);
+        try {
+            $received = 0;
+            while ($received < $bytes) {
+                $now = $this->appendChunk($id, $received, $stream);
+                if ($now <= $received) {
+                    throw new MediaError('The file arrived incomplete.');
+                }
+                $received = $now;
+            }
+
+            return $this->completeUpload($id);
+        } catch (MediaError $e) {
+            $this->abortUpload($id);
+
+            throw $e;
+        }
+    }
+
+    /**
      * Asks for a new poster from the video at this point. The worker makes it.
      *
      * @return string the preset the new poster will have

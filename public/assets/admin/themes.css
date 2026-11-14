@@ -1,3 +1,17 @@
+.look-preview {
+    max-width: 12rem;
+    max-height: 4rem;
+    background: repeating-conic-gradient(#ccc 0% 25%, #fff 0% 50%) 50% / 16px 16px;
+}
+
+.look-icon {
+    border-radius: 12px;
+}
+
+.swatch {
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+
 /* The theme picker: each theme's real home page, scaled down. */
 .theme-list {
     display: grid;

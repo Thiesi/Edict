@@ -1,6 +1,7 @@
 {% extends 'base.html.twig' %}
 
 {% set site = site() %}
+{% set look = site_look() %}
 
 {% block head %}
     {% set meta = meta|default({}) %}
@@ -29,6 +30,18 @@
     {% if meta.feed is defined %}<link rel="alternate" type="application/atom+xml" title="{{ meta.feed.title }}" href="{{ meta.feed.url }}">{% endif %}
     <link rel="stylesheet" href="/assets/site.css?v={{ asset_version }}">
     <link rel="stylesheet" href="/assets/build/themes/{{ site.theme }}.css?v={{ asset_version }}">
+    {% if look.accentVersion %}<link rel="stylesheet" href="/accent.css?theme={{ site.theme }}&amp;v={{ look.accentVersion }}">{% endif %}
+{% endblock %}
+
+{% block icons %}
+    {% set icons = look.icons %}
+    {% if icons %}
+        <link rel="icon" href="{{ icons[32] }}" sizes="32x32" type="image/png">
+        <link rel="icon" href="{{ icons[192] }}" sizes="192x192" type="image/png">
+        <link rel="apple-touch-icon" href="{{ icons[180] }}">
+    {% else %}
+        {{ parent() }}
+    {% endif %}
 {% endblock %}
 
 {% block body_class %}theme-{{ site.theme }}{% endblock %}
@@ -37,7 +50,11 @@
     <a class="skip-link" href="#content">Skip to the content</a>
     <header class="site-header">
         <div class="site-header-inner">
-            <p class="site-title"><a href="/">{{ site.title }}</a></p>
+            {% set logo = look.logo %}
+            <p class="site-title{% if logo %} has-logo{% endif %}"><a href="/">
+                {%- if logo %}<img class="site-logo" src="{{ logo.src }}"{% if logo.srcset %} srcset="{{ logo.srcset }}" sizes="12rem"{% endif %} width="{{ logo.width }}" height="{{ logo.height }}" alt="{{ site.logoOnly ? site.title : '' }}">{% endif -%}
+                {%- if not logo %}{{ site.title }}{% elseif not site.logoOnly %}<span class="site-name">{{ site.title }}</span>{% endif -%}
+            </a></p>
             {% if site.description %}<p class="site-description">{{ site.description }}</p>{% endif %}
             <form class="site-search" role="search" method="get" action="/search">
                 <label class="visually-hidden" for="site-search">Search</label>

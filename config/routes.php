@@ -34,6 +34,7 @@ return static function (App $app): void {
     $app->post('/comments/{id:[0-9]+}', [CommentController::class, 'post']);
 
     $app->get('/login', [OAuthController::class, 'showLogin']);
+    $app->get('/accent.css', [SiteController::class, 'accentCss']);
     $app->get('/auth/{provider}', [OAuthController::class, 'start']);
     $app->get('/auth/{provider}/callback', [OAuthController::class, 'callback']);
 
@@ -100,6 +101,7 @@ return static function (App $app): void {
 
         $group->get('/themes', [SiteController::class, 'themes']);
         $group->post('/themes', [SiteController::class, 'applyTheme']);
+        $group->post('/themes/look', [SiteController::class, 'saveLook']);
         $group->get('/site', [SiteController::class, 'show']);
         $group->post('/site', [SiteController::class, 'save']);
         $group->post('/site/legal/{which:imprint|privacy}', [SiteController::class, 'legalDraft']);

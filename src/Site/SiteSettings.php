@@ -21,10 +21,14 @@ final readonly class SiteSettings
         public array $footer,
         public string $imprint,
         public string $privacy,
+        public string $accent = '',
+        public int $logo = 0,
+        public bool $logoOnly = false,
+        public int $favicon = 0,
     ) {}
 
     public function withTheme(string $theme): self
     {
-        return new self($theme, $this->title, $this->description, $this->menu, $this->footer, $this->imprint, $this->privacy);
+        return new self($theme, $this->title, $this->description, $this->menu, $this->footer, $this->imprint, $this->privacy, $this->accent, $this->logo, $this->logoOnly, $this->favicon);
     }
 }
