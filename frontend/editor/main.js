@@ -67,6 +67,8 @@ const editor = new Editor({
         }),
     ],
     editorProps: {
+        // The writing area is a text box to screen readers, and a text box needs a name.
+        attributes: { 'aria-label': 'Text', 'aria-multiline': 'true' },
         // Word and Excel put a picture of the text on the clipboard as well. Text wins.
         handlePaste: (_view, event) => !event.clipboardData?.types.includes('text/html')
             && receiveFiles(event.clipboardData?.files, editor.state.selection.to),

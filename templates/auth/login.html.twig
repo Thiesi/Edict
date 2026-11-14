@@ -5,7 +5,7 @@
 {% block main %}
     <main>
         <h1>Sign in</h1>
-        {% if notice %}<p role="alert">{{ notice }}</p>{% endif %}
+        {% if notice %}<p class="notice notice-error" role="alert">{{ notice }}</p>{% endif %}
         <p>Sign in to comment and to like articles. Edict receives only your provider's account ID and display name, never your email address.</p>
         <ul>
             {% for provider in providers %}

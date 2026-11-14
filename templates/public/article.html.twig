@@ -15,7 +15,7 @@
 
 {% block main %}
     {% if preview %}
-        <p role="status"><strong>Preview.</strong> Status: {{ article.status }}. <a href="/admin/articles/{{ article.id }}">Back to the editor</a></p>
+        <p class="notice" role="status"><strong>Preview.</strong> Status: {{ article.status }}. <a href="/admin/articles/{{ article.id }}">Back to the editor</a></p>
     {% endif %}
     <main>
         <article lang="{{ article.lang }}">
