@@ -28,9 +28,9 @@ final readonly class FlowCookie
         return $this->config->secureCookies() ? '__Host-edict_oauth' : 'edict_oauth';
     }
 
-    public function begin(string $provider, string $next, ?int $linkUserId): FlowState
+    public function begin(string $provider, string $next, ?int $linkUserId, bool $combine = false): FlowState
     {
-        return FlowState::begin($provider, $next, $linkUserId, $this->clock->now() + self::TTL);
+        return FlowState::begin($provider, $next, $linkUserId, $this->clock->now() + self::TTL, $combine);
     }
 
     public function set(ResponseInterface $response, FlowState $flow): ResponseInterface

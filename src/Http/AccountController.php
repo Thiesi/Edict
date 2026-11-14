@@ -25,6 +25,7 @@ final readonly class AccountController
         private ProviderRegistry $providers,
         private SessionStore $sessions,
         private SessionCookie $cookie,
+        private LastProviderCookie $lastProvider,
     ) {}
 
     public function show(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
@@ -32,10 +33,12 @@ final readonly class AccountController
         $session = self::session($request);
         $identities = $this->accounts->identities($session->userId);
 
-        $linkable = $this->providers->all();
+        $linkable = $session->isAdmin ? [] : $this->providers->all();
         foreach ($identities as $identity) {
             unset($linkable[$identity['provider']]);
         }
+        $query = $request->getQueryParams();
+        $last = is_string($query['last'] ?? null) && isset($linkable[$query['last']]) ? $linkable[$query['last']] : null;
 
         $response->getBody()->write($this->twig->render('account/index.html.twig', [
             'notice' => Notices::fromRequest($request),
@@ -43,7 +46,10 @@ final readonly class AccountController
             'is_admin' => $session->isAdmin,
             'max_name_length' => Accounts::MAX_NAME_LENGTH,
             'identities' => $identities,
-            'linkable' => $session->isAdmin ? [] : $linkable,
+            'linkable' => $linkable,
+            'welcome' => ($query['notice'] ?? null) === 'welcome',
+            'last_provider' => $last,
+            'can_remove' => !$session->isAdmin && count($identities) > 1,
             'csrf_field' => CsrfMiddleware::FIELD,
             'csrf_token' => $session->csrfToken,
         ]));
@@ -56,6 +62,19 @@ final readonly class AccountController
         $renamed = $this->accounts->rename(self::session($request)->userId, self::field($request, 'display_name'));
 
         return self::redirect($response, '/account?notice=' . ($renamed ? 'renamed' : 'invalid-name'));
+    }
+
+    /**
+     * @param array<string, string> $args
+     */
+    public function unlink(ServerRequestInterface $request, ResponseInterface $response, array $args): ResponseInterface
+    {
+        $session = self::session($request);
+        if ($session->isAdmin) {
+            return self::redirect($response, '/account?notice=admin-cli');
+        }
+
+        return self::redirect($response, '/account?notice=' . $this->accounts->unlink($session->userId, $args['provider'] ?? ''));
     }
 
     public function logout(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
@@ -84,7 +103,7 @@ final readonly class AccountController
 
         $this->accounts->delete($session->userId);
 
-        return self::redirect($this->cookie->clear($response), '/');
+        return self::redirect($this->lastProvider->clear($this->cookie->clear($response)), '/');
     }
 
     private static function session(ServerRequestInterface $request): Session

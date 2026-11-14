@@ -9,7 +9,7 @@
         <p>Sign in to comment and to like articles. Edict receives only your provider's account ID and display name, never your email address.</p>
         <ul>
             {% for provider in providers %}
-                <li><a href="/auth/{{ provider.name }}?next={{ next|url_encode }}">Continue with {{ provider.label }}</a></li>
+                <li><a href="/auth/{{ provider.name }}?next={{ next|url_encode }}">Continue with {{ provider.label }}</a>{% if provider.name == last_provider %} <small>(you used this last time on this device)</small>{% endif %}</li>
             {% else %}
                 <li>Sign-in is not available right now.</li>
             {% endfor %}

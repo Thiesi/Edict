@@ -36,6 +36,7 @@ final readonly class OAuthController
         private SessionCookie $sessionCookie,
         private LoginThrottle $throttle,
         private Config $config,
+        private LastProviderCookie $lastProvider,
     ) {}
 
     public function showLogin(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
@@ -45,7 +46,7 @@ final readonly class OAuthController
             return self::redirect($response, FlowState::safeNext($next === '' ? '/account' : $next));
         }
 
-        return $this->renderLogin($response, Notices::fromRequest($request), FlowState::safeNext($next));
+        return $this->renderLogin($response, Notices::fromRequest($request), FlowState::safeNext($next), $this->lastProvider->read($request));
     }
 
     /**
@@ -85,6 +86,26 @@ final readonly class OAuthController
     }
 
     /**
+     * Combines the signed-in account with the one that owns a login of this
+     * provider. A POST, like linking.
+     *
+     * @param array<string, string> $args
+     */
+    public function startCombine(ServerRequestInterface $request, ResponseInterface $response, array $args): ResponseInterface
+    {
+        $provider = $this->provider($request, $args);
+        $session = self::session($request);
+        if ($session === null) {
+            return self::redirect($response, '/login');
+        }
+        if ($session->isAdmin) {
+            return self::redirect($response, '/account?notice=combine-admin');
+        }
+
+        return $this->leaveFor($provider, $this->flowCookie->begin($provider->name, '/account', $session->userId, true), $response);
+    }
+
+    /**
      * @param array<string, string> $args
      */
     public function callback(ServerRequestInterface $request, ResponseInterface $response, array $args): ResponseInterface
@@ -93,6 +114,7 @@ final readonly class OAuthController
         $session = self::session($request);
         $home = $session === null ? '/login' : '/account';
         $ip = self::clientIp($request);
+        $previous = $this->lastProvider->read($request);
 
         $flow = $this->flowCookie->read($request);
         $response = $this->flowCookie->clear($response);
@@ -126,12 +148,14 @@ final readonly class OAuthController
             return self::redirect($response, $home . '?notice=provider-error');
         }
 
+        $response = $this->lastProvider->set($response, $provider->name);
+
         return $flow->linkUserId === null
-            ? $this->logIn($identity, $flow, $session, $response)
-            : $this->link($identity, $flow->linkUserId, $session, $response);
+            ? $this->logIn($identity, $flow, $session, $response, $previous)
+            : $this->link($identity, $flow->linkUserId, $flow->combine, $session, $response);
     }
 
-    private function logIn(ProviderIdentity $identity, FlowState $flow, ?Session $current, ResponseInterface $response): ResponseInterface
+    private function logIn(ProviderIdentity $identity, FlowState $flow, ?Session $current, ResponseInterface $response, ?string $previous): ResponseInterface
     {
         $account = $this->accounts->findOrCreate($identity);
 
@@ -143,19 +167,36 @@ final readonly class OAuthController
         $token = $this->sessions->create($account['id'], $ttl);
 
         // New readers first see the name that a provider handed us, because it will be public.
-        $target = $account['created'] ? '/account?notice=welcome' : $flow->next;
+        // If this browser last used another provider, this new account is probably a second one by mistake.
+        $hint = $previous !== null && $previous !== $identity->provider ? '&last=' . $previous : '';
+        $target = $account['created'] ? '/account?notice=welcome' . $hint : $flow->next;
 
         return self::redirect($this->sessionCookie->set($response, $token, $ttl), $target);
     }
 
-    private function link(ProviderIdentity $identity, int $linkUserId, ?Session $session, ResponseInterface $response): ResponseInterface
+    private function link(ProviderIdentity $identity, int $linkUserId, bool $combine, ?Session $session, ResponseInterface $response): ResponseInterface
     {
         // The account that asked must still be the one signed in, and never the admin.
         if ($session === null || $session->userId !== $linkUserId || $session->isAdmin) {
             return self::redirect($response, ($session === null ? '/login' : '/account') . '?notice=expired');
         }
+        if (!$combine) {
+            return self::redirect($response, '/account?notice=' . $this->accounts->link($linkUserId, $identity));
+        }
 
-        return self::redirect($response, '/account?notice=' . $this->accounts->link($linkUserId, $identity));
+        $outcome = $this->accounts->combine($linkUserId, $identity);
+        if ($outcome['userId'] !== $session->userId) {
+            // The older account survived. The signed-in one is gone, and its sessions with it.
+            $token = $this->sessions->create($outcome['userId'], SessionStore::READER_TTL);
+            $response = $this->sessionCookie->set($response, $token, SessionStore::READER_TTL);
+        }
+        $notice = match ($outcome['result']) {
+            'admin' => 'combine-admin',
+            'conflict' => 'combine-conflict',
+            default => $outcome['result'],
+        };
+
+        return self::redirect($response, '/account?notice=' . $notice);
     }
 
     private function leaveFor(Provider $provider, FlowState $flow, ResponseInterface $response): ResponseInterface
@@ -164,12 +205,13 @@ final readonly class OAuthController
             ->withHeader('Cache-Control', 'no-store');
     }
 
-    private function renderLogin(ResponseInterface $response, ?string $notice, string $next): ResponseInterface
+    private function renderLogin(ResponseInterface $response, ?string $notice, string $next, ?string $last = null): ResponseInterface
     {
         $response->getBody()->write($this->twig->render('auth/login.html.twig', [
             'notice' => $notice,
             'providers' => $this->providers->all(),
             'next' => $next,
+            'last_provider' => $last,
         ]));
 
         return $response

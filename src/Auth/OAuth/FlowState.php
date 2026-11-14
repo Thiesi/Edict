@@ -21,9 +21,10 @@ final readonly class FlowState
         public string $next,
         public ?int $linkUserId,
         public int $expiresAt,
+        public bool $combine = false,
     ) {}
 
-    public static function begin(string $provider, string $next, ?int $linkUserId, int $expiresAt): self
+    public static function begin(string $provider, string $next, ?int $linkUserId, int $expiresAt, bool $combine = false): self
     {
         return new self(
             $provider,
@@ -33,6 +34,7 @@ final readonly class FlowState
             self::safeNext($next),
             $linkUserId,
             $expiresAt,
+            $combine && $linkUserId !== null,
         );
     }
 
@@ -78,11 +80,12 @@ final readonly class FlowState
             || !is_string($data['next'] ?? null)
             || !is_int($data['expiresAt'] ?? null)
             || !($link === null || is_int($link))
+            || !is_bool($data['combine'] ?? false)
         ) {
             return null;
         }
 
-        return new self($data['provider'], $data['state'], $data['nonce'], $data['verifier'], $data['next'], $link, $data['expiresAt']);
+        return new self($data['provider'], $data['state'], $data['nonce'], $data['verifier'], $data['next'], $link, $data['expiresAt'], ($data['combine'] ?? false) === true);
     }
 
     private static function random(): string

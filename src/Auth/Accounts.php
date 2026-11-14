@@ -102,6 +102,90 @@ final readonly class Accounts
     }
 
     /**
+     * Removes one provider login from a reader's account, as long as another remains.
+     *
+     * @return 'unlinked'|'not-linked'|'last-login'
+     */
+    public function unlink(int $userId, string $provider): string
+    {
+        return $this->transaction(function () use ($userId, $provider): string {
+            // Locks the account, so two removals at once can't leave it without a login.
+            $this->pdo->prepare('SELECT 1 FROM app_user WHERE id = ? FOR UPDATE')->execute([$userId]);
+            $providers = array_column($this->identities($userId), 'provider');
+            if (!in_array($provider, $providers, true)) {
+                return 'not-linked';
+            }
+            if (count($providers) < 2) {
+                return 'last-login';
+            }
+            $this->pdo->prepare('DELETE FROM user_identity WHERE user_id = ? AND provider = ?')->execute([$userId, $provider]);
+
+            return 'unlinked';
+        });
+    }
+
+    /**
+     * Brings the account that owns this identity together with the signed-in one.
+     * Both logins were just proven in the same browser, so both belong to the person
+     * asking. The older account survives: its name already stands next to most
+     * comments. Comments, likes and logins move over, a like given from both
+     * accounts counts once, the longer ban wins, and "trusted" survives only
+     * without a ban. If the identity has no account yet, it is simply added.
+     *
+     * @return array{result: 'combined'|'linked'|'already'|'provider-in-use'|'taken'|'admin'|'conflict', userId: int}
+     */
+    public function combine(int $userId, ProviderIdentity $identity): array
+    {
+        $owner = $this->owner($identity->provider, $identity->subject);
+        if ($owner === null) {
+            return ['result' => $this->link($userId, $identity), 'userId' => $userId];
+        }
+        if ($owner['id'] === $userId) {
+            return ['result' => 'already', 'userId' => $userId];
+        }
+
+        return $this->transaction(function () use ($userId, $owner, $identity): array {
+            $other = $owner['id'];
+            $keep = min($userId, $other);
+            $drop = max($userId, $other);
+
+            // Both rows locked in ID order, so two combines at once can't deadlock.
+            $stmt = $this->pdo->prepare('SELECT is_admin, deleted_at IS NOT NULL AS deleted FROM app_user WHERE id IN (?, ?) ORDER BY id FOR UPDATE');
+            $stmt->execute([$keep, $drop]);
+            $rows = array_values(array_filter($stmt->fetchAll(), 'is_array'));
+            foreach ($rows as $row) {
+                if (Row::bool($row, 'is_admin')) {
+                    return ['result' => 'admin', 'userId' => $userId];
+                }
+            }
+            $recheck = $this->owner($identity->provider, $identity->subject);
+            if (count($rows) !== 2 || $recheck === null || $recheck['id'] !== $other || Row::bool($rows[0], 'deleted') || Row::bool($rows[1], 'deleted')) {
+                return ['result' => 'taken', 'userId' => $userId];
+            }
+
+            $clash = $this->pdo->prepare('SELECT 1 FROM user_identity WHERE user_id IN (?, ?) GROUP BY provider HAVING count(*) > 1');
+            $clash->execute([$keep, $drop]);
+            if ($clash->fetchColumn() !== false) {
+                return ['result' => 'conflict', 'userId' => $userId];
+            }
+
+            $this->pdo->prepare(
+                'UPDATE app_user k
+                 SET banned_until = greatest(k.banned_until, d.banned_until),
+                     trusted = (k.trusted OR d.trusted) AND coalesce(greatest(k.banned_until, d.banned_until) <= to_timestamp(?), true)
+                 FROM app_user d WHERE k.id = ? AND d.id = ?',
+            )->execute([$this->clock->now(), $keep, $drop]);
+            $this->pdo->prepare('UPDATE user_identity SET user_id = ? WHERE user_id = ?')->execute([$keep, $drop]);
+            $this->pdo->prepare('UPDATE comment SET user_id = ? WHERE user_id = ?')->execute([$keep, $drop]);
+            $this->pdo->prepare('DELETE FROM vote WHERE user_id = ? AND article_id IN (SELECT article_id FROM vote WHERE user_id = ?)')->execute([$drop, $keep]);
+            $this->pdo->prepare('UPDATE vote SET user_id = ? WHERE user_id = ?')->execute([$keep, $drop]);
+            $this->erase($drop);
+
+            return ['result' => 'combined', 'userId' => $keep];
+        });
+    }
+
+    /**
      * @return list<array{provider: string, subject: string}>
      */
     public function identities(int $userId): array
