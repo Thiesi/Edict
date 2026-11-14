@@ -18,6 +18,8 @@
     --surface: #ffe600;
     --header-bg: #0d0d0d;
     --header-fg: #fffdf2;
+    --logo-plate: #fffdf2;
+    --logo-plate-pad: 0.3rem 0.6rem;
     --measure: 44rem;
     --wide: 70rem;
 }
@@ -34,6 +36,8 @@
         --surface: #2a2600;
         --header-bg: #ffe600;
         --header-fg: #0d0d0d;
+        --logo-plate: transparent;
+        --logo-plate-pad: 0;
     }
 }
 
@@ -66,9 +70,19 @@ body {
     font-weight: 700;
 }
 
+/* The menu stands beside the title, so the bar gives its two parts back to the grid. */
+.site-header-bar {
+    display: contents;
+}
+
+.site-search {
+    grid-column: 1;
+    margin-top: 0.5rem;
+}
+
 .site-nav {
     grid-column: 2;
-    grid-row: 1 / span 2;
+    grid-row: 1 / span 3;
 }
 
 .site-nav ul {

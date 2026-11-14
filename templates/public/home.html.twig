@@ -12,9 +12,9 @@
             <ul class="articles">
                 {% for article in articles %}{% include 'public/_summary.html.twig' %}{% endfor %}
             </ul>
-            {% if has_more %}<p><a href="/archive{{ lang_filter ? '?lang=' ~ lang_filter : '' }}">All articles</a></p>{% endif %}
+            {% if has_more %}<p class="more"><a class="button" href="/archive{{ lang_filter ? '?lang=' ~ lang_filter : '' }}">All articles</a></p>{% endif %}
         {% else %}
-            <p>A CMS for one sovereign. Nothing to read yet.</p>
+            <p class="empty">A CMS for one sovereign. Nothing to read yet.</p>
         {% endif %}
     </main>
 {% endblock %}

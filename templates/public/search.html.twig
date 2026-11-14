@@ -10,10 +10,10 @@
         <form role="search" method="get" action="/search" class="site-search">
             <label class="visually-hidden" for="search-again">Search for</label>
             <input id="search-again" type="search" name="q" value="{{ query }}" maxlength="200">
-            <button type="submit">Search</button>
+            <button class="button-primary" type="submit">Search</button>
         </form>
         {% if query %}
-            <p role="status">{{ total }} {{ total == 1 ? 'result' : 'results' }} for “{{ query }}”.</p>
+            <p class="search-count" role="status">{{ total }} {{ total == 1 ? 'result' : 'results' }} for “{{ query }}”.</p>
             {% if results %}
                 <ol class="search-results">
                     {% for result in results %}
@@ -26,13 +26,13 @@
                     {% endfor %}
                 </ol>
             {% else %}
-                <p>Try other words, or fewer of them.</p>
+                <p class="empty">Try other words, or fewer of them.</p>
             {% endif %}
             {% if last_page > 1 %}
-                <nav aria-label="Pages">
-                    {% if page > 1 %}<a rel="prev" href="/search?q={{ query|url_encode }}{% if page > 2 %}&amp;page={{ page - 1 }}{% endif %}">Better matches</a>{% endif %}
-                    Page {{ page }} of {{ last_page }}
-                    {% if page < last_page %}<a rel="next" href="/search?q={{ query|url_encode }}&amp;page={{ page + 1 }}">More results</a>{% endif %}
+                <nav class="pager" aria-label="Pages">
+                    {% if page > 1 %}<a class="button" rel="prev" href="/search?q={{ query|url_encode }}{% if page > 2 %}&amp;page={{ page - 1 }}{% endif %}">Better matches</a>{% endif %}
+                    <span class="pager-count">Page {{ page }} of {{ last_page }}</span>
+                    {% if page < last_page %}<a class="button" rel="next" href="/search?q={{ query|url_encode }}&amp;page={{ page + 1 }}">More results</a>{% endif %}
                 </nav>
             {% endif %}
         {% endif %}

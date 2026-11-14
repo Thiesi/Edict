@@ -28,6 +28,11 @@
 
     let index = 0;
 
+    // Which picture of how many, for galleries. Read out when it changes.
+    const count = document.createElement('p');
+    count.className = 'lightbox-count';
+    count.setAttribute('aria-live', 'polite');
+
     const show = (next) => {
         index = (next + links.length) % links.length;
         const link = links[index];
@@ -35,6 +40,7 @@
         image.alt = link.querySelector('img')?.alt ?? '';
         image.width = Number(link.dataset.width);
         image.height = Number(link.dataset.height);
+        count.textContent = `${index + 1} / ${links.length}`;
     };
 
     const close = button('Close', '×', 'lightbox-close', () => dialog.close());
@@ -43,6 +49,7 @@
         dialog.append(
             button('Previous image', '‹', 'lightbox-previous', () => show(index - 1)),
             button('Next image', '›', 'lightbox-next', () => show(index + 1)),
+            count,
         );
     }
     document.body.append(dialog);
