@@ -6,7 +6,7 @@
         <textarea id="comment-body-{{ parent ?: 'new' }}" name="body" rows="{{ parent ? 3 : 4 }}" maxlength="5000" required{% if comments.error and comments.reply == parent %} aria-invalid="true" aria-describedby="comment-error"{% endif %}>{{ comments.reply == parent ? comments.text : '' }}</textarea>
         {% if comments.error and comments.reply == parent %}<p class="comment-error" id="comment-error" role="alert">{{ comments.error }}</p>{% endif %}
         <p class="comment-hint">Plain text. Links work. {% if comments.status == 'hold' %}Comments appear once approved.{% endif %}</p>
-        <button type="submit">{{ parent ? 'Reply' : 'Post comment' }}</button>
+        <button class="button-primary" type="submit">{{ parent ? 'Reply' : 'Post comment' }}</button>
         {% if parent %}<a href="/{{ article.slug }}#comment-{{ parent }}">Cancel</a>{% endif %}
     </form>
 {% endmacro %}
@@ -125,7 +125,7 @@
     {% if comments.status == 'closed' %}
         <p class="comments-closed">Comments are closed.</p>
     {% elseif not session %}
-        <p><a href="/login?next={{ ('/' ~ article.slug ~ '#comments')|url_encode }}">Log in to comment</a></p>
+        <p><a class="button" href="/login?next={{ ('/' ~ article.slug ~ '#comments')|url_encode }}">Log in to comment</a></p>
     {% elseif banned %}
         <p>This account can’t comment.</p>
     {% elseif not comments.reply %}

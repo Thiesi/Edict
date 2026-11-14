@@ -21,7 +21,7 @@
         <article lang="{{ article.lang }}">
             <h1>{{ article.title }}</h1>
             {% if article.kind == 'article' and article.publishedAt %}
-                <p>
+                <p class="article-meta">
                     <time datetime="{{ article.publishedAt|article_iso }}">{{ article.publishedAt|article_date(article.lang) }}</time>
                     {% if article.revisedAt and article.revisedAt - article.publishedAt > 86400 %}
                         · <span class="updated">{{ article.lang == 'de' ? 'Aktualisiert am' : 'Updated on' }} <time datetime="{{ article.revisedAt|article_iso }}">{{ article.revisedAt|article_date(article.lang) }}</time></span>
@@ -32,13 +32,13 @@
             {% if article.teaser %}<p class="teaser">{{ article.teaser }}</p>{% endif %}
             {{ article.bodyJson|body_html }}
         </article>
-        {% if likes is defined and likes %}{% include 'public/_likes.html.twig' %}{% endif %}
-        {% if comments is defined and comments %}{% include 'public/_comments.html.twig' %}{% endif %}
         {% if article.kind == 'article' and article.tags %}
-            <p>Tags:
-                {% for tag in article.tags %}<a href="/tag/{{ tag.slug }}">{{ tag.name }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
+            <p class="tags"><span class="tags-label">Tags:</span>
+                {% for tag in article.tags %}<a href="/tag/{{ tag.slug }}">{{ tag.name }}</a>{% if not loop.last %}<span class="visually-hidden">, </span>{% endif %}{% endfor %}
             </p>
         {% endif %}
+        {% if likes is defined and likes %}{% include 'public/_likes.html.twig' %}{% endif %}
+        {% if comments is defined and comments %}{% include 'public/_comments.html.twig' %}{% endif %}
     </main>
     <script src="/assets/lightbox.js" defer></script>
     <script src="/assets/player.js" defer></script>

@@ -20,6 +20,8 @@
     --header-bg: #1d1a2e;
     --header-fg: #f3ead2;
     --header-accent: #d9b44a;
+    --logo-plate: #f4f2ec;
+    --logo-plate-pad: 0.3rem 0.6rem;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -67,12 +69,23 @@
     vertical-align: middle;
 }
 
+/* With a logo the ornaments step aside: they frame the name, not a picture. */
+.site-title.has-logo a::before,
+.site-title.has-logo a::after {
+    display: none;
+}
+
+.site-title.has-logo a {
+    justify-content: center;
+}
+
 .site-description {
     color: var(--header-fg);
     font-style: italic;
     opacity: 0.85;
 }
 
+.site-header-bar,
 .site-nav ul {
     justify-content: center;
 }

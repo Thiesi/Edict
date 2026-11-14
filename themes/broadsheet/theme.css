@@ -68,9 +68,13 @@ body {
     text-transform: uppercase;
 }
 
-.site-nav ul {
+.site-header-bar {
     justify-content: center;
     margin-top: 0.5rem;
+}
+
+.site-nav ul {
+    justify-content: center;
 }
 
 .site-nav a {
