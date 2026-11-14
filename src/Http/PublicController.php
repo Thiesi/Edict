@@ -107,6 +107,7 @@ final readonly class PublicController
         return $this->render($request, $response, 'public/list.html.twig', [
             'heading' => 'Tag: ' . $name,
             'base_path' => '/tag/' . $slug,
+            'feed' => ['title' => 'Tag: ' . $name, 'url' => '/tag/' . $slug . '/feed.atom'],
             'articles' => $this->articles->publicListByTag($slug, self::PER_PAGE, ($page - 1) * self::PER_PAGE),
             'page' => $page,
             'last_page' => self::lastPage($total),

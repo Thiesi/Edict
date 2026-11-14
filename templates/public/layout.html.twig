@@ -3,6 +3,30 @@
 {% set site = site() %}
 
 {% block head %}
+    {% set meta = meta|default({}) %}
+    {% set description = meta.description|default(site.description) %}
+    {% if description %}<meta name="description" content="{{ description }}">{% endif %}
+    {% if meta.robots is defined %}<meta name="robots" content="{{ meta.robots }}">{% endif %}
+    {% if meta.url is defined %}
+        <link rel="canonical" href="{{ app_url ~ meta.url }}">
+        <meta property="og:url" content="{{ app_url ~ meta.url }}">
+    {% endif %}
+    <meta property="og:site_name" content="{{ site.title }}">
+    <meta property="og:type" content="{{ meta.type|default('website') }}">
+    <meta property="og:title" content="{{ meta.title|default(site.title) }}">
+    {% if description %}<meta property="og:description" content="{{ description }}">{% endif %}
+    {% if meta.locale is defined %}<meta property="og:locale" content="{{ meta.locale }}">{% endif %}
+    {% if meta.image is defined and meta.image %}
+        <meta property="og:image" content="{{ meta.image.url }}">
+        <meta property="og:image:width" content="{{ meta.image.width }}">
+        <meta property="og:image:height" content="{{ meta.image.height }}">
+        {% if meta.image_alt is defined and meta.image_alt %}<meta property="og:image:alt" content="{{ meta.image_alt }}">{% endif %}
+        <meta name="twitter:card" content="summary_large_image">
+    {% else %}
+        <meta name="twitter:card" content="summary">
+    {% endif %}
+    <link rel="alternate" type="application/atom+xml" title="{{ site.title }}" href="/feed.atom">
+    {% if meta.feed is defined %}<link rel="alternate" type="application/atom+xml" title="{{ meta.feed.title }}" href="{{ meta.feed.url }}">{% endif %}
     <link rel="stylesheet" href="/assets/site.css?v={{ asset_version }}">
     <link rel="stylesheet" href="/assets/build/themes/{{ site.theme }}.css?v={{ asset_version }}">
 {% endblock %}
@@ -40,6 +64,6 @@
                 {% if site.privacy %}<li><a href="/{{ site.privacy }}">Datenschutz</a></li>{% endif %}
             </ul>
         </nav>
-        <p class="site-colophon">{{ site.title }} · published with <a href="https://github.com/Thiesi/Edict" rel="noopener">Edict</a></p>
+        <p class="site-colophon"><a href="/feed.atom">Feed</a> · {{ site.title }} · published with <a href="https://github.com/Thiesi/Edict" rel="noopener">Edict</a></p>
     </footer>
 {% endblock %}

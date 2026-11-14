@@ -740,3 +740,7 @@ mark {
     background: color-mix(in srgb, var(--accent) 25%, transparent);
     color: inherit;
 }
+
+.error-page {
+    padding: 2rem 0;
+}

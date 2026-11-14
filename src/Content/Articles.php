@@ -370,6 +370,28 @@ final readonly class Articles
         return self::all($stmt);
     }
 
+    /**
+     * Every public article and page, for the sitemap.
+     *
+     * @return list<array{slug: string, updated: int}>
+     */
+    public function sitemap(int $limit): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT a.slug, EXTRACT(EPOCH FROM coalesce(a.revised_at, a.published_at))::bigint AS updated
+             FROM article a WHERE ' . self::PUBLIC_WHERE . ' ORDER BY a.published_at DESC LIMIT ?',
+        );
+        $stmt->execute([$this->clock->now(), $limit]);
+        $entries = [];
+        foreach ($stmt->fetchAll() as $row) {
+            if (is_array($row)) {
+                $entries[] = ['slug' => Row::str($row, 'slug'), 'updated' => Row::int($row, 'updated')];
+            }
+        }
+
+        return $entries;
+    }
+
     public function publicCountByTag(string $tagSlug): int
     {
         $stmt = $this->pdo->prepare(

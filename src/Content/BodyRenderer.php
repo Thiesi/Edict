@@ -66,6 +66,32 @@ final readonly class BodyRenderer
     }
 
     /**
+     * The cover as link previews show it: a JPEG around 1600 pixels wide, as a full address.
+     *
+     * @return array{url: string, width: int, height: int}|null
+     */
+    public function shareImage(Article $article, string $baseUrl): ?array
+    {
+        $id = $article->coverMediaId;
+        $image = $id === null ? null : ($this->library->ready([$id])[$id] ?? null);
+        if ($image === null || $image['kind'] !== 'image' || !is_array($image['variants'] ?? null)) {
+            return null;
+        }
+        $best = null;
+        foreach ($image['variants'] as $variant) {
+            if (is_array($variant) && ($variant['format'] ?? null) === 'jpg' && is_int($variant['width'] ?? null) && $variant['width'] <= 1600
+                && ($best === null || $variant['width'] > $best['width'])) {
+                $best = $variant;
+            }
+        }
+        if ($best === null || !is_string($best['url'] ?? null) || !is_int($best['height'] ?? null)) {
+            return null;
+        }
+
+        return ['url' => $baseUrl . $best['url'], 'width' => $best['width'], 'height' => $best['height']];
+    }
+
+    /**
      * Native players: Apache answers their range requests, so seeking is instant. The
      * link inside is for browsers that can't play it.
      *

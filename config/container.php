@@ -59,6 +59,11 @@ return [
         ]);
         $twig->addGlobal('tested_commit', $config->testedCommit());
         $twig->addGlobal('asset_version', $config->release());
+        $twig->addGlobal('app_url', $config->appUrl);
+        $twig->addFunction(new TwigFunction(
+            'share_image',
+            static fn(Article $article): ?array => $services->get(BodyRenderer::class)->shareImage($article, $config->appUrl),
+        ));
         // The theme, name, menu and footer. Read only by pages that show them.
         $twig->addFunction(new TwigFunction('site', static fn(): SiteSettings => $services->get(Settings::class)->site()));
         $twig->addFunction(new TwigFunction('theme_name', static fn(string $id): string => Themes::ALL[$id]['name'] ?? $id));
