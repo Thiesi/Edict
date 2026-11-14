@@ -53,7 +53,7 @@
             {% set logo = look.logo %}
             <p class="site-title{% if logo %} has-logo{% endif %}"><a href="/">
                 {%- if logo %}<img class="site-logo" src="{{ logo.src }}"{% if logo.srcset %} srcset="{{ logo.srcset }}" sizes="12rem"{% endif %} width="{{ logo.width }}" height="{{ logo.height }}" alt="{{ site.logoOnly ? site.title : '' }}">{% endif -%}
-                {%- if not (logo and site.logoOnly) %}<span class="site-name">{{ site.title }}</span>{% endif -%}
+                {%- if not logo %}{{ site.title }}{% elseif not site.logoOnly %}<span class="site-name">{{ site.title }}</span>{% endif -%}
             </a></p>
             {% if site.description %}<p class="site-description">{{ site.description }}</p>{% endif %}
             <form class="site-search" role="search" method="get" action="/search">

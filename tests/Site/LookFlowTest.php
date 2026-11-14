@@ -173,7 +173,7 @@ final class LookFlowTest extends DbTestCase
         $this->save(['logo_remove' => '1', 'favicon_remove' => '1']);
         $home = $this->home();
         self::assertStringNotContainsString('site-logo', $home);
-        self::assertStringContainsString('<span class="site-name">Edict</span>', $home);
+        self::assertStringContainsString('<a href="/">Edict</a>', $home);
         self::assertStringContainsString('href="/favicon.svg"', $home);
     }
 }
