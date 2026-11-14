@@ -18,6 +18,7 @@ final readonly class JobRunner
         private AvProcessor $av,
         private FileProcessor $files,
         private CommentAlert $alerts,
+        private IconProcessor $icons,
         private MediaLibrary $library,
     ) {}
 
@@ -30,7 +31,7 @@ final readonly class JobRunner
     public function runNext(bool $imagesOnly = false): bool
     {
         // A new poster takes seconds, so it needn't wait hours behind a video either.
-        $job = $this->jobs->claim($imagesOnly ? [ImageProcessor::JOB, AvProcessor::POSTER_JOB, FileProcessor::JOB, CommentAlert::JOB] : null);
+        $job = $this->jobs->claim($imagesOnly ? [ImageProcessor::JOB, AvProcessor::POSTER_JOB, FileProcessor::JOB, CommentAlert::JOB, IconProcessor::JOB] : null);
         if ($job === null) {
             return false;
         }
@@ -82,6 +83,7 @@ final readonly class JobRunner
             ImageProcessor::JOB => $this->images->process(self::mediaId($payload)),
             AvProcessor::JOB => $this->av->process(self::mediaId($payload)),
             FileProcessor::JOB => $this->files->process(self::mediaId($payload)),
+            IconProcessor::JOB => $this->icons->process(self::mediaId($payload)),
             CommentAlert::JOB => $this->alerts->send(is_int($payload['comment_id'] ?? null) ? $payload['comment_id'] : 0),
             AvProcessor::POSTER_JOB => $this->av->choosePoster(self::mediaId($payload), is_numeric($payload['seconds'] ?? null) ? (float) $payload['seconds'] : 0.0),
             default => throw new \RuntimeException("Unknown job type $type"),

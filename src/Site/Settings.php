@@ -39,6 +39,10 @@ final class Settings
                 self::links($values['footer'] ?? null),
                 self::text($values['imprint'] ?? null, ''),
                 self::text($values['privacy'] ?? null, ''),
+                Accent::parse(self::text($values['accent'] ?? null, '')) ?? '',
+                is_int($values['logo'] ?? null) ? $values['logo'] : 0,
+                ($values['logo_only'] ?? false) === true,
+                is_int($values['favicon'] ?? null) ? $values['favicon'] : 0,
             );
         }
 
@@ -111,6 +115,34 @@ final class Settings
     public function preview(?string $theme): void
     {
         $this->preview = $theme !== null && Themes::exists($theme) ? $theme : null;
+    }
+
+    /**
+     * The accent colour, logo and icon. A null image leaves it as it is, 0 removes it.
+     *
+     * @param array<mixed> $form
+     *
+     * @return array<string, string> what is wrong, by field; nothing is stored then
+     */
+    public function saveLook(array $form, ?int $logo, ?int $favicon): array
+    {
+        $accent = '';
+        if (self::field($form, 'accent_mode') === 'own') {
+            $accent = Accent::parse(self::field($form, 'accent')) ?? '';
+            if ($accent === '') {
+                return ['accent' => 'Please choose a colour, such as #1a56db.'];
+            }
+        }
+        $values = ['accent' => $accent, 'logo_only' => self::field($form, 'logo_only') === '1'];
+        if ($logo !== null) {
+            $values['logo'] = $logo;
+        }
+        if ($favicon !== null) {
+            $values['favicon'] = $favicon;
+        }
+        $this->store($values);
+
+        return [];
     }
 
     public function applyTheme(string $theme): bool

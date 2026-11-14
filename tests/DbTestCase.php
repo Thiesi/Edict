@@ -15,6 +15,7 @@ use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\StreamInterface;
+use Psr\Http\Message\UploadedFileInterface;
 use Slim\App;
 use Slim\Psr7\Factory\ServerRequestFactory;
 
@@ -118,6 +119,24 @@ abstract class DbTestCase extends TestCase
     protected function post(string $path, array $body = [], array $cookies = [], array $headers = []): ResponseInterface
     {
         return $this->request('POST', $path, $body, $cookies, $headers);
+    }
+
+    /**
+     * A form with files, as a browser sends it with enctype="multipart/form-data".
+     *
+     * @param array<string, mixed> $body
+     * @param array<string, UploadedFileInterface> $files
+     * @param array<string, string> $cookies
+     */
+    protected function postFiles(string $path, array $body, array $files, array $cookies): ResponseInterface
+    {
+        $request = (new ServerRequestFactory())
+            ->createServerRequest('POST', self::ORIGIN . $path, ['REMOTE_ADDR' => '203.0.113.7'])
+            ->withCookieParams($cookies)
+            ->withParsedBody($body)
+            ->withUploadedFiles($files);
+
+        return $this->app->handle($request);
     }
 
     /**
