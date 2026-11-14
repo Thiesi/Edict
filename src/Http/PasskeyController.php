@@ -92,6 +92,7 @@ final readonly class PasskeyController
         $session = self::requireSession($request);
         $response->getBody()->write($this->twig->render('admin/passkeys.html.twig', [
             'passkeys' => $this->passkeys->all($session->userId),
+            'notice' => Notices::fromRequest($request),
             'csrf_field' => CsrfMiddleware::FIELD,
             'csrf_token' => $session->csrfToken,
         ]));
@@ -167,6 +168,20 @@ final readonly class PasskeyController
         }
 
         return self::json($response, ['redirect' => '/admin/passkeys']);
+    }
+
+    /**
+     * Renaming needs no password: it adds no way in.
+     *
+     * @param array<string, string> $args
+     */
+    public function rename(ServerRequestInterface $request, ResponseInterface $response, array $args): ResponseInterface
+    {
+        $id = $args['id'] ?? '';
+        $renamed = ctype_digit($id)
+            && $this->passkeys->rename(self::requireSession($request)->userId, (int) $id, AdminAuthController::credential($request->getParsedBody(), 'name'));
+
+        return $response->withStatus(303)->withHeader('Location', '/admin/passkeys?notice=' . ($renamed ? 'passkey-renamed' : 'passkey-bad-name'));
     }
 
     /**

@@ -530,6 +530,30 @@ final class PasskeyTest extends DbTestCase
         self::assertSame(401, $this->logIn()->getStatusCode());
     }
 
+    public function testPasskeysCanBeRenamed(): void
+    {
+        $cookies = $this->adminSession();
+        self::assertSame(200, $this->register($cookies, 'Laptop')->getStatusCode());
+        $id = $this->pdo->query('SELECT id FROM passkey');
+        self::assertNotFalse($id);
+        $id = $id->fetchColumn();
+        self::assertIsInt($id);
+
+        self::assertSame(403, $this->post("/admin/passkeys/$id/rename", ['name' => 'Hacked'], $cookies)->getStatusCode());
+        $renamed = $this->post("/admin/passkeys/$id/rename", ['name' => '  Work   laptop '], $cookies, $this->csrf($cookies));
+        self::assertSame('/admin/passkeys?notice=passkey-renamed', $renamed->getHeaderLine('Location'));
+        self::assertStringContainsString('Work laptop, added', (string) $this->get('/admin/passkeys', $cookies)->getBody());
+        self::assertStringContainsString('The passkey was renamed.', (string) $this->get('/admin/passkeys?notice=passkey-renamed', $cookies)->getBody());
+
+        foreach (['', str_repeat('x', 65)] as $bad) {
+            $refused = $this->post("/admin/passkeys/$id/rename", ['name' => $bad], $cookies, $this->csrf($cookies));
+            self::assertSame('/admin/passkeys?notice=passkey-bad-name', $refused->getHeaderLine('Location'));
+        }
+        $missing = $this->post('/admin/passkeys/999/rename', ['name' => 'Other'], $cookies, $this->csrf($cookies));
+        self::assertSame('/admin/passkeys?notice=passkey-bad-name', $missing->getHeaderLine('Location'));
+        self::assertSame(200, $this->logIn()->getStatusCode(), 'the passkey still works');
+    }
+
     public function testResetRemovesPasskeys(): void
     {
         $this->registered();

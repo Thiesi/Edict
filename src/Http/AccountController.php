@@ -50,6 +50,7 @@ final readonly class AccountController
             'welcome' => ($query['notice'] ?? null) === 'welcome',
             'last_provider' => $last,
             'can_remove' => !$session->isAdmin && count($identities) > 1,
+            'providers' => $this->providers->all(),
             'csrf_field' => CsrfMiddleware::FIELD,
             'csrf_token' => $session->csrfToken,
         ]));
