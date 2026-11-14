@@ -75,7 +75,7 @@ Set `DATA_DIR` in `.env` to a folder outside the repo, and install libvips (`vip
 | `php bin/edict admin:disallow <google\|twitch> <id>` | Remove it again; ends all admin sessions |
 | `php bin/edict admin:identities` | List the allow-listed accounts |
 
-To allow-list your own account: sign in with it on the site, copy its ID from `/account`, then run `admin:allow`. The ID moves from that new reader account to the admin account, and the reader account is deleted if it has no other login. Sign in again afterwards to get an admin session.
+Easier: sign in as admin and use the logins form on `/account` (password and authenticator code required). On the command line instead: sign in with the account on the site, copy its ID from `/account`, then run `admin:allow`. The ID moves from that new reader account to the admin account, and the reader account is deleted if it has no other login. Sign in again afterwards to get an admin session.
 
 `EDICT_ADMIN_PASSWORD` supplies the password for non-interactive runs. Changing `APP_SECRET` makes stored authenticator secrets unreadable, so run `admin:reset` afterwards.
 

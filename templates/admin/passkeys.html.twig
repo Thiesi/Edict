@@ -6,12 +6,18 @@
     <main>
         <h1>Passkeys</h1>
         <p><a href="/admin">Back to admin</a></p>
+        {% if notice %}<p role="status">{{ notice }}</p>{% endif %}
 
         {% if passkeys %}
             <ul>
                 {% for passkey in passkeys %}
                     <li>
                         {{ passkey.name }}, added {{ passkey.created_at }}{% if passkey.last_used_at %}, last used {{ passkey.last_used_at }}{% endif %}
+                        <form method="post" action="/admin/passkeys/{{ passkey.id }}/rename">
+                            <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                            <label>New name for {{ passkey.name }} <input name="name" value="{{ passkey.name }}" maxlength="64" required></label>
+                            <button type="submit">Rename</button>
+                        </form>
                         <form method="post" action="/admin/passkeys/{{ passkey.id }}/remove">
                             <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
                             <button type="submit">Remove</button>

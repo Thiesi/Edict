@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Edict\Http;
 
 use Edict\Auth\Accounts;
+use Edict\Auth\AdminAccount;
 use Edict\Auth\LoginThrottle;
 use Edict\Auth\OAuth\FlowState;
 use Edict\Auth\OAuth\OAuthClient;
@@ -37,6 +38,7 @@ final readonly class OAuthController
         private LoginThrottle $throttle,
         private Config $config,
         private LastProviderCookie $lastProvider,
+        private AdminAccount $admin,
     ) {}
 
     public function showLogin(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
@@ -83,6 +85,63 @@ final readonly class OAuthController
         }
 
         return $this->leaveFor($provider, $this->flowCookie->begin($provider->name, '/account', $session->userId), $response);
+    }
+
+    /**
+     * Adds or removes a Google or Twitch login of the admin. Each change needs the
+     * password and authenticator code, so a stolen session alone can't leave a
+     * way in behind or lock the owner out. The command line (admin:allow,
+     * admin:disallow) stays as the way back.
+     */
+    public function adminLogins(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
+    {
+        $session = self::session($request);
+        if ($session === null || !$session->isAdmin) {
+            return self::redirect($response, '/account');
+        }
+        $body = $request->getParsedBody();
+        $action = AdminAuthController::credential($body, 'action');
+        [$verb, $name] = array_pad(explode(':', $action, 2), 2, '');
+        $provider = $this->providers->get($name);
+        if (!in_array($verb, ['add', 'remove'], true) || $provider === null) {
+            return self::redirect($response, '/account');
+        }
+
+        $username = $this->admin->usernameOf($session->userId);
+        if ($username === null) {
+            return self::redirect($response, '/account?notice=admin-cli');
+        }
+        $ip = self::clientIp($request);
+        if ($this->throttle->isBlocked($ip, $username)) {
+            return self::redirect($response, '/account?notice=throttled');
+        }
+        // Recorded before the slow check, so parallel requests can't all pass the limit.
+        $this->throttle->recordFailure($ip, $username);
+        $verified = $this->admin->verify(
+            $username,
+            AdminAuthController::credential($body, 'password'),
+            AdminAuthController::credential($body, 'code'),
+        );
+        if ($verified !== $session->userId) {
+            return self::redirect($response, '/account?notice=admin-not-confirmed');
+        }
+        $this->throttle->clear($ip, $username);
+
+        if ($verb === 'add') {
+            return $this->leaveFor($provider, $this->flowCookie->begin($provider->name, '/account', $session->userId), $response);
+        }
+
+        $removed = false;
+        foreach ($this->accounts->identities($session->userId) as $identity) {
+            if ($identity['provider'] === $provider->name) {
+                $removed = $this->accounts->disallowForAdmin($identity['provider'], $identity['subject'], $session->tokenHash);
+            }
+        }
+        if ($removed) {
+            $this->audit("removed the admin's {$provider->name} login; other admin sessions ended");
+        }
+
+        return self::redirect($response, '/account?notice=' . ($removed ? 'admin-unlinked' : 'not-linked'));
     }
 
     /**
@@ -176,9 +235,13 @@ final readonly class OAuthController
 
     private function link(ProviderIdentity $identity, int $linkUserId, bool $combine, ?Session $session, ResponseInterface $response): ResponseInterface
     {
-        // The account that asked must still be the one signed in, and never the admin.
-        if ($session === null || $session->userId !== $linkUserId || $session->isAdmin) {
+        // The account that asked must still be the one signed in.
+        if ($session === null || $session->userId !== $linkUserId || ($session->isAdmin && $combine)) {
             return self::redirect($response, ($session === null ? '/login' : '/account') . '?notice=expired');
+        }
+        if ($session->isAdmin) {
+            // Only adminLogins starts an admin flow, after checking the password and code.
+            return self::redirect($response, '/account?notice=' . $this->allowForAdmin($identity));
         }
         if (!$combine) {
             return self::redirect($response, '/account?notice=' . $this->accounts->link($linkUserId, $identity));
@@ -197,6 +260,31 @@ final readonly class OAuthController
         };
 
         return self::redirect($response, '/account?notice=' . $notice);
+    }
+
+    private function allowForAdmin(ProviderIdentity $identity): string
+    {
+        try {
+            $result = $this->accounts->allowForAdmin($identity->provider, $identity->subject);
+        } catch (\DomainException) {
+            return 'provider-in-use';
+        }
+        if ($result !== 'unchanged') {
+            $this->audit("added a {$identity->provider} login to the admin" . ($result === 'moved' ? ', taken from a reader account' : ''));
+        }
+
+        return match ($result) {
+            'added' => 'linked',
+            'moved' => 'admin-moved',
+            'unchanged' => 'already',
+        };
+    }
+
+    private function audit(string $what): void
+    {
+        if ($this->config->env !== 'test') {
+            error_log('Edict security: ' . $what);
+        }
     }
 
     private function leaveFor(Provider $provider, FlowState $flow, ResponseInterface $response): ResponseInterface
