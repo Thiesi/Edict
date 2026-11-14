@@ -5,39 +5,58 @@ declare(strict_types=1);
 namespace Edict\Mail;
 
 use Edict\Config;
+use Edict\Database\Row;
 use Edict\Media\Command;
 use Edict\Media\MediaError;
 
 /**
  * Plain-text mail through the host's sendmail, which hands it to the local MTA.
- * Only ever to the sovereign's own address: Edict stores no reader addresses.
+ * Only ever to the sovereign: Edict stores no reader addresses.
  */
 final readonly class Mailer
 {
     private const SECONDS = 30;
 
-    public function __construct(private Config $config) {}
+    public function __construct(private Config $config, private \PDO $pdo) {}
 
     /**
-     * Both addresses, or nothing is sent. There is deliberately no default sender: a
-     * made-up one fails the domain's DMARC policy, and the mail vanishes unseen.
+     * The admin's notification address from /account, or else ALERT_EMAIL.
      */
-    public function isConfigured(): bool
+    public function recipient(): ?string
     {
-        return $this->config->alertEmail !== null && $this->config->mailFrom !== null;
+        $stmt = $this->pdo->query('SELECT c.email FROM admin_credential c JOIN app_user u ON u.id = c.user_id WHERE u.is_admin AND c.email IS NOT NULL');
+        $row = $stmt === false ? false : $stmt->fetch();
+
+        return is_array($row) ? Row::str($row, 'email') : $this->config->alertEmail;
     }
 
     /**
+     * A recipient and MAIL_FROM, or nothing is sent. There is deliberately no default
+     * sender: a made-up one fails the domain's DMARC policy, and the mail vanishes unseen.
+     */
+    public function isConfigured(): bool
+    {
+        return $this->config->mailFrom !== null && $this->recipient() !== null;
+    }
+
+    /**
+     * @param string|null $alsoTo a second address, such as the one being replaced
+     *
      * @throws MediaError when sendmail refuses or isn't there, so the job tries again
      */
-    public function toOwner(string $subject, string $text): void
+    public function toOwner(string $subject, string $text, ?string $alsoTo = null): void
     {
-        $to = $this->config->alertEmail;
         $from = $this->config->mailFrom;
-        if ($to === null || $from === null) {
+        if ($from === null) {
             return;
         }
+        foreach (array_unique(array_filter([$this->recipient(), $alsoTo], static fn(?string $to): bool => $to !== null)) as $to) {
+            $this->send($from, $to, $subject, $text);
+        }
+    }
 
+    private function send(string $from, string $to, string $subject, string $text): void
+    {
         $message = implode("\r\n", [
             'From: Edict <' . $from . '>',
             'To: ' . $to,

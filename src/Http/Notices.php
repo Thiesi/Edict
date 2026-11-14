@@ -33,6 +33,8 @@ final class Notices
         'admin-cli' => 'Change the admin’s logins in the form below, with your password and authenticator code.',
         'admin-not-confirmed' => 'That password or code is not valid, so nothing was changed. Each code works only once, so you may need to wait for the next one.',
         'admin-unlinked' => 'The login was removed, and every other admin session has ended.',
+        'admin-email-saved' => 'The notification address was saved.',
+        'admin-email-invalid' => 'That is not a usable email address, so nothing was changed.',
         'passkey-renamed' => 'The passkey was renamed.',
         'passkey-bad-name' => 'Please give the passkey a name of 1 to 64 characters.',
         'admin-moved' => 'The login was added. It belonged to a reader account until now; that account lost it, and was deleted if it had no other login.',

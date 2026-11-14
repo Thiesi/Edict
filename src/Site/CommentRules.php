@@ -20,6 +20,7 @@ final readonly class CommentRules
         public int $autoCloseDays,
         public array $words,
         public string $wordAction,
+        public bool $alerts = true,
     ) {}
 
     /**
