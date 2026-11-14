@@ -123,7 +123,7 @@ final class AdminEmailTest extends DbTestCase
         $this->pdo->exec("INSERT INTO comment (article_id, user_id, body, state, created_at)
              SELECT id, {$user->fetchColumn()}, 'Hello', 'visible', now() FROM article WHERE slug = 'talk'");
         $this->pdo->exec("INSERT INTO job (type, payload, run_after, created_at)
-             SELECT 'comment-alert', json_build_object('comment_id', id)::text, now(), now() FROM comment");
+             SELECT 'comment-alert', jsonb_build_object('comment_id', id), now(), now() FROM comment");
     }
 
     public function testTheAddressNeedsThePasswordAndCodeAndMustBeAnAddress(): void
@@ -176,7 +176,7 @@ final class AdminEmailTest extends DbTestCase
         self::assertStringNotContainsString('name="comment_alerts" value="1" checked', (string) $this->get('/admin/comments', $admin['cookies'])->getBody());
 
         $this->pdo->exec("INSERT INTO job (type, payload, run_after, created_at)
-             SELECT 'comment-alert', json_build_object('comment_id', id)::text, now(), now() FROM comment");
+             SELECT 'comment-alert', jsonb_build_object('comment_id', id), now(), now() FROM comment");
         $this->runJobs();
         self::assertCount(1, $this->sent(), 'switched off: nothing more');
     }
