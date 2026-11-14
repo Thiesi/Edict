@@ -258,6 +258,15 @@ hr {
     background: color-mix(in srgb, var(--accent) 76%, var(--fg));
 }
 
+/* A link dressed as a button takes the button's colours, not the link colour. */
+a.button {
+    color: var(--control-fg);
+}
+
+a.button-primary {
+    color: var(--accent-fg);
+}
+
 /* Something that can't be undone. */
 :where(.button-danger) {
     border-color: var(--danger);

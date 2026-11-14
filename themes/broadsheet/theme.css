@@ -20,6 +20,9 @@
     --rule: #111;
     --measure: 40rem;
     --wide: 72rem;
+    --radius: 0;
+    --control-bg: var(--bg);
+    --control-border: var(--rule);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -104,21 +107,51 @@ body:has(.articles) .site-content {
     text-transform: uppercase;
 }
 
+/*
+ * A front page: a grid with rules between its columns. The newest story leads, two
+ * columns wide. Each row's stories end on the same rule.
+ */
 .articles {
-    columns: 3 16rem;
-    column-gap: 2rem;
-    column-rule: 1px solid var(--rule);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    margin: 0;
 }
 
 .articles > li {
-    break-inside: avoid;
-    margin-bottom: 1.5rem;
-    padding-bottom: 1rem;
+    padding: 1rem 0;
     border-bottom: 1px solid var(--rule);
 }
 
-.articles > li:first-child h2 {
-    font-size: 2rem;
+@media (min-width: 40rem) {
+    .articles {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        margin: 0 -1rem;
+        /* Hides the rule to the left of each row's first story. */
+        clip-path: inset(0 0 0 1px);
+    }
+
+    .articles > li {
+        padding: 1rem;
+        border-left: 1px solid var(--rule);
+    }
+
+    .articles > li:first-child {
+        grid-column: span 2;
+    }
+
+    .articles > li:first-child h2 {
+        font-size: 2.4rem;
+    }
+
+    .articles > li:first-child .summary-teaser {
+        font-size: 1.1rem;
+    }
+}
+
+@media (min-width: 64rem) {
+    .articles {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
 }
 
 .articles h2 {
@@ -173,7 +206,9 @@ article > p:has(> time) {
     font-weight: 700;
 }
 
-article > p:first-of-type:not(.teaser):not(:has(time))::first-letter {
+/* The first paragraph of the text itself: after the date line, the cover or the teaser,
+   whichever comes last. Never a comment. */
+article:not(.comment-body) > :is(h1, .article-meta, .article-cover, .teaser) + p:not(.article-meta, .teaser)::first-letter {
     float: left;
     margin: 0.1rem 0.4rem 0 0;
     font-family: var(--font-heading);
@@ -208,4 +243,112 @@ blockquote {
 
 .site-footer ul {
     justify-content: center;
+}
+
+/* Controls like the labels on a printed form: square, ruled, in small capitals. */
+button,
+.button,
+.file-download {
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.button-primary,
+a.button-primary {
+    border-color: var(--fg);
+    background: var(--fg);
+    color: var(--bg);
+}
+
+.button-primary:hover {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--accent-fg);
+}
+
+.comment-actions button {
+    font-size: 0.7rem;
+    font-weight: 400;
+}
+
+.lang-filter,
+.summary-meta,
+.pager-count,
+.tags-label,
+.search-count {
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.tags a {
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+/* One system of rules: double closes a page, thick opens a part, thin separates. */
+.comments {
+    border-top: 2px solid var(--rule);
+}
+
+.comments > h2,
+.search-results h2 {
+    padding-top: 0;
+    border-top: 0;
+}
+
+.pager {
+    padding-top: 0.75rem;
+    border-top: 2px solid var(--rule);
+}
+
+figcaption {
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--rule);
+    color: var(--fg);
+    font-size: 0.8rem;
+    font-style: normal;
+}
+
+th {
+    border-bottom-width: 2px;
+    font-size: 0.8rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.notice {
+    border: 1px solid var(--rule);
+    border-left-width: 4px;
+}
+
+.empty {
+    border: 0;
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+    color: var(--fg);
+    font-style: italic;
+}
+
+.error-page {
+    text-align: center;
+}
+
+.error-page h1 {
+    font-size: clamp(2rem, 6vw, 3.5rem);
+    font-weight: 900;
+}
+
+.error-page .site-search,
+.error-links {
+    justify-content: center;
+}
+
+.audio-player,
+.file-card {
+    border-color: var(--rule);
 }
