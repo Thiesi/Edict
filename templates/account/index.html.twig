@@ -8,6 +8,24 @@
         <h1>Your account</h1>
         {% if notice %}<p role="status">{{ notice }}</p>{% endif %}
 
+        {% if welcome and linkable %}
+            <section aria-labelledby="join-heading">
+                <h2 id="join-heading">Already have an account?</h2>
+                {% if last_provider %}
+                    <p><strong>Last time you signed in here with {{ last_provider.label }}.</strong> If that was you, this new account is probably a second one. Sign in with {{ last_provider.label }} once more, and the two become one.</p>
+                {% else %}
+                    <p>If you’ve signed in here before with another provider, sign in with it once more, and the two accounts become one.</p>
+                {% endif %}
+                {% for provider in last_provider ? [last_provider] : linkable %}
+                    <form method="post" action="/account/combine/{{ provider.name }}">
+                        <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                        <button type="submit">Combine with my {{ provider.label }} account</button>
+                    </form>
+                {% endfor %}
+                <p><small>New here? Then there’s nothing to do.</small></p>
+            </section>
+        {% endif %}
+
         <h2>Name</h2>
         <form method="post" action="/account/name">
             <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
@@ -23,7 +41,15 @@
         {% if identities %}
             <ul>
                 {% for identity in identities %}
-                    <li>{{ identity.provider|capitalize }} (ID <code>{{ identity.subject }}</code>)</li>
+                    <li>
+                        {{ identity.provider|capitalize }} (ID <code>{{ identity.subject }}</code>)
+                        {% if can_remove %}
+                            <form method="post" action="/account/unlink/{{ identity.provider }}">
+                                <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                                <button type="submit">Remove {{ identity.provider|capitalize }} login</button>
+                            </form>
+                        {% endif %}
+                    </li>
                 {% endfor %}
             </ul>
         {% else %}
@@ -37,6 +63,17 @@
         {% endfor %}
         {% if is_admin %}
             <p>Logins for the admin account are managed on the command line.</p>
+        {% endif %}
+
+        {% if linkable and not welcome %}
+            <h2>Combine with another account</h2>
+            <p>Made a second account by mistake? Sign in with its login here, and both become one: comments, likes and logins move to the older account, which keeps its name, and the other one is deleted. This can’t be undone.</p>
+            {% for provider in linkable %}
+                <form method="post" action="/account/combine/{{ provider.name }}">
+                    <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                    <button type="submit">Combine with my {{ provider.label }} account</button>
+                </form>
+            {% endfor %}
         {% endif %}
 
         <h2>Sessions</h2>

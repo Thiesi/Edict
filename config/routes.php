@@ -42,6 +42,8 @@ return static function (App $app): void {
         $group->get('', [AccountController::class, 'show']);
         $group->post('/name', [AccountController::class, 'rename']);
         $group->post('/link/{provider}', [OAuthController::class, 'startLink']);
+        $group->post('/combine/{provider}', [OAuthController::class, 'startCombine']);
+        $group->post('/unlink/{provider}', [AccountController::class, 'unlink']);
         $group->post('/logout', [AccountController::class, 'logout']);
         $group->post('/logout-everywhere', [AccountController::class, 'logoutEverywhere']);
         $group->post('/delete', [AccountController::class, 'delete']);
