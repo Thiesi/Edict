@@ -46,12 +46,8 @@ body {
 /*
  * A notebook page, with its red margin line from the top edge to the bottom one:
  * header, content and footer share one width and each carries its piece of the line.
+ * The page fills the window (site.css); here the footer takes the spare height.
  */
-body {
-    display: flex;
-    flex-direction: column;
-    min-height: 100vh;
-}
 
 .site-header {
     padding: 0;
@@ -85,6 +81,7 @@ body {
 }
 
 .site-content {
+    flex: none;
     padding: 1.5rem var(--gutter) 2rem calc(var(--gutter) + 1.25rem);
     border-left: 2px solid var(--margin-line);
 }

@@ -100,6 +100,40 @@ body {
     overflow-wrap: break-word;
 }
 
+/* The page fills the window: with little to read, the content stretches and the footer
+   sits at the bottom edge instead of halfway up. */
+body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    min-height: 100dvh;
+}
+
+.site-content {
+    flex: 1 0 auto;
+}
+
+/* The commit staging runs (base.html.twig; never in production): small and quiet in the
+   bottom right corner, as in the admin, and out of the page's flow. */
+body > small {
+    position: fixed;
+    right: 0.5rem;
+    bottom: 0.25rem;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+}
+
+body > small a {
+    color: var(--muted);
+    text-decoration: none;
+}
+
+body > small a:hover,
+body > small a:focus-visible {
+    color: var(--fg);
+    text-decoration: underline;
+}
+
 a {
     color: var(--accent);
     text-underline-offset: 0.15em;
@@ -1439,10 +1473,16 @@ mark {
     }
 
     html body {
+        display: block;
+        min-height: 0;
         background: #fff;
         color: #000;
         font-size: 11pt;
         text-shadow: none;
+    }
+
+    body > small {
+        display: none;
     }
 
     .skip-link,
