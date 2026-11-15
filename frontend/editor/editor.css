@@ -63,16 +63,147 @@ img.ProseMirror-separator {
     display: block;
 }
 
-/* The editor's own look. It is the writing surface, not the public theme (S9). */
+/*
+ * The editor's own look. It is the writing surface, not the public theme: neutral,
+ * light and dark, with the admin's palette (see public/assets/admin/admin.css) and
+ * Edict's seal red for the one main action. The text itself is set in a plain serif.
+ */
+:root {
+    color-scheme: light dark;
+    --bg: #f6f6f4;
+    --surface: #fff;
+    --ink: #1b1c20;
+    --muted: #5c5e66;
+    --line: #dfdfda;
+    --line-strong: #8f9199;
+    --hover: #eeeeea;
+    --accent: #9e1f25;
+    --accent-ink: #fff;
+    --danger: #b3261e;
+    --ok: #175c39;
+    --warn-bg: #fbecc8;
+    --warn: #6f4a00;
+    --select: #dbe6fb;
+    --radius: 6px;
+    --motion-fast: 120ms;
+    --ui: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #131418;
+        --surface: #1b1c21;
+        --ink: #e8e8e6;
+        --muted: #a0a2aa;
+        --line: #303238;
+        --line-strong: #6f727b;
+        --hover: #24262c;
+        --accent: #ee8a8e;
+        --accent-ink: #1b0b0c;
+        --danger: #ff8a80;
+        --ok: #8fdcb0;
+        --warn-bg: #3b2e0c;
+        --warn: #f0cd7c;
+        --select: #2b3a5c;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    :root {
+        --motion-fast: 0s;
+    }
+}
+
+body {
+    margin: 0;
+    background: var(--surface);
+    color: var(--ink);
+}
+
+:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+/* Buttons and fields of the chrome. Inside :where(), so each part below can restyle its own. */
+:where(.editor-app, .slash-menu) :where(button, .button) {
+    display: inline-block;
+    margin: 0;
+    padding: 0.35em 0.8em;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+    font-weight: 550;
+    line-height: 1.4;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color var(--motion-fast), border-color var(--motion-fast);
+}
+
+:where(.editor-app, .slash-menu) :where(button, .button):where(:hover) {
+    background: var(--hover);
+}
+
+:where(.editor-app) :where(button):where(:disabled) {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+:where(.editor-app) :where(button)[hidden] {
+    display: none;
+}
+
+:where(.editor-app) :where(.button-primary) {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--accent-ink);
+}
+
+:where(.editor-app) :where(.button-primary):where(:hover) {
+    background: color-mix(in srgb, var(--accent) 88%, var(--ink));
+}
+
+:where(.editor-app) :where(.button-danger) {
+    border-color: var(--danger);
+    color: var(--danger);
+}
+
+:where(.editor-app) :where(.button-quiet) {
+    border-color: transparent;
+    background: none;
+    color: var(--muted);
+    font-weight: 400;
+}
+
+:where(.editor-app) :where(.button-quiet):where(:hover) {
+    border-color: var(--line);
+    color: var(--ink);
+}
+
+:where(.editor-app) :where(input:not([type='checkbox'], [type='radio'], [type='file'], [type='hidden']), select, textarea) {
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+}
+
+.editor-app a {
+    color: var(--accent);
+}
+
 .editor-app {
     display: flex;
     flex-direction: column;
     min-height: 100vh;
     font-family: Georgia, serif;
-    background: #fff;
-    color: #1a1a1a;
+    background: var(--surface);
+    color: var(--ink);
 }
 
+/* The bar: where you are, whether it is saved, and the one main action at the end. */
 .editor-bar {
     position: sticky;
     top: 0;
@@ -80,29 +211,75 @@ img.ProseMirror-separator {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 1rem;
+    gap: 0.5rem 1rem;
     padding: 0.5rem 1rem;
-    border-bottom: 1px solid #ddd;
-    background: #fff;
-    font: 0.9rem system-ui, sans-serif;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface);
+    font: 0.9rem var(--ui);
 }
 
 .editor-bar-end {
     display: flex;
-    gap: 0.75rem;
+    flex-wrap: wrap;
+    gap: 0.4rem;
     align-items: center;
     margin-left: auto;
 }
 
+.editor-bar a.button-quiet {
+    color: var(--muted);
+}
+
+.editor-bar a.button-quiet:hover {
+    color: var(--ink);
+}
+
+.editor-back::before {
+    content: '←';
+    content: '←' / '';
+    margin-right: 0.35em;
+}
+
+/* The words are the message; the dot says at a glance which kind. */
 #save-status {
-    color: #555;
+    color: var(--muted);
+}
+
+#save-status::before {
+    content: '';
+    display: inline-block;
+    width: 0.55rem;
+    height: 0.55rem;
+    margin-right: 0.45rem;
+    border-radius: 50%;
+    background: var(--ok);
+}
+
+#save-status[data-state='busy']::before {
+    background: var(--warn);
+}
+
+#save-status[data-state='problem'] {
+    color: var(--ink);
+    font-weight: 600;
+}
+
+#save-status[data-state='problem']::before {
+    background: var(--danger);
 }
 
 .editor-banner {
     margin: 0;
-    padding: 0.5rem 1rem;
-    background: #fff4d6;
-    font: 0.9rem system-ui, sans-serif;
+    padding: 0.6rem 1rem;
+    border-bottom: 1px solid var(--line);
+    background: var(--warn-bg);
+    color: var(--warn);
+    font: 0.9rem var(--ui);
+}
+
+.editor-banner button {
+    margin-left: 0.4rem;
+    padding: 0.15em 0.6em;
 }
 
 #restore-text {
@@ -116,7 +293,7 @@ img.ProseMirror-separator {
     width: 100%;
     max-width: 42rem;
     margin: 0 auto;
-    padding: 2rem 1rem;
+    padding: 2.5rem 1rem 2rem;
     box-sizing: border-box;
 }
 
@@ -134,15 +311,30 @@ img.ProseMirror-separator {
     width: 100%;
     box-sizing: border-box;
     border: 0;
+    border-radius: 0;
     padding: 0;
     outline: none;
+    background: none;
+    color: var(--ink);
     font-family: inherit;
     resize: vertical;
+}
+
+.editor-title:focus-visible,
+.editor-teaser:focus-visible {
+    outline: none;
+    box-shadow: -0.75rem 0 0 var(--surface), -0.9rem 0 0 var(--accent);
+}
+
+.editor-title::placeholder,
+.editor-teaser::placeholder {
+    color: var(--muted);
 }
 
 .editor-title {
     font-size: 2.2rem;
     font-weight: bold;
+    line-height: 1.2;
 }
 
 .editor-teaser {
@@ -162,20 +354,21 @@ img.ProseMirror-separator {
     content: attr(data-placeholder);
     float: left;
     height: 0;
-    color: #999;
+    color: var(--muted);
     pointer-events: none;
 }
 
 .editor-body blockquote {
     margin-left: 0;
     padding-left: 1rem;
-    border-left: 3px solid #ccc;
+    border-left: 3px solid var(--line-strong);
 }
 
 .editor-body pre {
     padding: 0.75rem;
     overflow-x: auto;
-    background: #f4f4f4;
+    border-radius: var(--radius);
+    background: var(--bg);
 }
 
 .editor-body table {
@@ -185,31 +378,72 @@ img.ProseMirror-separator {
 
 .editor-body td,
 .editor-body th {
-    border: 1px solid #ccc;
+    border: 1px solid var(--line-strong);
     padding: 0.25rem 0.5rem;
     vertical-align: top;
 }
 
-.editor-body .selectedCell {
-    background: #e8f0fe;
+.editor-body th {
+    background: var(--bg);
 }
 
+.editor-body .selectedCell {
+    background: var(--select);
+}
+
+.ProseMirror-gapcursor::after {
+    border-top-color: var(--ink);
+}
+
+/* The menus that float over the text. */
 .bubble-menu,
 .table-tools,
 .slash-menu {
     display: flex;
     gap: 0.125rem;
     padding: 0.25rem;
-    border: 1px solid #ccc;
-    border-radius: 6px;
-    background: #fff;
-    box-shadow: 0 2px 8px rgb(0 0 0 / 15%);
-    font: 0.85rem system-ui, sans-serif;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    box-shadow: 0 6px 20px rgb(0 0 0 / 22%);
+    color: var(--ink);
+    font: 0.85rem var(--ui);
+}
+
+/* The formatting menu is dark on a light page and light on a dark one, so it stands out from the text it sits on. */
+.bubble-menu {
+    border-color: var(--ink);
+    background: var(--ink);
+}
+
+.bubble-menu button {
+    min-width: 2rem;
+    padding: 0.3em 0.5em;
+    border-color: transparent;
+    background: none;
+    color: var(--surface);
+    text-align: center;
+}
+
+.bubble-menu button:hover,
+.bubble-menu button.is-active {
+    background: color-mix(in srgb, var(--surface) 22%, transparent);
+}
+
+.bubble-menu :focus-visible {
+    outline-color: var(--surface);
 }
 
 .table-tools {
     flex-wrap: wrap;
     margin-bottom: 0.5rem;
+    box-shadow: none;
+}
+
+.table-tools button {
+    padding: 0.2em 0.6em;
+    border-color: transparent;
+    font-weight: 400;
 }
 
 .table-tools[hidden],
@@ -221,29 +455,58 @@ img.ProseMirror-separator {
     position: absolute;
     z-index: 10;
     flex-direction: column;
-    min-width: 11rem;
+    min-width: 15rem;
+    padding: 0.3rem;
+}
+
+.slash-group {
+    margin: 0.4rem 0.5rem 0.15rem;
+    color: var(--muted);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
 }
 
 .slash-menu button {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
     border: 0;
-    padding: 0.35rem 0.5rem;
+    padding: 0.4rem 0.5rem;
     background: none;
+    font-weight: 400;
     text-align: left;
     cursor: pointer;
 }
 
 .slash-menu button[aria-selected='true'] {
-    background: #e8f0fe;
+    background: var(--hover);
+    box-shadow: inset 3px 0 0 var(--accent);
 }
 
+.slash-hint {
+    color: var(--muted);
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 0.75rem;
+}
+
+/* Media in the text. */
 .editor-media,
 .editor-gallery {
     position: relative;
     margin: 1rem 0;
     padding: 0.5rem;
-    border: 1px solid #ddd;
-    border-radius: 6px;
-    font: 0.85rem system-ui, sans-serif;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--bg);
+    font: 0.85rem var(--ui);
+}
+
+.ProseMirror-selectednode.editor-media,
+.ProseMirror-selectednode.editor-gallery {
+    border-color: var(--accent);
 }
 
 .editor-media img,
@@ -251,6 +514,7 @@ img.ProseMirror-separator {
     display: block;
     max-width: 100%;
     height: auto;
+    border-radius: 4px;
 }
 
 .editor-media video,
@@ -268,6 +532,7 @@ img.ProseMirror-separator {
 .editor-gallery label {
     display: block;
     margin-top: 0.5rem;
+    color: var(--muted);
 }
 
 .editor-media input,
@@ -275,7 +540,8 @@ img.ProseMirror-separator {
     display: block;
     width: 100%;
     box-sizing: border-box;
-    padding: 0.25rem;
+    margin-top: 0.15rem;
+    padding: 0.3rem 0.5rem;
 }
 
 .editor-gallery {
@@ -294,15 +560,24 @@ img.ProseMirror-separator {
     top: 0.25rem;
     right: 0.25rem;
     z-index: 1;
+    display: grid;
+    place-items: center;
     border: 0;
     border-radius: 50%;
-    width: 1.6rem;
-    height: 1.6rem;
-    background: rgb(0 0 0 / 65%);
+    padding: 0;
+    width: 1.75rem;
+    height: 1.75rem;
+    background: rgb(0 0 0 / 70%);
     color: #fff;
     cursor: pointer;
 }
 
+.media-remove:hover {
+    background: var(--danger);
+    color: var(--surface);
+}
+
+/* The media library: a panel at the side. */
 .media-panel {
     position: fixed;
     top: 3rem;
@@ -313,13 +588,30 @@ img.ProseMirror-separator {
     padding: 0.75rem;
     box-sizing: border-box;
     overflow-y: auto;
-    border-left: 1px solid #ccc;
-    background: #fff;
-    font: 0.9rem system-ui, sans-serif;
+    border-left: 1px solid var(--line);
+    background: var(--bg);
+    box-shadow: -8px 0 24px rgb(0 0 0 / 8%);
+    font: 0.9rem var(--ui);
 }
 
 .media-panel[hidden] {
     display: none;
+}
+
+.media-panel > p {
+    display: flex;
+    gap: 0.5rem;
+    margin: 0 0 0.75rem;
+}
+
+.media-panel > p:last-child {
+    margin: 0.75rem 0 0;
+}
+
+#media-insert:not(:disabled) {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--accent-ink);
 }
 
 /* The panel makes room, so it never covers the text or a block's buttons. */
@@ -332,22 +624,44 @@ img.ProseMirror-separator {
 .media-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(6rem, 1fr));
-    gap: 0.25rem;
-}
-
-.media-grid button {
-    padding: 0;
-    border: 3px solid transparent;
-    background: none;
-    cursor: pointer;
-}
-
-.media-grid button[aria-pressed='true'] {
-    border-color: #1a56db;
+    gap: 0.35rem;
 }
 
 .media-grid button {
     position: relative;
+    padding: 0;
+    border: 3px solid transparent;
+    border-radius: 8px;
+    background: none;
+    overflow: hidden;
+    cursor: pointer;
+}
+
+.media-grid button:hover {
+    border-color: var(--line-strong);
+}
+
+/* Chosen: the accent as an edge, and a tick, so it is not colour alone. */
+.media-grid button[aria-pressed='true'] {
+    border-color: var(--accent);
+}
+
+.media-grid button[aria-pressed='true']::before {
+    content: '✓';
+    content: '✓' / '';
+    position: absolute;
+    top: 0.25rem;
+    right: 0.25rem;
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    width: 1.25rem;
+    height: 1.25rem;
+    border-radius: 50%;
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-size: 0.75rem;
+    font-weight: 700;
 }
 
 .media-grid button.is-audio,
@@ -359,9 +673,10 @@ img.ProseMirror-separator {
     gap: 0.25rem;
     height: calc(6rem + 6px);
     padding: 0.25rem;
-    background: #eef2fb;
-    color: #1a3a7a;
+    background: var(--surface);
+    color: var(--ink);
     font-size: 0.75rem;
+    font-weight: 400;
 }
 
 .tile-icon {
@@ -390,7 +705,7 @@ img.ProseMirror-separator {
     bottom: 0.35rem;
     padding: 0.1rem 0.35rem;
     border-radius: 3px;
-    background: rgb(0 0 0 / 65%);
+    background: rgb(0 0 0 / 70%);
     color: #fff;
     font-size: 0.7rem;
     line-height: 1.2;
@@ -404,10 +719,11 @@ img.ProseMirror-separator {
     gap: 0.25rem;
     height: calc(6rem + 6px);
     padding: 0.25rem;
-    border: 1px dashed #999;
-    background: #f6f6f6;
-    color: #555;
+    border: 1px dashed var(--line-strong);
+    background: var(--surface);
+    color: var(--muted);
     font-size: 0.75rem;
+    font-weight: 400;
     cursor: progress;
 }
 
@@ -443,6 +759,7 @@ img.ProseMirror-separator {
 
 .media-grid button.is-processing:has([role='alert']) {
     overflow-wrap: anywhere;
+    color: var(--ink);
     cursor: default;
 }
 
@@ -459,14 +776,14 @@ img.ProseMirror-separator {
     bottom: 1rem;
     z-index: 7;
     margin: 0;
-    padding: 0.5rem 0.75rem;
+    padding: 0.6rem 0.8rem;
     max-width: min(28rem, 90vw);
     list-style: none;
-    border: 1px solid #ccc;
-    border-radius: 6px;
-    background: #fff;
-    box-shadow: 0 2px 8px rgb(0 0 0 / 15%);
-    font: 0.85rem system-ui, sans-serif;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    box-shadow: 0 6px 20px rgb(0 0 0 / 22%);
+    font: 0.85rem var(--ui);
 }
 
 .upload-tray[hidden] {
@@ -476,20 +793,34 @@ img.ProseMirror-separator {
 .upload-tray progress {
     display: block;
     width: 100%;
+    accent-color: var(--accent);
 }
 
+/* Details: the address, language, tags, versions, and what can't be undone. */
 .editor-details {
     width: 100%;
     max-width: 42rem;
-    margin: 0 auto;
-    padding: 1rem;
+    margin: 0 auto 3rem;
+    padding: 0 1rem;
     box-sizing: border-box;
-    border-top: 1px solid #ddd;
-    font: 0.9rem system-ui, sans-serif;
+    font: 0.9rem var(--ui);
+}
+
+.editor-details > summary {
+    padding: 0.75rem 0;
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.editor-details[open] > summary {
+    color: var(--ink);
 }
 
 .editor-details label {
     display: block;
+    margin-bottom: 0.2rem;
     font-weight: 600;
 }
 
@@ -497,12 +828,55 @@ img.ProseMirror-separator {
 .editor-details select {
     width: 100%;
     box-sizing: border-box;
-    padding: 0.25rem;
+    padding: 0.35rem 0.5rem;
+}
+
+.editor-details small {
+    display: block;
+    margin-top: 0.25rem;
+    color: var(--muted);
+}
+
+.editor-details h3 {
+    margin: 1.5rem 0 0.25rem;
+    font-size: 0.95rem;
+}
+
+.editor-revisions {
+    margin: 0.5rem 0 1rem;
+    padding: 0;
+    list-style: none;
+}
+
+.editor-revisions li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.25rem 1rem;
+    padding: 0.5rem 0;
+    border-top: 1px solid var(--line);
+}
+
+.editor-revisions small {
+    display: inline;
+}
+
+.editor-revisions button,
+.editor-fate button {
+    padding: 0.2em 0.6em;
+    font-size: 0.85rem;
 }
 
 .editor-details form {
     display: inline-block;
     margin-right: 0.5rem;
+}
+
+.editor-fate {
+    margin-top: 1.25rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--line);
 }
 
 .media-grid button.is-animated::after {
@@ -526,20 +900,31 @@ img.ProseMirror-separator {
     background: #000;
 }
 
+.poster-chooser button {
+    padding: 0.2em 0.6em;
+}
+
 .editor-cover {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 0.5rem;
-    margin: 0.5rem 0 1rem;
-    font-size: 0.875rem;
+    margin: 0.5rem 0 1.25rem;
+    font: 0.875rem var(--ui);
 }
 
 .editor-cover img {
     width: 8rem;
     aspect-ratio: 16 / 9;
     object-fit: cover;
-    border-radius: 3px;
+    border-radius: 4px;
+}
+
+.editor-cover button {
+    padding: 0.2em 0.7em;
+    border-style: dashed;
+    color: var(--muted);
+    font-weight: 400;
 }
 
 /* Only shown with a cover. */
@@ -548,6 +933,11 @@ img.ProseMirror-separator {
     flex-direction: column;
     flex: 1 1 100%;
     gap: 0.25rem;
+    color: var(--muted);
+}
+
+.editor-cover input {
+    padding: 0.3rem 0.5rem;
 }
 
 .editor-file {
@@ -566,11 +956,11 @@ img.ProseMirror-separator {
 }
 
 .editor-file small {
-    opacity: 0.75;
+    color: var(--muted);
 }
 
 .editor-count {
-    color: #666;
+    color: var(--muted);
     font-size: 0.85rem;
     white-space: nowrap;
 }
