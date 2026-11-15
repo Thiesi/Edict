@@ -97,9 +97,13 @@ test('the slash menu inserts blocks', async ({ page }) => {
 
 test('the toolbar formats a selection', async ({ page }) => {
     await newItem(page);
+    // The menu belongs to a selection: none on load, none while typing.
+    await expect(page.locator('#bubble-menu')).toBeHidden();
     await page.locator('.ProseMirror').click();
     await page.keyboard.type('Format me');
+    await expect(page.locator('#bubble-menu')).toBeHidden();
     await page.keyboard.press('Control+A');
+    await expect(page.locator('#bubble-menu')).toBeVisible();
 
     await page.locator('#bubble-menu [data-command="italic"]').click();
 
