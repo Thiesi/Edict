@@ -20,8 +20,10 @@ final readonly class ErrorPage implements ErrorRendererInterface
 
     public function __invoke(\Throwable $exception, bool $displayErrorDetails): string
     {
-        // Developers want the stack trace, not a pretty page.
-        if ($displayErrorDetails) {
+        // Developers want the stack trace for a real fault. A 404, 403 or 405 has none
+        // worth reading, so those get the themed page everywhere, which also lets the
+        // browser tests (in development mode) check it.
+        if ($displayErrorDetails && !$exception instanceof HttpException) {
             return (new HtmlErrorRenderer())($exception, true);
         }
 

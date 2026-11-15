@@ -132,5 +132,9 @@ final class FeedFlowTest extends DbTestCase
         self::assertStringContainsString('<h1>Not found</h1>', $html);
         self::assertStringContainsString('class="site-title"', $html, 'in the theme');
         self::assertStringContainsString('<meta name="robots" content="noindex">', $html);
+
+        // With details on, as in development: a real fault shows them, an HTTP answer doesn't.
+        self::assertStringContainsString('class="site-title"', $page($notFound, true), 'a 404 is themed in development too');
+        self::assertStringContainsString('database gone', $page(new \RuntimeException('database gone'), true));
     }
 }
