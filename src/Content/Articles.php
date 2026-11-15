@@ -155,6 +155,8 @@ final readonly class Articles
             }
 
             $this->setTags($article->id, $input);
+            // The draft a preview link showed is gone: published, or waiting to be.
+            $this->endPreviewLink($article->id);
             if (!$wasPublic) {
                 // A version scheduled before and replaced now never reached readers.
                 $this->forgetUnseenRevisions($article->id, $now);
@@ -302,10 +304,21 @@ final readonly class Articles
             ->execute([$articleId, $now]);
     }
 
+    /**
+     * Also ends its preview link: restoring it from the trash doesn't bring that back.
+     */
     public function trash(int $id): void
     {
-        $this->pdo->prepare('UPDATE article SET deleted_at = to_timestamp(?) WHERE id = ? AND deleted_at IS NULL')
-            ->execute([$this->clock->now(), $id]);
+        $this->transaction(function () use ($id): void {
+            $this->pdo->prepare('UPDATE article SET deleted_at = to_timestamp(?) WHERE id = ? AND deleted_at IS NULL')
+                ->execute([$this->clock->now(), $id]);
+            $this->endPreviewLink($id);
+        });
+    }
+
+    private function endPreviewLink(int $id): void
+    {
+        $this->pdo->prepare('DELETE FROM preview_link WHERE article_id = ?')->execute([$id]);
     }
 
     public function restore(int $id): void
@@ -429,6 +442,19 @@ final readonly class Articles
         $stmt->execute([$this->clock->now(), $lang, $lang]);
 
         return Row::int(['n' => $stmt->fetchColumn()], 'n');
+    }
+
+    /**
+     * The languages readers find articles and pages in, for the home page's structured data.
+     *
+     * @return list<string>
+     */
+    public function publicLanguages(): array
+    {
+        $stmt = $this->pdo->prepare('SELECT DISTINCT a.lang FROM article a WHERE ' . self::PUBLIC_WHERE . ' ORDER BY a.lang');
+        $stmt->execute([$this->clock->now()]);
+
+        return array_values(array_filter($stmt->fetchAll(\PDO::FETCH_COLUMN), is_string(...)));
     }
 
     /**

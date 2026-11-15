@@ -1,20 +1,28 @@
 {% extends 'public/layout.html.twig' %}
 
+{# Shared: a private preview link (#85), for someone without an account. It names no
+   address: a draft's may be a placeholder, and the link's own must stay private. #}
+{% set shared_preview = shared_preview|default(false) %}
 {% set meta = {
     title: article.title,
     description: article.teaser ?: null,
-    url: '/' ~ article.slug,
+    url: shared_preview ? null : '/' ~ article.slug,
     type: article.kind == 'article' ? 'article' : 'website',
     locale: article.lang == 'de' ? 'de_DE' : 'en_GB',
     image: preview ? null : share_image(article),
     image_alt: article.coverAlt,
-    robots: preview ? 'noindex' : null,
+    robots: shared_preview ? 'noindex, nofollow' : (preview ? 'noindex' : null),
 }|filter(v => v is not null) %}
+
+{# The same share image as og:image. #}
+{% block structured_data %}{{ structured_data_article(article) }}{% endblock %}
 
 {% block title %}{{ article.title }} · {{ site().title }}{% endblock %}
 
 {% block main %}
-    {% if preview %}
+    {% if shared_preview %}
+        <p class="notice preview-banner" role="status"><strong>Preview, not published.</strong> This text may still change before it goes live.</p>
+    {% elseif preview %}
         <p class="notice" role="status"><strong>Preview.</strong> Status: {% if article.scheduled %}scheduled for {{ article.publishedAt|admin_datetime }} (Berlin time){% else %}{{ article.status }}{% endif %}. <a href="/admin/articles/{{ article.id }}">Back to the editor</a></p>
     {% endif %}
     <main>

@@ -128,6 +128,29 @@
                     <small id="tags-help">Separated by commas. Suggestions come from tags already in use. <a href="/admin/tags">Rename tags</a></small>
                 </p>
             {% endif %}
+            {% if not article.deletedAt %}
+                {# The link is only ever shown when it is made: the database keeps just its hash. #}
+                <section class="editor-share" aria-labelledby="share-heading">
+                    <h3 id="share-heading">Share preview</h3>
+                    <p><small>Anyone with the link can read the current draft without an account, later edits included. It works for {{ preview_link_days }} days, and stops when you publish, schedule or trash this. A new link replaces the old one.</small></p>
+                    <div id="share-link" class="editor-share-link" hidden>
+                        <label for="share-url">Preview link</label>
+                        <span class="editor-share-row">
+                            <input id="share-url" readonly aria-describedby="share-once">
+                            <button type="button" id="share-copy">Copy</button>
+                            <span id="share-copied" class="editor-share-copied" role="status"></span>
+                        </span>
+                        <small id="share-once">Copy it now: it is shown only this once. Later you can replace it with a new link.</small>
+                    </div>
+                    <p id="share-status" class="editor-share-status" role="status">
+                        {%- if preview_link_expires %}A link is shared until <time datetime="{{ preview_link_expires|article_iso }}">{{ preview_link_expires|admin_datetime }}</time> (Berlin time). To send it again, make a new link.{% endif -%}
+                    </p>
+                    <p class="editor-share-actions">
+                        <button type="button" id="share-create">{{ preview_link_expires ? 'New link' : 'Share preview' }}</button>
+                        <button type="button" id="share-stop"{% if not preview_link_expires %} hidden{% endif %}>Stop sharing</button>
+                    </p>
+                </section>
+            {% endif %}
             {% if revisions %}
                 <h3>Published versions</h3>
                 <p><small>Restoring puts a version into the draft. Readers see it once you publish again.</small></p>

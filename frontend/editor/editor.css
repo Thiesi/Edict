@@ -900,6 +900,45 @@ body {
     border-top: 1px solid var(--line);
 }
 
+/* Share preview: the private link, shown once, with what it does and until when. */
+.editor-share-link {
+    margin: 0.75rem 0;
+}
+
+.editor-share-link[hidden] {
+    display: none;
+}
+
+.editor-share-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem 0.6rem;
+}
+
+.editor-details .editor-share-row input {
+    flex: 1 1 16rem;
+    width: auto;
+    font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+    font-size: 0.85rem;
+}
+
+.editor-share-copied {
+    color: var(--ok);
+    font-size: 0.85rem;
+}
+
+.editor-share-status:empty {
+    display: none;
+}
+
+.editor-share-actions button,
+.editor-share-row button {
+    margin: 0 0.5rem 0 0;
+    padding: 0.2em 0.6em;
+    font-size: 0.85rem;
+}
+
 .media-grid button.is-animated::after {
     content: 'GIF';
 }

@@ -13,6 +13,7 @@ use Edict\Content\ArticleDate;
 use Edict\Content\ArticleInput;
 use Edict\Content\Articles;
 use Edict\Content\Body;
+use Edict\Content\PreviewLinks;
 use Edict\Content\SlugTaken;
 use Edict\Content\StaleDraft;
 use Edict\Content\Views;
@@ -37,6 +38,7 @@ final readonly class ArticleAdminController
         private Export $export,
         private Clock $clock,
         private Views $views,
+        private PreviewLinks $previewLinks,
     ) {}
 
     public function index(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
@@ -109,6 +111,9 @@ final readonly class ArticleAdminController
             // The schedule field starts at the scheduled time, and offers nothing earlier than now.
             'publish_at' => $article->scheduled && $article->publishedAt !== null ? ArticleDate::fieldValue($article->publishedAt) : '',
             'publish_at_min' => ArticleDate::fieldValue($this->clock->now()),
+            // The link itself isn't stored, so it can't be shown again: only that one works, and until when.
+            'preview_link_expires' => $this->previewLinks->expiresAt($article->id),
+            'preview_link_days' => PreviewLinks::DAYS,
             'state' => [
                 'id' => $article->id,
                 'version' => $article->draftVersion,

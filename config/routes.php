@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Edict\Content\PreviewLinks;
 use Edict\Http\AccountController;
 use Edict\Http\AdminAuthController;
 use Edict\Http\ArticleAdminController;
@@ -14,6 +15,7 @@ use Edict\Http\Middleware\RequireAdmin;
 use Edict\Http\Middleware\RequireLogin;
 use Edict\Http\OAuthController;
 use Edict\Http\PasskeyController;
+use Edict\Http\PreviewLinkController;
 use Edict\Http\PublicController;
 use Edict\Http\SiteController;
 use Edict\Http\VoteController;
@@ -30,6 +32,7 @@ return static function (App $app): void {
     $app->get('/robots.txt', [FeedController::class, 'robots']);
     $app->get('/tag/{slug:[a-z0-9-]+}', [PublicController::class, 'tag']);
     $app->get('/healthz', HealthAction::class);
+    $app->get('/preview/{token:' . PreviewLinks::TOKEN_PATTERN . '}', [PreviewLinkController::class, 'show']);
 
     $app->post('/votes/{id:[0-9]+}', [VoteController::class, 'like']);
     $app->post('/comments/{id:[0-9]+}', [CommentController::class, 'post']);
@@ -85,6 +88,8 @@ return static function (App $app): void {
         $group->get('/articles/{id:[0-9]+}', [ArticleAdminController::class, 'edit']);
         $group->post('/articles/{id:[0-9]+}/autosave', [ArticleAdminController::class, 'autosave']);
         $group->get('/articles/{id:[0-9]+}/preview', [ArticleAdminController::class, 'preview']);
+        $group->post('/articles/{id:[0-9]+}/preview-link', [PreviewLinkController::class, 'create']);
+        $group->post('/articles/{id:[0-9]+}/preview-link/stop', [PreviewLinkController::class, 'stop']);
         $group->post('/articles/{id:[0-9]+}/publish', [ArticleAdminController::class, 'publish']);
         $group->post('/articles/{id:[0-9]+}/unpublish', [ArticleAdminController::class, 'unpublish']);
         $group->post('/articles/{id:[0-9]+}/trash', [ArticleAdminController::class, 'trash']);

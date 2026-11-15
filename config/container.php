@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Edict\Auth\Accounts;
 use Edict\Auth\OAuth\HttpClient;
 use Edict\Auth\OAuth\StreamHttpClient;
 use Edict\Auth\SecretBox;
@@ -9,9 +10,11 @@ use Edict\Clock;
 use Edict\Config;
 use Edict\Content\Article;
 use Edict\Content\ArticleDate;
+use Edict\Content\Articles;
 use Edict\Content\BodyRenderer;
 use Edict\Content\Comments;
 use Edict\Content\CommentText;
+use Edict\Content\StructuredData;
 use Edict\Database\ConnectionFactory;
 use Edict\Database\Migrator;
 use Edict\Services;
@@ -65,6 +68,28 @@ return [
         $twig->addFunction(new TwigFunction(
             'share_image',
             static fn(Article $article): ?array => $services->get(BodyRenderer::class)->shareImage($article, $config->appUrl),
+        ));
+        // Structured data for search engines, as a script element for the head. Safe:
+        // StructuredData encodes with flags that escape every character that could end it.
+        $twig->addFunction(new TwigFunction(
+            'structured_data_article',
+            static fn(Article $article): string => StructuredData::script(StructuredData::article(
+                $article,
+                $services->get(Settings::class)->site(),
+                $config->appUrl,
+                $services->get(BodyRenderer::class)->shareImage($article, $config->appUrl),
+                $services->get(Accounts::class)->adminAuthorName(),
+            )),
+            ['is_safe' => ['html']],
+        ));
+        $twig->addFunction(new TwigFunction(
+            'structured_data_website',
+            static fn(): string => StructuredData::script(StructuredData::website(
+                $services->get(Settings::class)->site(),
+                $config->appUrl,
+                $services->get(Articles::class)->publicLanguages(),
+            )),
+            ['is_safe' => ['html']],
         ));
         // The theme, name, menu and footer. Read only by pages that show them.
         $twig->addFunction(new TwigFunction('site', static fn(): SiteSettings => $services->get(Settings::class)->site()));

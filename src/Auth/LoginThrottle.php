@@ -12,6 +12,7 @@ use Edict\Config;
  * HMACs, so the table contains no IP addresses or attempted usernames. Failed
  * provider and passkey logins count separately, so that they can't lock anyone
  * out of the password form. A provider failure can also cost a blocking request.
+ * Preview links that don't work count separately as well.
  */
 final readonly class LoginThrottle
 {
@@ -86,6 +87,21 @@ final readonly class LoginThrottle
     public function recordPasskeyFailure(string $ip): void
     {
         $this->record($this->ipBucket('passkey-ip', $ip));
+    }
+
+    /**
+     * Preview links that don't work, per client. Guessing a 256-bit token is hopeless
+     * anyway; this keeps anyone from even trying at volume. Its own bucket, so it can
+     * never lock anyone out of signing in.
+     */
+    public function isPreviewBlocked(string $ip): bool
+    {
+        return $this->failures($this->ipBucket('preview-ip', $ip)) >= self::MAX_OTHER_PER_IP;
+    }
+
+    public function recordPreviewFailure(string $ip): void
+    {
+        $this->record($this->ipBucket('preview-ip', $ip));
     }
 
     private function ipBucket(string $kind, string $ip): string

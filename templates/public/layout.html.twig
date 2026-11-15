@@ -26,6 +26,9 @@
     {% else %}
         <meta name="twitter:card" content="summary">
     {% endif %}
+    {# Structured data, for the pages that describe something: the home page and published
+        articles and pages. Any preview (the admin's, or a preview link) sets `preview` and gets none. #}
+    {% if not preview|default(false) %}{% block structured_data %}{% endblock %}{% endif %}
     <link rel="alternate" type="application/atom+xml" title="{{ site.title }}" href="/feed.atom">
     {% if meta.feed is defined %}<link rel="alternate" type="application/atom+xml" title="{{ meta.feed.title }}" href="{{ meta.feed.url }}">{% endif %}
     <link rel="stylesheet" href="/assets/site.css?v={{ asset_version }}">
