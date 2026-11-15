@@ -20,6 +20,7 @@ final class Themes
         'almanac' => ['name' => 'Almanac', 'character' => 'Warm paper, a notebook feel, generous margins, friendly old-style type.'],
         'terminal' => ['name' => 'Terminal', 'character' => 'Monospace and retro: phosphor green in the dark, for the nerdy articles.'],
         'zine' => ['name' => 'Zine', 'character' => 'Loud: big type, high contrast, an asymmetrical layout, unapologetic colour.'],
+        'blueprint' => ['name' => 'Blueprint', 'character' => 'A drawing sheet: grid paper, a title block, numbered sections and figures. For how-it-works writing.'],
     ];
 
     /**
@@ -35,6 +36,7 @@ final class Themes
         'almanac' => ['light' => '#f5eedf', 'dark' => '#221e19'],
         'terminal' => ['light' => '#e9efe6', 'dark' => '#050805'],
         'zine' => ['light' => '#fffdf2', 'dark' => '#0d0d0d'],
+        'blueprint' => ['light' => '#f3f6fb', 'dark' => '#0f2747'],
     ];
 
     /**

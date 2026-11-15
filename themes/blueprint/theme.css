@@ -1,0 +1,421 @@
+/*
+ * Blueprint: an engineer's drawing sheet. Grid paper, a title block for a header,
+ * numbered sections and figures, labels in drafting capitals. Ink on pale paper in
+ * light mode; a cyanotype, white on blue, in dark mode. For how-it-works writing
+ * with diagrams, tables and code.
+ */
+@import '@fontsource/ibm-plex-sans/latin-400.css';
+@import '@fontsource/ibm-plex-sans/latin-400-italic.css';
+@import '@fontsource/ibm-plex-sans/latin-600.css';
+@import '@fontsource/ibm-plex-mono/latin-400.css';
+@import '@fontsource/ibm-plex-mono/latin-600.css';
+
+/* Arial, stretched to Plex Sans's width, holds the lines in place until the font arrives. */
+@font-face {
+    font-family: 'Blueprint Fallback';
+    src: local('Arial'), local('Helvetica'), local('Liberation Sans');
+    size-adjust: 101%;
+}
+
+:root {
+    --font-body: 'IBM Plex Sans', 'Blueprint Fallback', system-ui, sans-serif;
+    --font-heading: var(--font-body);
+    --font-mono: 'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace;
+    --bg: #f3f6fb;
+    --fg: #12305c;
+    --muted: #46628f;
+    --accent: #a8360c;
+    --accent-fg: #fff;
+    --border: #9fb4d6;
+    --surface: #e4ecf8;
+    --grid: #dbe5f3;
+    --measure: 44rem;
+    --wide: 60rem;
+    --radius: 0;
+    --control-bg: var(--bg);
+    --control-border: var(--fg);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #0f2747;
+        --fg: #e3ecfb;
+        --muted: #a9bfe3;
+        --accent: #ffb37a;
+        --accent-fg: #0f2747;
+        --border: #3d5d8f;
+        --surface: #17335a;
+        --grid: #173560;
+    }
+}
+
+/* Grid paper behind everything; the sheet itself lies on it. */
+body {
+    background-image:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 1.5rem 1.5rem;
+    font-size: 1rem;
+    line-height: 1.65;
+}
+
+/* The title block: a ruled box with the name, what it is about, and the way around. */
+.site-header {
+    padding: 1.5rem var(--gutter) 0;
+}
+
+.site-header-inner {
+    max-width: calc(var(--measure) + 2 * var(--gutter));
+    border: 1.5px solid var(--fg);
+    background: var(--bg);
+}
+
+.site-title {
+    padding: 0.75rem 1rem 0.5rem;
+    font-size: 1.5rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+.site-description {
+    margin: 0;
+    padding: 0.4rem 1rem;
+    border-top: 1px solid var(--fg);
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.site-header-bar {
+    margin: 0;
+    padding: 0.5rem 1rem;
+    border-top: 1px solid var(--fg);
+}
+
+.site-nav a,
+.summary-meta,
+.article-meta,
+.lang-filter,
+.tags,
+.pager-count,
+.search-count,
+th,
+figcaption::before {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.site-nav a {
+    text-decoration: none;
+}
+
+.site-nav a:hover {
+    color: var(--accent);
+    text-decoration: underline;
+}
+
+/* The sheet. */
+.site-content {
+    margin-top: 1.5rem;
+    padding: 1.5rem var(--gutter) 2rem;
+    border: 1.5px solid var(--fg);
+    background: var(--bg);
+}
+
+@media (max-width: 48rem) {
+    .site-header {
+        padding: 0;
+    }
+
+    .site-header-inner,
+    .site-content {
+        border-right: 0;
+        border-left: 0;
+    }
+
+    .site-content {
+        margin-top: 0;
+        border-top: 0;
+    }
+}
+
+h1,
+h2,
+h3 {
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+article > h1 {
+    margin: 0 0 0.5rem;
+    padding-bottom: 0.6rem;
+    border-bottom: 1.5px solid var(--fg);
+    font-size: 2rem;
+    line-height: 1.15;
+}
+
+.home-heading {
+    margin: 0 0 1rem;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 400;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+/* Sections of an article are numbered, as on a drawing. The numbers are an aid to the
+   eye, so screen readers skip them (the empty alternative text after the slash). */
+article {
+    counter-reset: section figure;
+}
+
+article > h2 {
+    margin-top: 2.25rem;
+    font-size: 1.35rem;
+    counter-increment: section;
+    counter-reset: subsection;
+}
+
+article > h2::before {
+    margin-right: 0.6em;
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    font-weight: 400;
+    content: counter(section) '.0';
+    content: counter(section) '.0' / '';
+}
+
+article > h3 {
+    font-size: 1.1rem;
+    counter-increment: subsection;
+}
+
+article > h3::before {
+    margin-right: 0.6em;
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    font-weight: 400;
+    content: counter(section) '.' counter(subsection);
+    content: counter(section) '.' counter(subsection) / '';
+}
+
+/* Figures with a caption are numbered too. */
+figcaption {
+    padding-top: 0.4rem;
+    border-top: 1px dashed var(--border);
+    font-style: normal;
+    counter-increment: figure;
+}
+
+figcaption::before {
+    margin-right: 0.6em;
+    color: var(--accent);
+    content: 'Fig. ' counter(figure);
+}
+
+figure.media-image img,
+figure.article-cover img,
+.article-cover-thumb img,
+.media-gallery img,
+figure.media-video video {
+    border: 1px solid var(--fg);
+}
+
+.teaser {
+    color: var(--muted);
+    font-size: 1.1rem;
+    font-style: normal;
+}
+
+/* Lists of articles: entries in a register, one ruled row each. */
+.articles > li {
+    padding: 1rem 0;
+    border-top: 1px dashed var(--border);
+}
+
+.articles > li:first-child {
+    border-top: 1.5px solid var(--fg);
+}
+
+.articles h2 {
+    margin: 0 0 0.25rem;
+    font-size: 1.25rem;
+}
+
+.articles h2 a,
+.search-results h2 a {
+    color: var(--fg);
+    text-decoration: none;
+}
+
+.articles h2 a:hover,
+.search-results h2 a:hover {
+    color: var(--accent);
+    text-decoration: underline;
+}
+
+.article-cover-thumb {
+    width: 7rem;
+}
+
+/* Controls like the stamps and boxes on a form: square, ruled, labelled in capitals. */
+button,
+.button,
+.file-download {
+    border-width: 1.5px;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+button:hover,
+.button:hover {
+    border-color: var(--accent);
+    background: var(--surface);
+}
+
+.button-primary,
+a.button-primary {
+    border-color: var(--fg);
+    background: var(--fg);
+    color: var(--bg);
+}
+
+.button-primary:hover,
+a.button-primary:hover {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--accent-fg);
+}
+
+.comment-actions button {
+    font-weight: 400;
+}
+
+.like-button {
+    border-radius: 0;
+    border-width: 1.5px;
+}
+
+input:not([type='checkbox'], [type='radio'], [type='file'], [type='color'], [type='range'], [type='hidden']),
+select,
+textarea {
+    --control-border: var(--border);
+}
+
+:is(input, select, textarea):is(:hover, :focus) {
+    border-color: var(--fg);
+}
+
+/* A note in the margin of the drawing. */
+blockquote {
+    padding: 0.5rem 1rem;
+    border: 1px dashed var(--border);
+    border-left: 3px solid var(--accent);
+    color: var(--fg);
+}
+
+pre {
+    border: 1px solid var(--border);
+}
+
+th,
+td {
+    border-color: var(--fg);
+}
+
+hr {
+    border-top: 1px dashed var(--border);
+}
+
+.tags a {
+    border-color: var(--fg);
+}
+
+.lang-filter [aria-current] {
+    border-color: var(--fg);
+    background: var(--fg);
+    color: var(--bg);
+}
+
+.notice {
+    border: 1px solid var(--fg);
+    border-left: 4px solid var(--accent);
+    background: var(--surface);
+}
+
+.empty {
+    border: 1px dashed var(--fg);
+}
+
+.comments {
+    border-top: 1.5px solid var(--fg);
+}
+
+.comment-list .comment-list {
+    border-left: 1px solid var(--border);
+}
+
+.comment.is-pinned > .comment-body {
+    border: 1px dashed var(--fg);
+    border-left: 3px solid var(--accent);
+}
+
+.panel {
+    border-color: var(--fg);
+}
+
+.panel-welcome {
+    border-left: 4px solid var(--accent);
+}
+
+.audio-player,
+.file-card {
+    border-color: var(--fg);
+    background: var(--bg);
+}
+
+.audio-play,
+.audio-speed {
+    border-radius: 0;
+}
+
+/* The corner of the sheet: who drew it. */
+.site-footer {
+    margin-top: 1.5rem;
+    margin-bottom: 1.5rem;
+    padding: 0.75rem 1rem;
+    border: 1.5px solid var(--fg);
+    background: var(--bg);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+}
+
+@media (max-width: 48rem) {
+    .site-footer {
+        margin: 0;
+        border-right: 0;
+        border-bottom: 0;
+        border-left: 0;
+    }
+}
+
+.site-footer ul {
+    margin-top: 0;
+}
+
+@media print {
+    body {
+        background-image: none;
+    }
+}
