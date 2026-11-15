@@ -242,11 +242,3 @@ figcaption,
     border-style: dotted;
     font-style: italic;
 }
-
-.panel {
-    border-style: dotted;
-}
-
-.panel-welcome {
-    border-left: 3px solid var(--margin-line);
-}

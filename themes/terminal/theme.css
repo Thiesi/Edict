@@ -462,16 +462,3 @@ th {
         content: none;
     }
 }
-
-/* Panels are boxes drawn with dashes. */
-.panel {
-    border-style: dashed;
-}
-
-.panel-welcome {
-    border-left: 3px double var(--accent);
-}
-
-.login-list > li {
-    border-top-style: dashed;
-}

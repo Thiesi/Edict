@@ -4,143 +4,121 @@
 {% block title %}Your account · {{ site().title }}{% endblock %}
 
 {% block main %}
-    <main class="account">
+    <main>
         <h1>Your account</h1>
         {% if notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
 
         {% if welcome and linkable %}
-            <section class="panel panel-welcome" aria-labelledby="join-heading">
+            <section aria-labelledby="join-heading">
                 <h2 id="join-heading">Already have an account?</h2>
                 {% if last_provider %}
                     <p><strong>Last time you signed in here with {{ last_provider.label }}.</strong> If that was you, this new account is probably a second one. Sign in with {{ last_provider.label }} once more, and the two become one.</p>
                 {% else %}
                     <p>If you’ve signed in here before with another provider, sign in with it once more, and the two accounts become one.</p>
                 {% endif %}
-                <div class="actions">
-                    {% for provider in last_provider ? [last_provider] : linkable %}
-                        <form method="post" action="/account/combine/{{ provider.name }}">
-                            <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
-                            <button class="button-primary" type="submit">Combine with my {{ provider.label }} account</button>
-                        </form>
-                    {% endfor %}
-                </div>
-                <p class="panel-hint"><small>New here? Then there’s nothing to do.</small></p>
+                {% for provider in last_provider ? [last_provider] : linkable %}
+                    <form method="post" action="/account/combine/{{ provider.name }}">
+                        <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                        <button type="submit">Combine with my {{ provider.label }} account</button>
+                    </form>
+                {% endfor %}
+                <p><small>New here? Then there’s nothing to do.</small></p>
             </section>
         {% endif %}
 
-        <section class="panel">
-            <h2>Name</h2>
-            <form method="post" action="/account/name">
-                <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
-                <p class="field">
-                    <label>Shown publicly next to your comments
-                        <input name="display_name" value="{{ display_name }}" maxlength="{{ max_name_length }}" required>
-                    </label>
-                </p>
-                <p class="actions"><button class="button-primary" type="submit">Save name</button></p>
-            </form>
-        </section>
+        <h2>Name</h2>
+        <form method="post" action="/account/name">
+            <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+            <p>
+                <label>Shown publicly next to your comments
+                    <input name="display_name" value="{{ display_name }}" maxlength="{{ max_name_length }}" required>
+                </label>
+            </p>
+            <p><button type="submit">Save name</button></p>
+        </form>
 
-        <section class="panel">
-            <h2>Logins</h2>
-            {% if identities %}
-                <ul class="login-list">
-                    {% for identity in identities %}
-                        <li>
-                            <span class="login-name">{{ identity.provider|capitalize }} <span class="login-id">(ID <code>{{ identity.subject }}</code>)</span></span>
-                            {% if can_remove %}
-                                <form method="post" action="/account/unlink/{{ identity.provider }}">
-                                    <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
-                                    <button class="button-danger" type="submit">Remove {{ identity.provider|capitalize }} login</button>
-                                </form>
-                            {% endif %}
-                        </li>
+        <h2>Logins</h2>
+        {% if identities %}
+            <ul>
+                {% for identity in identities %}
+                    <li>
+                        {{ identity.provider|capitalize }} (ID <code>{{ identity.subject }}</code>)
+                        {% if can_remove %}
+                            <form method="post" action="/account/unlink/{{ identity.provider }}">
+                                <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                                <button type="submit">Remove {{ identity.provider|capitalize }} login</button>
+                            </form>
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>No provider logins yet.</p>
+        {% endif %}
+        {% for provider in linkable %}
+            <form method="post" action="/account/link/{{ provider.name }}">
+                <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                <button type="submit">Add {{ provider.label }} login</button>
+            </form>
+        {% endfor %}
+        {% if is_admin and providers %}
+            <form method="post" action="/account/admin-logins">
+                <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                <p>Changing how the admin signs in needs your password and authenticator code. Removing a login ends every other admin session.</p>
+                <p><label>Password <input name="password" type="password" autocomplete="current-password" required></label></p>
+                <p><label>Authenticator code <input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required></label></p>
+                <p>
+                    {% for provider in providers %}
+                        {% if provider.name in identities|map(i => i.provider) %}
+                            <button type="submit" name="action" value="remove:{{ provider.name }}">Remove {{ provider.label }} login</button>
+                        {% else %}
+                            <button type="submit" name="action" value="add:{{ provider.name }}">Add {{ provider.label }} login</button>
+                        {% endif %}
                     {% endfor %}
-                </ul>
-            {% else %}
-                <p>No provider logins yet.</p>
-            {% endif %}
-            {% if linkable %}
-                <div class="actions">
-                    {% for provider in linkable %}
-                        <form method="post" action="/account/link/{{ provider.name }}">
-                            <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
-                            <button type="submit">Add {{ provider.label }} login</button>
-                        </form>
-                    {% endfor %}
-                </div>
-            {% endif %}
-            {% if is_admin and providers %}
-                <form class="confirm-form" method="post" action="/account/admin-logins">
-                    <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
-                    <p>Changing how the admin signs in needs your password and authenticator code. Removing a login ends every other admin session.</p>
-                    <p class="field"><label>Password <input name="password" type="password" autocomplete="current-password" required></label></p>
-                    <p class="field"><label>Authenticator code <input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required></label></p>
-                    <p class="actions">
-                        {% for provider in providers %}
-                            {% if provider.name in identities|map(i => i.provider) %}
-                                <button class="button-danger" type="submit" name="action" value="remove:{{ provider.name }}">Remove {{ provider.label }} login</button>
-                            {% else %}
-                                <button type="submit" name="action" value="add:{{ provider.name }}">Add {{ provider.label }} login</button>
-                            {% endif %}
-                        {% endfor %}
-                    </p>
-                </form>
-            {% endif %}
-        </section>
+                </p>
+            </form>
+        {% endif %}
 
         {% if linkable and not welcome %}
-            <section class="panel">
-                <h2>Combine with another account</h2>
-                <p>Made a second account by mistake? Sign in with its login here, and both become one: comments, likes and logins move to the older account, which keeps its name, and the other one is deleted. This can’t be undone.</p>
-                <div class="actions">
-                    {% for provider in linkable %}
-                        <form method="post" action="/account/combine/{{ provider.name }}">
-                            <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
-                            <button type="submit">Combine with my {{ provider.label }} account</button>
-                        </form>
-                    {% endfor %}
-                </div>
-            </section>
+            <h2>Combine with another account</h2>
+            <p>Made a second account by mistake? Sign in with its login here, and both become one: comments, likes and logins move to the older account, which keeps its name, and the other one is deleted. This can’t be undone.</p>
+            {% for provider in linkable %}
+                <form method="post" action="/account/combine/{{ provider.name }}">
+                    <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                    <button type="submit">Combine with my {{ provider.label }} account</button>
+                </form>
+            {% endfor %}
         {% endif %}
 
         {% if is_admin %}
-            <section class="panel">
-                <h2>Notifications</h2>
-                <form class="confirm-form" method="post" action="/account/admin-email">
-                    <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
-                    <p>Comment alerts and security notices (a login or passkey added or removed) go to this address. It is never used to sign in or to reset anything. Leave it empty to use <code>ALERT_EMAIL</code> from the server’s settings instead. Comment alerts can be switched off under <a href="/admin/comments">Comments</a>.</p>
-                    <p class="field"><label>Email <input name="email" type="email" value="{{ admin_email }}" maxlength="254" autocomplete="email"></label></p>
-                    <p class="field"><label>Password <input name="password" type="password" autocomplete="current-password" required></label></p>
-                    <p class="field"><label>Authenticator code <input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required></label></p>
-                    <p class="actions"><button class="button-primary" type="submit">Save address</button></p>
-                </form>
-            </section>
+            <h2>Notifications</h2>
+            <form method="post" action="/account/admin-email">
+                <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                <p>Comment alerts and security notices (a login or passkey added or removed) go to this address. It is never used to sign in or to reset anything. Leave it empty to use <code>ALERT_EMAIL</code> from the server’s settings instead. Comment alerts can be switched off under <a href="/admin/comments">Comments</a>.</p>
+                <p><label>Email <input name="email" type="email" value="{{ admin_email }}" maxlength="254" autocomplete="email"></label></p>
+                <p><label>Password <input name="password" type="password" autocomplete="current-password" required></label></p>
+                <p><label>Authenticator code <input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required></label></p>
+                <p><button type="submit">Save address</button></p>
+            </form>
         {% endif %}
 
-        <section class="panel">
-            <h2>Sessions</h2>
-            <div class="actions">
-                <form method="post" action="/account/logout">
-                    <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
-                    <button type="submit">Sign out</button>
-                </form>
-                <form method="post" action="/account/logout-everywhere">
-                    <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
-                    <button type="submit">Sign out everywhere</button>
-                </form>
-            </div>
-        </section>
+        <h2>Sessions</h2>
+        <form method="post" action="/account/logout">
+            <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+            <button type="submit">Sign out</button>
+        </form>
+        <form method="post" action="/account/logout-everywhere">
+            <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+            <button type="submit">Sign out everywhere</button>
+        </form>
 
         {% if not is_admin %}
-            <section class="panel panel-danger">
-                <h2>Delete account</h2>
-                <form method="post" action="/account/delete">
-                    <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
-                    <p><label class="check"><input type="checkbox" name="confirm" value="yes" required> Yes, permanently delete my account. This cannot be undone.</label></p>
-                    <p class="actions"><button class="button-danger" type="submit">Delete account</button></p>
-                </form>
-            </section>
+            <h2>Delete account</h2>
+            <form method="post" action="/account/delete">
+                <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                <p><label><input type="checkbox" name="confirm" value="yes" required> Yes, permanently delete my account. This cannot be undone.</label></p>
+                <p><button type="submit">Delete account</button></p>
+            </form>
         {% endif %}
     </main>
 {% endblock %}

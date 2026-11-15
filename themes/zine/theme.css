@@ -350,22 +350,3 @@ td {
     color: var(--fg);
     font-weight: 700;
 }
-
-.panel {
-    border: 3px solid var(--border);
-}
-
-.panel-welcome {
-    background: var(--pop);
-    box-shadow: 6px 6px 0 var(--accent);
-    color: #0d0d0d;
-}
-
-.panel-welcome .panel-hint {
-    color: #0d0d0d;
-}
-
-.panel-danger {
-    border-color: var(--border);
-    border-style: dashed;
-}
