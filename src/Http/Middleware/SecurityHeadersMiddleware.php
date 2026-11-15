@@ -29,9 +29,13 @@ final readonly class SecurityHeadersMiddleware implements MiddlewareInterface
             return $response;
         }
 
+        // A page may ask for less than the default, as a private preview link does.
+        if (!$response->hasHeader('Referrer-Policy')) {
+            $response = $response->withHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+        }
+
         return $response
             ->withHeader('Content-Security-Policy', self::POLICY)
-            ->withHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
             ->withHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()')
             ->withHeader('Cross-Origin-Opener-Policy', 'same-origin')
             ->withHeader('X-Content-Type-Options', 'nosniff');

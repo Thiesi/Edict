@@ -155,6 +155,8 @@ final readonly class Articles
             }
 
             $this->setTags($article->id, $input);
+            // The draft a preview link showed is gone: published, or waiting to be.
+            $this->endPreviewLink($article->id);
             if (!$wasPublic) {
                 // A version scheduled before and replaced now never reached readers.
                 $this->forgetUnseenRevisions($article->id, $now);
@@ -302,10 +304,21 @@ final readonly class Articles
             ->execute([$articleId, $now]);
     }
 
+    /**
+     * Also ends its preview link: restoring it from the trash doesn't bring that back.
+     */
     public function trash(int $id): void
     {
-        $this->pdo->prepare('UPDATE article SET deleted_at = to_timestamp(?) WHERE id = ? AND deleted_at IS NULL')
-            ->execute([$this->clock->now(), $id]);
+        $this->transaction(function () use ($id): void {
+            $this->pdo->prepare('UPDATE article SET deleted_at = to_timestamp(?) WHERE id = ? AND deleted_at IS NULL')
+                ->execute([$this->clock->now(), $id]);
+            $this->endPreviewLink($id);
+        });
+    }
+
+    private function endPreviewLink(int $id): void
+    {
+        $this->pdo->prepare('DELETE FROM preview_link WHERE article_id = ?')->execute([$id]);
     }
 
     public function restore(int $id): void

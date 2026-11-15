@@ -753,6 +753,94 @@ field('preview').addEventListener('click', async (event) => {
     }
 });
 
+/* Share preview: a private link to the current draft. The server keeps only its hash,
+   so the link is shown once, right after it is made. */
+
+const shareCreate = field('share-create');
+const shareStop = field('share-stop');
+const shareLink = field('share-link');
+const shareUrl = field('share-url');
+const shareStatus = field('share-status');
+const shareCopied = field('share-copied');
+
+// One more try with a fresh token if the session's changed (see refreshToken).
+const postShare = async (path) => {
+    let response = await post(path, {});
+    if (response.status === 403 || response.type === 'opaqueredirect') {
+        if (!(await refreshToken().catch(() => false))) {
+            throw new Error('You are signed out. Sign in again in another tab, then try again.');
+        }
+        response = await post(path, {});
+    }
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        throw new Error(data.error ?? 'The server had a problem. Please try again.');
+    }
+
+    return data;
+};
+
+const shareFailed = (error) => {
+    shareStatus.textContent = error instanceof TypeError ? 'No connection. Please try again.' : error.message;
+};
+
+shareCreate?.addEventListener('click', async () => {
+    shareCreate.disabled = true;
+    try {
+        const link = await postShare('preview-link');
+        shareUrl.value = link.url;
+        shareCopied.textContent = '';
+        shareLink.hidden = false;
+        const until = Object.assign(document.createElement('time'), { dateTime: link.expiresIso, textContent: link.expires });
+        shareStatus.replaceChildren('Link made. It works until ', until, ' (Berlin time).');
+        shareCreate.textContent = 'New link';
+        shareStop.hidden = false;
+        shareUrl.focus();
+        shareUrl.select();
+    } catch (error) {
+        shareFailed(error);
+    } finally {
+        shareCreate.disabled = false;
+    }
+});
+
+shareStop?.addEventListener('click', async () => {
+    shareStop.disabled = true;
+    try {
+        await postShare('preview-link/stop');
+        shareUrl.value = '';
+        shareLink.hidden = true;
+        shareStatus.textContent = 'Sharing stopped. The link no longer works.';
+        shareCreate.textContent = 'Share preview';
+        shareStop.hidden = true;
+        shareCreate.focus();
+    } catch (error) {
+        shareFailed(error);
+    } finally {
+        shareStop.disabled = false;
+    }
+});
+
+field('share-copy')?.addEventListener('click', async () => {
+    try {
+        await navigator.clipboard.writeText(shareUrl.value);
+        shareCopied.textContent = 'Copied.';
+
+        return;
+    } catch {
+        // No clipboard API (no HTTPS, say) or no permission: the old way below.
+    }
+    shareUrl.focus();
+    shareUrl.select();
+    let copied = false;
+    try {
+        copied = document.execCommand('copy');
+    } catch {
+        copied = false;
+    }
+    shareCopied.textContent = copied ? 'Copied.' : 'Selected: press Ctrl+C (or ⌘C) to copy it.';
+});
+
 const showErrors = (messages) => {
     errorLine.textContent = messages.join(' ');
     errorLine.hidden = messages.length === 0;
