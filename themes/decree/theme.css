@@ -22,6 +22,10 @@
     --header-accent: #d9b44a;
     --logo-plate: #f4f2ec;
     --logo-plate-pad: 0.3rem 0.6rem;
+    --control-bg: #1d1a2e;
+    --control-fg: #f3ead2;
+    --control-border: var(--gold);
+    --radius: 2px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -37,6 +41,8 @@
         --header-bg: #0c0b14;
         --header-fg: #ece6d6;
         --header-accent: #e0b84f;
+        --control-bg: #1e1b2e;
+        --control-fg: #ece6d6;
     }
 }
 
@@ -179,4 +185,112 @@ blockquote {
 
 .site-footer ul {
     justify-content: center;
+}
+
+/* Buttons in deep ink with a fine gold rule; fields on the paper, gold when in use. */
+button,
+.button {
+    font-variant: small-caps;
+    letter-spacing: 0.05em;
+}
+
+.button-primary {
+    border-color: var(--gold);
+}
+
+.comment-actions button {
+    font-variant: normal;
+    letter-spacing: 0;
+}
+
+input:not([type='checkbox'], [type='radio'], [type='file'], [type='color'], [type='range'], [type='hidden']),
+select,
+textarea {
+    --control-border: var(--border);
+}
+
+:is(input, select, textarea):is(:hover, :focus) {
+    border-color: var(--gold);
+}
+
+.file-download {
+    border-color: var(--gold);
+}
+
+/* The steps between headings inside an article were too close to tell apart. */
+article h2 {
+    margin-top: 2.25rem;
+    font-size: 1.8rem;
+}
+
+article h3 {
+    margin-top: 1.75rem;
+    font-size: 1.4rem;
+}
+
+article h4 {
+    font-family: var(--font-body);
+    font-size: 1rem;
+    font-variant: small-caps;
+    letter-spacing: 0.06em;
+}
+
+.summary-meta,
+.lang-filter,
+th {
+    font-variant: small-caps;
+    letter-spacing: 0.04em;
+}
+
+/* The gold rule under the title returns wherever a part ends: tags, likes, comments, footer. */
+.tags,
+.like-form,
+.pager {
+    justify-content: center;
+}
+
+.likes > p {
+    text-align: center;
+}
+
+.like-button {
+    border-color: var(--gold);
+}
+
+.comments {
+    border-top: 3px double var(--gold);
+}
+
+.comments > h2 {
+    text-align: center;
+}
+
+.comment.is-pinned > .comment-body {
+    border-left-color: var(--gold);
+}
+
+.notice {
+    border-left-color: var(--gold);
+}
+
+.empty {
+    border: 0;
+    border-top: 3px double var(--gold);
+    border-bottom: 3px double var(--gold);
+    font-style: italic;
+}
+
+.error-page {
+    text-align: center;
+}
+
+.error-page .site-search,
+.error-links {
+    justify-content: center;
+}
+
+hr {
+    width: 4rem;
+    margin: 2rem auto;
+    border-top: 2px solid var(--gold);
 }
