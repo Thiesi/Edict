@@ -35,19 +35,39 @@ final readonly class Look
     }
 
     /**
+     * The same colour fitted against the header, for themes whose header has a
+     * background of its own: there the page's version can be unreadable.
+     *
+     * @return array{light: string, dark: string}|null
+     */
+    public function headerAccent(string $theme): ?array
+    {
+        $colour = $this->settings->site()->accent;
+        $backgrounds = Themes::headerBackgrounds($theme);
+        if ($colour === '' || $backgrounds === null) {
+            return null;
+        }
+
+        return ['light' => Accent::fit($colour, $backgrounds['light'])['accent'], 'dark' => Accent::fit($colour, $backgrounds['dark'])['accent']];
+    }
+
+    /**
      * Loaded after the theme, so it wins. Plain custom properties: no inline styles,
-     * which the CSP forbids.
+     * which the CSP forbids. Without an accent of the admin's own it sets nothing,
+     * and the theme keeps its colours, the header's included.
      */
     public function accentCss(string $theme): string
     {
         $accent = $this->accent($theme);
-        if ($accent === null) {
+        $header = $this->headerAccent($theme);
+        if ($accent === null || $header === null) {
             return "/* The theme's own accent. */\n";
         }
         $rules = static fn(array $c): string => "--accent: {$c['accent']}; --accent-fg: {$c['fg']}; --focus: {$c['accent']};";
 
         return ":root { {$rules($accent['light'])} }\n"
-            . "@media (prefers-color-scheme: dark) { :root { {$rules($accent['dark'])} } }\n";
+            . ":root { --header-accent: {$header['light']}; }\n"
+            . "@media (prefers-color-scheme: dark) { :root { {$rules($accent['dark'])} } :root { --header-accent: {$header['dark']}; } }\n";
     }
 
     /**

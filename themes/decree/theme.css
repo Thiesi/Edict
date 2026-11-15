@@ -57,6 +57,12 @@
     color: var(--header-fg);
 }
 
+/* The header's rule, ornaments and button edge share one colour: the gold, or the
+   owner's accent as Edict fitted it against this dark header. */
+.site-header {
+    --control-border: var(--header-accent);
+}
+
 .site-title {
     font-family: var(--font-heading);
     font-size: 2.4rem;
@@ -293,4 +299,14 @@ hr {
     width: 4rem;
     margin: 2rem auto;
     border-top: 2px solid var(--gold);
+}
+
+.panel-welcome {
+    border-left-color: var(--gold);
+}
+
+.sign-in,
+.sign-in .provider-list > li {
+    justify-content: center;
+    text-align: center;
 }
