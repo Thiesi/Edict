@@ -21,6 +21,12 @@ final readonly class FeedController
     private const ENTRIES = 20;
     private const SITEMAP_LIMIT = 10_000;
 
+    /**
+     * The main NetWorkXXIII site refreshes its list of latest posts from /feed.atom in the
+     * browser. Lowercase, as browsers send the Origin header. GET only, no credentials.
+     */
+    private const FEED_ORIGINS = ['https://networkxxiii.de', 'https://www.networkxxiii.de', 'https://network23.de', 'https://www.network23.de'];
+
     public function __construct(
         private Articles $articles,
         private BodyRenderer $renderer,
@@ -34,7 +40,16 @@ final readonly class FeedController
         $lang = $lang === 'de' || $lang === 'en' ? $lang : null;
         $title = $this->settings->site()->title . ($lang === null ? '' : ($lang === 'de' ? ' (Deutsch)' : ' (English)'));
 
-        return $this->atom($response, $title, '/feed.atom' . ($lang === null ? '' : '?lang=' . $lang), '/', $this->articles->publicList(self::ENTRIES, 0, $lang));
+        $response = $this->atom($response, $title, '/feed.atom' . ($lang === null ? '' : '?lang=' . $lang), '/', $this->articles->publicList(self::ENTRIES, 0, $lang));
+
+        // Only a listed origin is named, never "*"; Vary on every answer, so a cache never
+        // hands one origin's answer to another.
+        $origin = $request->getHeaderLine('Origin');
+        if (in_array($origin, self::FEED_ORIGINS, true)) {
+            $response = $response->withHeader('Access-Control-Allow-Origin', $origin);
+        }
+
+        return $response->withHeader('Vary', 'Origin');
     }
 
     /**
