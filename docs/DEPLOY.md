@@ -170,8 +170,11 @@ Ops runs these before the first deploy, because CI runs on Linux:
 The owner creates it once on the host after the first deploy, as a user that can read `shared/.env`:
 
 ```sh
-php /usr/local/share/edict-staging/current/bin/edict admin:create <username>
+php /usr/local/share/edict-staging/current/bin/edict admin:create <username>   # staging
+php /usr/local/share/edict/current/bin/edict admin:create <username>           # production
 ```
+
+The username stays secret: pick a display name on `/account` afterwards, because comments show the display name, and it starts out as the username.
 
 ## Done when
 
