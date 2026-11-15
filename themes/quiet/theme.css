@@ -235,3 +235,21 @@ td {
 .pager {
     margin-top: 3.5rem;
 }
+
+/* Panels are sections under a hairline, not boxes. */
+.panel {
+    padding: var(--space-5) 0 0;
+    border: 0;
+    border-top: 1px solid var(--border);
+    border-radius: 0;
+}
+
+.panel-welcome {
+    padding: var(--space-4) var(--space-5) var(--space-5);
+    border-top: 0;
+    border-left: 2px solid var(--fg);
+}
+
+.panel-danger {
+    border-color: var(--border);
+}
