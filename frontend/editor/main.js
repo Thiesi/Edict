@@ -103,6 +103,8 @@ let stopped = false;
 
 const setStatus = (text) => {
     statusLine.textContent = text;
+    // For the dot beside it: done, under way, or something to act on. The words stay the message.
+    statusLine.dataset.state = /^(Saved|Up to date)/.test(text) ? 'saved' : (/^(Saving|Unsaved)/.test(text) ? 'busy' : 'problem');
 };
 
 const backup = () => {

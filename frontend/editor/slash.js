@@ -2,18 +2,19 @@
 import { Extension } from '@tiptap/core';
 import Suggestion from '@tiptap/suggestion';
 
+// "hint" is what typing at the start of a line does the same thing, where there is such a shortcut.
 const BLOCKS = [
-    { title: 'Heading 2', run: (chain) => chain.setNode('heading', { level: 2 }) },
-    { title: 'Heading 3', run: (chain) => chain.setNode('heading', { level: 3 }) },
-    { title: 'Heading 4', run: (chain) => chain.setNode('heading', { level: 4 }) },
-    { title: 'Bullet list', run: (chain) => chain.toggleBulletList() },
-    { title: 'Numbered list', run: (chain) => chain.toggleOrderedList() },
-    { title: 'Quote', run: (chain) => chain.toggleBlockquote() },
-    { title: 'Code block', run: (chain) => chain.toggleCodeBlock() },
-    { title: 'Divider', run: (chain) => chain.setHorizontalRule() },
-    { title: 'Table', run: (chain) => chain.insertTable({ rows: 3, cols: 3, withHeaderRow: true }) },
-    { title: 'Image, audio or video', action: 'chooseFiles' },
-    { title: 'Media library', action: 'openLibrary' },
+    { group: 'Text', title: 'Heading 2', hint: '##', run: (chain) => chain.setNode('heading', { level: 2 }) },
+    { group: 'Text', title: 'Heading 3', hint: '###', run: (chain) => chain.setNode('heading', { level: 3 }) },
+    { group: 'Text', title: 'Heading 4', hint: '####', run: (chain) => chain.setNode('heading', { level: 4 }) },
+    { group: 'Text', title: 'Bullet list', hint: '-', run: (chain) => chain.toggleBulletList() },
+    { group: 'Text', title: 'Numbered list', hint: '1.', run: (chain) => chain.toggleOrderedList() },
+    { group: 'Text', title: 'Quote', hint: '>', run: (chain) => chain.toggleBlockquote() },
+    { group: 'Text', title: 'Code block', hint: '```', run: (chain) => chain.toggleCodeBlock() },
+    { group: 'Blocks', title: 'Divider', hint: '---', run: (chain) => chain.setHorizontalRule() },
+    { group: 'Blocks', title: 'Table', run: (chain) => chain.insertTable({ rows: 3, cols: 3, withHeaderRow: true }) },
+    { group: 'Media', title: 'Image, audio or video', action: 'chooseFiles' },
+    { group: 'Media', title: 'Media library', action: 'openLibrary' },
 ];
 
 const renderMenu = () => {
@@ -31,20 +32,38 @@ const renderMenu = () => {
     };
 
     const draw = () => {
-        menu.replaceChildren(...items.map((item, index) => {
+        const parts = [];
+        items.forEach((item, index) => {
+            // A heading where a new group starts. It is no option, so the arrow keys pass over it.
+            if (item.group !== items[index - 1]?.group) {
+                const heading = document.createElement('div');
+                heading.className = 'slash-group';
+                heading.role = 'presentation';
+                heading.textContent = item.group;
+                parts.push(heading);
+            }
             const button = document.createElement('button');
             button.type = 'button';
             button.role = 'option';
-            button.textContent = item.title;
+            const title = document.createElement('span');
+            title.textContent = item.title;
+            button.append(title);
+            if (item.hint) {
+                const hint = document.createElement('span');
+                hint.className = 'slash-hint';
+                hint.setAttribute('aria-hidden', 'true');
+                hint.textContent = item.hint;
+                button.append(hint);
+            }
             button.setAttribute('aria-selected', String(index === selected));
             // mousedown, because a click would first move the focus away from the editor.
             button.addEventListener('mousedown', (event) => {
                 event.preventDefault();
                 choose(item);
             });
-
-            return button;
-        }));
+            parts.push(button);
+        });
+        menu.replaceChildren(...parts);
         menu.hidden = items.length === 0;
     };
 
@@ -53,6 +72,7 @@ const renderMenu = () => {
             menu = document.createElement('div');
             menu.className = 'slash-menu';
             menu.role = 'listbox';
+            menu.setAttribute('aria-label', 'Blocks to insert');
             document.body.append(menu);
             items = props.items;
             selected = 0;
