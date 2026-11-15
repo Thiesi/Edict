@@ -74,6 +74,7 @@ return [
         $twig->addFunction(new TwigFunction('theme_name', static fn(string $id): string => Themes::ALL[$id]['name'] ?? $id));
         $twig->addFilter(new TwigFilter('article_date', ArticleDate::format(...)));
         $twig->addFilter(new TwigFilter('article_iso', ArticleDate::iso(...)));
+        $twig->addFilter(new TwigFilter('admin_datetime', ArticleDate::adminDateTime(...)));
         // Safe: CommentText escapes everything and adds only <p>, <br> and links.
         $twig->addFilter(new TwigFilter('comment_html', CommentText::html(...), ['is_safe' => ['html']]));
         // Safe because BodyRenderer and Body build HTML from fixed tags and escape all values.

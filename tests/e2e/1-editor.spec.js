@@ -272,3 +272,118 @@ test('a static page is reachable but not listed', async ({ page, request }) => {
     expect(await (await request.get('/impressum')).text()).toContain('Angaben');
     expect(await (await request.get('/archive')).text()).not.toContain('Impressum');
 });
+
+// A datetime-local value in Berlin time, which is what the server reads it as.
+const berlinField = (date) => date.toLocaleString('sv-SE', { timeZone: 'Europe/Berlin' }).slice(0, 16).replace(' ', 'T');
+// As the admin shows it: "15 Nov 2026, 18:00".
+const berlinShown = (value) => {
+    const [year, month, day, hour, minute] = value.split(/[-T:]/);
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+    return `${Number(day)} ${months[Number(month) - 1]} ${year}, ${hour}:${minute}`;
+};
+const daysAhead = (days) => {
+    const date = new Date(Date.now() + days * 86_400_000);
+    date.setUTCMinutes(0, 0, 0);
+
+    return berlinField(date);
+};
+
+test('schedules, refuses the past, changes the time, cancels and publishes now', async ({ page, request }) => {
+    const problems = [];
+    page.on('pageerror', (error) => problems.push(error.message));
+
+    await newItem(page);
+    await page.getByLabel('Title').fill('Scheduled one');
+    await page.locator('.ProseMirror').click();
+    await page.keyboard.type('Words for later');
+    await saved(page);
+
+    const button = page.locator('#publish');
+    const toggle = page.getByRole('button', { name: 'Schedule…' });
+    const field = page.getByLabel('Publish at');
+    await expect(button).toHaveText('Publish');
+    await expect(field).toBeHidden();
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(field).toBeFocused();
+
+    // A time sets the main button to Schedule; clearing it sets it back.
+    await field.fill(daysAhead(2));
+    await expect(button).toHaveText('Schedule');
+    await page.getByRole('button', { name: 'Clear' }).click();
+    await expect(button).toHaveText('Publish');
+
+    // The past is refused, with a message, and nothing goes live.
+    await field.fill(berlinField(new Date(Date.now() - 86_400_000)));
+    await button.click();
+    await expect(page.locator('#editor-errors')).toContainText('has passed');
+    expect((await request.get('/scheduled-one')).status()).toBe(404);
+
+    const first = daysAhead(2);
+    await field.fill(first);
+    await button.click();
+    const banner = page.locator('#scheduled-banner');
+    await expect(banner).toContainText(`Scheduled for ${berlinShown(first)}`);
+    await expect(button).toHaveText('Schedule');
+    await expect(page.getByRole('link', { name: 'View', exact: true })).toHaveCount(0);
+    expect((await request.get('/scheduled-one')).status()).toBe(404);
+    expect(await (await request.get('/')).text()).not.toContain('Scheduled one');
+    expect(await (await request.get('/feed.atom')).text()).not.toContain('Scheduled one');
+
+    // The list shows when, and offers to cancel.
+    await page.goto('/admin/articles');
+    const row = page.locator('tr', { hasText: 'Scheduled one' });
+    await expect(row.locator('.pill-scheduled')).toHaveText('scheduled');
+    await expect(row).toContainText(berlinShown(first));
+    await expect(row.getByRole('button', { name: 'Cancel schedule' })).toBeVisible();
+    await row.getByRole('link', { name: 'Scheduled one' }).click();
+
+    // Another time.
+    const second = daysAhead(3);
+    await banner.getByRole('button', { name: 'Change time' }).click();
+    await expect(field).toHaveValue(first);
+    await field.fill(second);
+    await button.click();
+    await expect(banner).toContainText(`Scheduled for ${berlinShown(second)}`);
+
+    // Cancelled: a draft again.
+    await banner.getByRole('button', { name: 'Cancel schedule' }).click();
+    await expect(banner).toHaveCount(0);
+    await expect(button).toHaveText('Publish');
+    await expect(toggle).toBeVisible();
+    expect((await request.get('/scheduled-one')).status()).toBe(404);
+
+    // Scheduled again, then published right away after all.
+    await toggle.click();
+    await field.fill(daysAhead(2));
+    await button.click();
+    await expect(banner).toBeVisible();
+    await banner.getByRole('button', { name: 'Publish now' }).click();
+    await expect(page.getByRole('link', { name: 'View', exact: true })).toBeVisible();
+    await expect(button).toHaveText('Update');
+    await expect(toggle).toHaveCount(0);
+    expect(await (await request.get('/scheduled-one')).text()).toContain('Words for later');
+
+    expect(problems).toEqual([]);
+});
+
+test('a scheduled article waits on the dashboard', async ({ page, request }) => {
+    await newItem(page);
+    await page.getByLabel('Title').fill('Waiting one');
+    await page.locator('.ProseMirror').click();
+    await page.keyboard.type('Not yet');
+    await saved(page);
+    await page.getByRole('button', { name: 'Schedule…' }).click();
+    const when = daysAhead(30);
+    await page.getByLabel('Publish at').fill(when);
+    await page.locator('#publish').click();
+    await expect(page.locator('#scheduled-banner')).toBeVisible();
+
+    // It stays scheduled, so the accessibility checks see the list and the dashboard with it.
+    await page.goto('/admin');
+    const panel = page.locator('section', { has: page.getByRole('heading', { name: 'Scheduled' }) });
+    await expect(panel.getByRole('link', { name: 'Waiting one' })).toBeVisible();
+    await expect(panel).toContainText(berlinShown(when));
+    expect((await request.get('/waiting-one')).status()).toBe(404);
+});

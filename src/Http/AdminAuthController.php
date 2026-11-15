@@ -22,6 +22,8 @@ final readonly class AdminAuthController
 {
     /** How many unfinished pieces the dashboard offers to continue. */
     private const DASHBOARD_DRAFTS = 5;
+    /** How many upcoming scheduled pieces it lists. */
+    private const DASHBOARD_SCHEDULED = 5;
 
     public function __construct(
         private Environment $twig,
@@ -88,6 +90,7 @@ final readonly class AdminAuthController
             'display_name' => $session?->displayName,
             'held_comments' => $this->comments->heldCount(),
             'drafts' => $this->articles->unfinished(self::DASHBOARD_DRAFTS),
+            'scheduled' => $this->articles->scheduled(self::DASHBOARD_SCHEDULED),
             'storage' => $this->library->usage(),
             'csrf_field' => CsrfMiddleware::FIELD,
             'csrf_token' => $session?->csrfToken,

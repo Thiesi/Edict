@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Edict\Http;
 
 use Edict\Auth\Session;
+use Edict\Clock;
 use Edict\Config;
 use Edict\Content\Article;
+use Edict\Content\ArticleDate;
 use Edict\Content\ArticleInput;
 use Edict\Content\Articles;
 use Edict\Content\Body;
@@ -25,7 +27,7 @@ use Twig\Environment;
  */
 final readonly class ArticleAdminController
 {
-    public function __construct(private Environment $twig, private Articles $articles, private Config $config, private Votes $votes) {}
+    public function __construct(private Environment $twig, private Articles $articles, private Config $config, private Votes $votes, private Clock $clock) {}
 
     public function index(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
     {
@@ -43,6 +45,7 @@ final readonly class ArticleAdminController
             // What a quick action from this list (or the editor's trash button) just did.
             'done' => match ($query['done'] ?? null) {
                 'unpublished' => 'unpublished',
+                'unscheduled' => 'unscheduled',
                 'trashed' => 'trashed',
                 default => null,
             },
@@ -88,6 +91,9 @@ final readonly class ArticleAdminController
             'known_tags' => array_column($this->articles->tags(), 'name'),
             'restored' => ($request->getQueryParams()['restored'] ?? null) === '1',
             'asset_version' => $this->config->release(),
+            // The schedule field starts at the scheduled time, and offers nothing earlier than now.
+            'publish_at' => $article->scheduled && $article->publishedAt !== null ? ArticleDate::fieldValue($article->publishedAt) : '',
+            'publish_at_min' => ArticleDate::fieldValue($this->clock->now()),
             'state' => [
                 'id' => $article->id,
                 'version' => $article->draftVersion,
@@ -193,8 +199,10 @@ final readonly class ArticleAdminController
     }
 
     /**
-     * Makes the stored draft live. The editor saves first, and sends the version it
-     * saved so that newer text from elsewhere can't go live unseen.
+     * Makes the stored draft live, now or at a time ahead ("at", as a datetime-local
+     * field gives it, in the site's time). The editor saves first, and sends the
+     * version it saved so that newer text from elsewhere can't go live unseen.
+     * Scheduling checks the text exactly as publishing does.
      *
      * @param array<string, string> $args
      */
@@ -208,9 +216,18 @@ final readonly class ArticleAdminController
 
         $input = $article->input();
         $errors = $input->errors();
+        $at = null;
+        $rawAt = $payload['at'] ?? null;
+        if ($rawAt !== null && $rawAt !== '') {
+            $at = is_string($rawAt) ? ArticleDate::fromFieldValue($rawAt) : null;
+            $error = $this->scheduleError($article, $at);
+            if ($error !== null) {
+                $errors['at'] = $error;
+            }
+        }
         if ($errors === []) {
             try {
-                $this->articles->publish($article, $input);
+                $this->articles->publish($article, $input, $at);
 
                 return self::json($response, ['redirect' => '/admin/articles/' . $article->id]);
             } catch (SlugTaken) {
@@ -223,18 +240,32 @@ final readonly class ArticleAdminController
         return self::json($response->withStatus(422), ['errors' => $errors]);
     }
 
+    private function scheduleError(Article $article, ?int $at): ?string
+    {
+        $now = $this->clock->now();
+
+        return match (true) {
+            !$article->canBeScheduled() => 'This has been public already, so it can only be published now. Scheduling is for pieces readers have never seen.',
+            $at === null => 'Please enter a valid date and time for publishing.',
+            $at <= $now => 'That time (' . ArticleDate::adminDateTime($at) . ') has passed. Choose a time in the future, or publish now.',
+            $at > $now + Articles::MAX_SCHEDULE_DAYS * 86400 => 'Please choose a time within the next ten years.',
+            default => null,
+        };
+    }
+
     /**
      * @param array<string, string> $args
      */
     public function unpublish(ServerRequestInterface $request, ResponseInterface $response, array $args): ResponseInterface
     {
         $article = $this->article($request, $args);
-        $this->articles->unpublish($article->id);
+        // A scheduled piece goes back to being a draft: the schedule is cancelled.
+        $status = $this->articles->unpublish($article->id);
 
         // From the list's quick actions, back to the list; from the editor, back to the editor.
         $body = $request->getParsedBody();
         if (is_array($body) && ($body['back'] ?? null) === 'list') {
-            return $response->withStatus(303)->withHeader('Location', '/admin/articles?' . ($article->kind === 'page' ? 'kind=page&' : '') . 'done=unpublished');
+            return $response->withStatus(303)->withHeader('Location', '/admin/articles?' . ($article->kind === 'page' ? 'kind=page&' : '') . 'done=' . ($status === 'draft' ? 'unscheduled' : 'unpublished'));
         }
 
         return self::toEdit($response, $article->id);
