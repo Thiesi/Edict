@@ -36,6 +36,24 @@ final readonly class Accounts
     }
 
     /**
+     * The admin's display name, to credit as an article's author. Null while it is
+     * still the login username, which admin:create sets it to: that stays private.
+     */
+    public function adminAuthorName(): ?string
+    {
+        $stmt = $this->pdo->query(
+            'SELECT u.display_name, c.username FROM app_user u JOIN admin_credential c ON c.user_id = u.id WHERE u.is_admin',
+        );
+        $row = $stmt === false ? false : $stmt->fetch(\PDO::FETCH_ASSOC);
+        if (!is_array($row)) {
+            return null;
+        }
+        $name = Row::str($row, 'display_name');
+
+        return AdminAccount::normaliseUsername($name) === Row::str($row, 'username') ? null : $name;
+    }
+
+    /**
      * Returns the account of this identity, creating one on first login.
      *
      * @return array{id: int, isAdmin: bool, created: bool}

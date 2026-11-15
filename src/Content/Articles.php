@@ -432,6 +432,19 @@ final readonly class Articles
     }
 
     /**
+     * The languages readers find articles and pages in, for the home page's structured data.
+     *
+     * @return list<string>
+     */
+    public function publicLanguages(): array
+    {
+        $stmt = $this->pdo->prepare('SELECT DISTINCT a.lang FROM article a WHERE ' . self::PUBLIC_WHERE . ' ORDER BY a.lang');
+        $stmt->execute([$this->clock->now()]);
+
+        return array_values(array_filter($stmt->fetchAll(\PDO::FETCH_COLUMN), is_string(...)));
+    }
+
+    /**
      * @return list<Article>
      */
     public function publicListByTag(string $tagSlug, int $limit, int $offset): array
