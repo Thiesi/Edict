@@ -46,7 +46,7 @@ final class ViewFlowTest extends DbTestCase
     }
 
     /**
-     * @param array<string, string> $fields
+     * @param array<string, mixed> $fields
      */
     private function adminPost(string $path, array $fields = []): ResponseInterface
     {
@@ -74,7 +74,9 @@ final class ViewFlowTest extends DbTestCase
     {
         $id = $this->saved($title, $kind);
         $version = $this->service(Articles::class)->find($id)?->draftVersion;
-        self::assertSame(200, $this->adminPost("/admin/articles/$id/publish", ['version' => (string) $version])->getStatusCode());
+        // The version as the editor sends it, a JSON number: a string is someone else's draft.
+        $response = $this->adminPost("/admin/articles/$id/publish", ['version' => $version]);
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
 
         return $id;
     }
