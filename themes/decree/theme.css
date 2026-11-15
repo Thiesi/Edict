@@ -300,3 +300,13 @@ hr {
     margin: 2rem auto;
     border-top: 2px solid var(--gold);
 }
+
+.panel-welcome {
+    border-left-color: var(--gold);
+}
+
+.sign-in,
+.sign-in .provider-list > li {
+    justify-content: center;
+    text-align: center;
+}
