@@ -352,25 +352,3 @@ th {
 .file-card {
     border-color: var(--rule);
 }
-
-/* Panels are parts of the page under a thick rule, like sections of the paper. */
-.panel {
-    padding: var(--space-4) 0 0;
-    border: 0;
-    border-top: 2px solid var(--rule);
-}
-
-.panel-welcome {
-    padding: var(--space-4) var(--space-5) var(--space-5);
-    border: 1px solid var(--rule);
-    border-left-width: 4px;
-}
-
-.panel-danger {
-    border-color: var(--rule);
-}
-
-.login-list > li,
-.confirm-form {
-    border-color: var(--rule);
-}
