@@ -132,6 +132,14 @@ final class SiteFlowTest extends DbTestCase
         self::assertStringContainsString('theme-' . Themes::DEFAULT . '"', (string) $this->get('/?theme=' . $other)->getBody(), 'an unknown stored theme falls back');
         self::assertStringContainsString('theme-' . $other . '"', (string) $this->get('/?theme=' . $other, $this->admin)->getBody());
         self::assertStringContainsString('theme-' . Themes::DEFAULT . '"', (string) $this->get('/?theme=../../etc', $this->admin)->getBody());
+
+        // The sign-in page too. Signed in, the admin is sent on to the account page, except in a preview.
+        $login = $this->get('/login?theme=' . $other, $this->admin);
+        self::assertSame(200, $login->getStatusCode());
+        self::assertStringContainsString('theme-' . $other . '"', (string) $login->getBody());
+        self::assertStringContainsString('<h1>Sign in</h1>', (string) $login->getBody());
+        self::assertSame('/account', $this->get('/login', $this->admin)->getHeaderLine('Location'));
+        self::assertSame('/account', $this->get('/login?theme=../../etc', $this->admin)->getHeaderLine('Location'), 'an unknown theme is no preview');
     }
 
     public function testReadersCannotChangeTheSite(): void
@@ -146,5 +154,6 @@ final class SiteFlowTest extends DbTestCase
         self::assertSame(403, $this->post('/admin/site', ['title' => 'Mine', '_csrf' => $session->csrfToken], [self::SESSION => $token])->getStatusCode());
         self::assertSame(403, $this->post('/admin/themes', ['theme' => Themes::DEFAULT, '_csrf' => $session->csrfToken], [self::SESSION => $token])->getStatusCode());
         self::assertSame(303, $this->get('/admin/themes')->getStatusCode());
+        self::assertSame('/account', $this->get('/login?theme=' . array_key_last(Themes::ALL), [self::SESSION => $token])->getHeaderLine('Location'), 'no preview for readers');
     }
 }
