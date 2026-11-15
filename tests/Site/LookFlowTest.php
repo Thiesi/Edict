@@ -8,6 +8,8 @@ use Edict\Auth\AdminAccount;
 use Edict\Auth\SessionStore;
 use Edict\Media\JobRunner;
 use Edict\Media\MediaStore;
+use Edict\Site\Accent;
+use Edict\Site\Themes;
 use Edict\Tests\DbTestCase;
 use Psr\Http\Message\ResponseInterface;
 use Slim\Psr7\UploadedFile;
@@ -110,6 +112,11 @@ final class LookFlowTest extends DbTestCase
         self::assertStringContainsString('@media (prefers-color-scheme: dark) { :root { --accent: #ffd400; --accent-fg: #111111;', $body, 'bright enough on dark as it is');
         self::assertStringNotContainsString('--accent: #ffd400', strstr($body, '@media', true) ?: '', 'darkened for the light background');
         self::assertSame("/* The theme's own accent. */\n", (string) $this->get('/accent.css?theme=nonsense')->getBody());
+
+        // Decree's header is dark in both schemes: there the colour is fitted against the header, not the page.
+        self::assertSame(1, preg_match_all('~^:root \{ --header-accent: (#[0-9a-f]{6}); \}$~m', $body, $light));
+        self::assertGreaterThanOrEqual(Accent::MIN_CONTRAST, Accent::contrast($light[1][0], Themes::HEADER_BACKGROUNDS['decree']['light']));
+        self::assertStringContainsString('} :root { --header-accent: #ffd400; } }', $body, 'bright enough on the dark header as it is');
 
         $page = (string) $this->get('/admin/themes', $this->cookies)->getBody();
         self::assertStringContainsString('value="#ffd400"', $page);
