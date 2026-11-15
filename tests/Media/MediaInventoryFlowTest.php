@@ -118,6 +118,19 @@ final class MediaInventoryFlowTest extends DbTestCase
     }
 
     /**
+     * A document as the editor posts it: arrays, as parsed JSON arrives.
+     *
+     * @return array<mixed>
+     */
+    private static function tree(string $json): array
+    {
+        $tree = json_decode($json, true);
+        self::assertIsArray($tree);
+
+        return $tree;
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private static function image(int $mediaId): array
@@ -436,7 +449,7 @@ final class MediaInventoryFlowTest extends DbTestCase
         $photo = $this->media('holiday.jpg');
         $create = $this->adminPost('/admin/articles', ['kind' => 'article']);
         $id = (int) substr($create->getHeaderLine('Location'), strlen('/admin/articles/'));
-        $draft = ['title' => 'Summer', 'slug' => 'summer', 'lang' => 'en', 'teaser' => '', 'tags' => '', 'cover' => $photo, 'body' => json_decode(self::doc([
+        $draft = ['title' => 'Summer', 'slug' => 'summer', 'lang' => 'en', 'teaser' => '', 'tags' => '', 'cover' => $photo, 'body' => self::tree(self::doc([
             ['type' => 'paragraph', 'content' => [['type' => 'text', 'text' => 'Sunny.']]],
             self::image($photo),
         ]))];
@@ -448,7 +461,7 @@ final class MediaInventoryFlowTest extends DbTestCase
             self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
         };
         $publish($draft);
-        $publish(['cover' => null, 'body' => json_decode(self::doc([['type' => 'paragraph', 'content' => [['type' => 'text', 'text' => 'Rainy.']]]]))] + $draft);
+        $publish(['cover' => null, 'body' => self::tree(self::doc([['type' => 'paragraph', 'content' => [['type' => 'text', 'text' => 'Rainy.']]]]))] + $draft);
 
         $inventory = $this->service(MediaInventory::class);
         self::assertSame([], $inventory->usesOf($photo), 'old versions don\'t keep an item');
@@ -470,7 +483,7 @@ final class MediaInventoryFlowTest extends DbTestCase
         self::assertSame(200, $this->get("/admin/articles/$id/preview", $this->admin)->getStatusCode());
 
         // Readers see the text, and nothing where the picture was.
-        $publish(['cover' => $photo, 'body' => json_decode(self::doc([
+        $publish(['cover' => $photo, 'body' => self::tree(self::doc([
             ['type' => 'paragraph', 'content' => [['type' => 'text', 'text' => 'Sunny.']]],
             self::image($photo),
         ]))] + $draft);
