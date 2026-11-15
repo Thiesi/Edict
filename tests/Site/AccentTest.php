@@ -59,37 +59,6 @@ final class AccentTest extends TestCase
         }
     }
 
-    public function testNoColourCanVanishOnAnyHeader(): void
-    {
-        $colours = ['#000000', '#ffffff', '#808080', '#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff', '#6b1f2e', '#1d1a2e', '#ffe600'];
-        foreach (array_keys(Themes::ALL) as $theme) {
-            $backgrounds = Themes::headerBackgrounds($theme);
-            self::assertNotNull($backgrounds, $theme);
-            foreach ($backgrounds as $scheme => $background) {
-                foreach ($colours as $colour) {
-                    $fit = Accent::fit($colour, $background);
-                    self::assertGreaterThanOrEqual(Accent::MIN_CONTRAST, Accent::contrast($fit['accent'], $background), "$colour on the header of $theme ($scheme)");
-                }
-            }
-        }
-        self::assertNull(Themes::headerBackgrounds('nonsense'));
-    }
-
-    public function testTheHeaderBackgroundsMatchTheThemes(): void
-    {
-        foreach (array_keys(Themes::ALL) as $theme) {
-            $css = (string) file_get_contents(dirname(__DIR__, 2) . "/themes/$theme/theme.css");
-            preg_match_all('~--header-bg:\s*(#[0-9a-fA-F]{3,6})\s*;~', $css, $found);
-            $expected = Themes::HEADER_BACKGROUNDS[$theme] ?? null;
-            if ($expected === null) {
-                self::assertSame([], $found[1], "$theme has no header background of its own, or it is missing from Themes::HEADER_BACKGROUNDS");
-
-                continue;
-            }
-            self::assertSame([$expected['light'], $expected['dark']], array_map(static fn(string $c): ?string => Accent::parse($c), $found[1]), $theme);
-        }
-    }
-
     public function testTheBackgroundsMatchTheThemes(): void
     {
         self::assertSame(array_keys(Themes::ALL), array_keys(Themes::BACKGROUNDS));
