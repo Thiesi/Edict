@@ -184,9 +184,12 @@ final class CommentFlowTest extends DbTestCase
         self::assertStringContainsString('waiting for approval, only you see it', $this->page($alice));
         self::assertStringContainsString('1 comment waits for approval', (string) $this->get('/admin', $admin['cookies'])->getBody());
         self::assertStringContainsString('Let me in', (string) $this->get('/admin/comments', $admin['cookies'])->getBody());
+        // The admin's menu says so on every page, not only on the dashboard.
+        self::assertStringContainsString('<span class="admin-count">', (string) $this->get('/admin/tags', $admin['cookies'])->getBody());
 
         self::assertSame(303, $this->moderate($admin, $id, 'approve')->getStatusCode());
         self::assertStringContainsString('Let me in', $this->page());
+        self::assertStringNotContainsString('<span class="admin-count">', (string) $this->get('/admin/tags', $admin['cookies'])->getBody());
 
         $this->moderate($admin, $id, 'trust');
         $this->posted($alice, 'Straight through now');
