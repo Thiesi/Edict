@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Edict\Cli;
 
 use Edict\Clock;
+use Edict\Content\Views;
 use Edict\Database\Row;
 use Edict\Media\JobRunner;
 use Edict\Media\MediaLibrary;
@@ -62,6 +63,8 @@ final class WorkerCommand extends Command
             $staleBefore = $this->services->get(Clock::class)->now() - self::TEMP_FILES_LIVE_FOR;
             $store->sweep($staleBefore);
             $this->services->get(MediaLibrary::class)->forgetUploadsOlderThan($staleBefore);
+            // Yesterday's salt for view counts, if nobody has read anything today yet.
+            $this->services->get(Views::class)->forgetPastDays();
         }
 
         $seconds = $input->getOption('seconds');

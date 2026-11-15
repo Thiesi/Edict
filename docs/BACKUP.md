@@ -17,6 +17,7 @@ The file is `"format": "edict-export", "version": 2`:
 Left out on purpose:
 
 - **Comments, likes and reader accounts.** They belong to people who signed in with Google or Twitch, so they are personal data. Only the host's database backup keeps them.
+- **View counts.** They are statistics, not content. Only the host's database backup keeps them; a restored site starts counting from zero.
 - **Published versions (revisions).** Up to 20 per article would make the file many times larger. A restored article starts with an empty version history.
 - **Media variants** (thumbnails, transcodes, posters, site icons). The worker makes them again from the originals.
 

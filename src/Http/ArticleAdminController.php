@@ -16,6 +16,7 @@ use Edict\Content\Body;
 use Edict\Content\PreviewLinks;
 use Edict\Content\SlugTaken;
 use Edict\Content\StaleDraft;
+use Edict\Content\Views;
 use Edict\Content\Votes;
 use Edict\Http\Middleware\CsrfMiddleware;
 use Edict\Http\Middleware\SessionMiddleware;
@@ -36,6 +37,7 @@ final readonly class ArticleAdminController
         private Votes $votes,
         private Export $export,
         private Clock $clock,
+        private Views $views,
         private PreviewLinks $previewLinks,
     ) {}
 
@@ -49,6 +51,7 @@ final readonly class ArticleAdminController
         }
 
         $articles = $this->articles->adminList($kind, $trash);
+        $ids = array_map(static fn(Article $article): int => $article->id, $articles);
 
         return $this->html($request, $response, 'admin/articles.html.twig', [
             'articles' => $articles,
@@ -59,7 +62,9 @@ final readonly class ArticleAdminController
                 'trashed' => 'trashed',
                 default => null,
             },
-            'likes' => $kind === 'article' ? $this->votes->counts(array_map(static fn(Article $article): int => $article->id, $articles)) : [],
+            'likes' => $kind === 'article' ? $this->votes->counts($ids) : [],
+            'views' => $this->views->counts($ids),
+            'recent_days' => Views::RECENT_DAYS,
             'kind' => $kind,
             'trash' => $trash,
             'trash_days' => Articles::TRASH_DAYS,
@@ -98,6 +103,8 @@ final readonly class ArticleAdminController
             'article' => $article,
             'input' => $input,
             'revisions' => $this->articles->revisions($article->id),
+            'views' => $this->views->counts([$article->id])[$article->id] ?? ['total' => 0, 'recent' => 0],
+            'recent_days' => Views::RECENT_DAYS,
             'known_tags' => array_column($this->articles->tags(), 'name'),
             'restored' => ($request->getQueryParams()['restored'] ?? null) === '1',
             'asset_version' => $this->config->release(),

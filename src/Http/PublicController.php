@@ -8,6 +8,7 @@ use Edict\Auth\Session;
 use Edict\Content\Article;
 use Edict\Content\Articles;
 use Edict\Content\Comments;
+use Edict\Content\Views;
 use Edict\Content\Votes;
 use Edict\Http\Middleware\CsrfMiddleware;
 use Edict\Http\Middleware\SessionMiddleware;
@@ -25,7 +26,7 @@ final readonly class PublicController
     private const PER_PAGE = 20;
     private const MAX_QUERY = 200;
 
-    public function __construct(private Environment $twig, private Articles $articles, private Votes $votes, private Comments $comments) {}
+    public function __construct(private Environment $twig, private Articles $articles, private Votes $votes, private Comments $comments, private Views $views) {}
 
     public function home(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
     {
@@ -122,7 +123,10 @@ final readonly class PublicController
         $slug = $args['slug'] ?? '';
         $article = $this->articles->findPublic($slug);
         if ($article !== null) {
-            return $this->showArticle($request, $response, $article);
+            $response = $this->showArticle($request, $response, $article);
+            $this->countView($request, $response, $article);
+
+            return $response;
         }
 
         $target = $this->articles->redirectTarget($slug);
@@ -167,6 +171,24 @@ final readonly class PublicController
                 'posted' => self::id($query['posted'] ?? null),
             ] : null,
         ]);
+    }
+
+    /**
+     * A reader's view, for the admin's counts. Not the admin's own, not a bot's, not a
+     * HEAD request or anything but the page itself, and not a refused comment coming back
+     * (that never passes through here).
+     */
+    private function countView(ServerRequestInterface $request, ResponseInterface $response, Article $article): void
+    {
+        $session = $request->getAttribute(SessionMiddleware::ATTRIBUTE);
+        $userAgent = $request->getHeaderLine('User-Agent');
+        if ($request->getMethod() !== 'GET' || $response->getStatusCode() !== 200
+            || ($session instanceof Session && $session->isAdmin) || Views::isBot($userAgent)) {
+            return;
+        }
+        $ip = $request->getServerParams()['REMOTE_ADDR'] ?? null;
+
+        $this->views->record($article->id, is_string($ip) ? $ip : '', $userAgent);
     }
 
     private static function id(mixed $value): ?int

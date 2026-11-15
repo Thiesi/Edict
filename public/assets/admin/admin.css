@@ -624,6 +624,88 @@ legend {
     background: var(--danger);
 }
 
+/* Views per day on the dashboard: neutral bars, the red stays for what needs doing.
+   Each day's full-height strip carries its tooltip, so an empty day has one too. */
+.views-chart {
+    display: block;
+    width: 100%;
+    height: auto;
+    margin: var(--space-3) 0 var(--space-1);
+    overflow: visible;
+}
+
+.views-chart-bar {
+    fill: var(--muted);
+}
+
+.views-chart-hit {
+    fill: transparent;
+}
+
+.views-chart-day:hover .views-chart-bar {
+    fill: var(--ink);
+}
+
+.views-chart-day:hover .views-chart-hit {
+    fill: var(--hover);
+}
+
+.views-chart-base {
+    stroke: var(--line-strong);
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+}
+
+@media (forced-colors: active) {
+    .views-chart-bar,
+    .views-chart-day:hover .views-chart-bar {
+        fill: CanvasText;
+    }
+
+    .views-chart-base {
+        stroke: CanvasText;
+    }
+}
+
+.views-chart-axis {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0;
+    color: var(--muted);
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.views-table table {
+    width: 100%;
+    border-collapse: collapse;
+    font-variant-numeric: tabular-nums;
+}
+
+.views-table th,
+.views-table td {
+    padding: var(--space-1) 0;
+    border-bottom: 1px solid var(--line);
+    text-align: left;
+}
+
+.views-table .num {
+    text-align: right;
+}
+
+/* The article list's views of the recent days, under the total. */
+.views-recent {
+    display: block;
+    color: var(--muted);
+    white-space: nowrap;
+}
+
+@media (max-width: 40rem) {
+    .views-recent {
+        display: inline;
+    }
+}
+
 .actions {
     display: flex;
     flex-wrap: wrap;

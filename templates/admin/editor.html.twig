@@ -167,6 +167,9 @@
                     {% endfor %}
                 </ol>
             {% endif %}
+            {% if article.publishedAt %}
+                <p>Views: <strong>{{ views.total|number_format }}</strong>, {{ views.recent|number_format }} in the last {{ recent_days }} days. <small>Readers only, each once a day; not you, and not bots.</small></p>
+            {% endif %}
             <div class="editor-fate">
                 <p>
                     Status: <strong>{% if article.scheduled %}scheduled for <time datetime="{{ article.publishedAt|article_iso }}">{{ article.publishedAt|admin_datetime }}</time>{% else %}{{ article.status }}{% endif %}</strong>{% if article.hasPendingChanges %}, with changes readers don't see yet{% endif %}.
