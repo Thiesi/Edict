@@ -14,7 +14,7 @@ test('no page breaks the Content-Security-Policy', async ({ page }) => {
         violations.push(...await page.evaluate(() => window.cspViolations ?? []));
     };
 
-    for (const path of ['/', '/archive', '/search?q=a', '/login', '/admin', '/admin/articles', '/admin/site', '/admin/comments', '/admin/tags', '/admin/themes', '/no-such-article']) {
+    for (const path of ['/', '/archive', '/search?q=a', '/login', '/admin', '/admin/articles', '/admin/media-library', '/admin/site', '/admin/comments', '/admin/tags', '/admin/themes', '/no-such-article']) {
         await page.goto(path);
         await page.waitForLoadState('load');
         await collect();
