@@ -2,6 +2,8 @@
 
 {% set meta = {url: '/'} %}
 
+{% block structured_data %}{{ structured_data_website() }}{% endblock %}
+
 {% block title %}{{ site().title }}{% endblock %}
 
 {% block main %}

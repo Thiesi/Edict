@@ -11,6 +11,9 @@
     robots: preview ? 'noindex' : null,
 }|filter(v => v is not null) %}
 
+{# The same share image as og:image. #}
+{% block structured_data %}{{ structured_data_article(article) }}{% endblock %}
+
 {% block title %}{{ article.title }} · {{ site().title }}{% endblock %}
 
 {% block main %}

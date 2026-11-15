@@ -20,11 +20,21 @@ test('no page breaks the Content-Security-Policy', async ({ page }) => {
         await collect();
     }
 
+    // Structured data is a data block, which browsers never run, so script-src doesn't
+    // apply to it: these pages carry one, and the policy has nothing to report about them.
+    const structuredData = async (type) => {
+        const blocks = await page.locator('head script[type="application/ld+json"]').allTextContents();
+        expect(blocks).toHaveLength(1);
+        expect(JSON.parse(blocks[0])['@type']).toBe(type);
+    };
+
     // An article with whatever the earlier tests left on it: pictures, players, likes, comments.
     await page.goto('/');
+    await structuredData('WebSite');
     const href = await page.locator('.articles h2 a').first().getAttribute('href');
     await page.goto(href);
     await page.waitForLoadState('load');
+    await structuredData('BlogPosting');
     await collect();
 
     // The editor, with its bundle, its bubble menu and the media library open.
