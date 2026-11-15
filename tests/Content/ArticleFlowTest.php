@@ -716,6 +716,35 @@ final class ArticleFlowTest extends DbTestCase
         self::assertSame($first, $this->service(Articles::class)->find($id)?->publishedAt);
     }
 
+    public function testTheListUnpublishesAndBinsInOneClick(): void
+    {
+        $id = $this->published();
+        $list = (string) $this->get('/admin/articles', $this->admin)->getBody();
+        self::assertStringContainsString('action="/admin/articles/' . $id . '/unpublish"', $list);
+        self::assertStringContainsString('action="/admin/articles/' . $id . '/trash"', $list);
+
+        $unpublished = $this->adminPost("/admin/articles/$id/unpublish", ['back' => 'list']);
+        self::assertSame('/admin/articles?done=unpublished', $unpublished->getHeaderLine('Location'), 'back to the list, not the editor');
+        self::assertSame('unpublished', $this->service(Articles::class)->find($id)?->status);
+        self::assertSame(404, $this->get('/hello-world')->getStatusCode());
+        $list = (string) $this->get('/admin/articles?done=unpublished', $this->admin)->getBody();
+        self::assertStringContainsString('Unpublished. Readers no longer see it', $list);
+        self::assertStringNotContainsString('action="/admin/articles/' . $id . '/unpublish"', $list, 'only published pieces can be unpublished');
+
+        // From the editor, unpublishing still goes back to the editor.
+        $this->publish($id);
+        self::assertSame("/admin/articles/$id", $this->adminPost("/admin/articles/$id/unpublish")->getHeaderLine('Location'));
+
+        $binned = $this->adminPost("/admin/articles/$id/trash");
+        self::assertSame('/admin/articles?kind=article&done=trashed', $binned->getHeaderLine('Location'));
+        self::assertStringContainsString('Moved to the trash.', (string) $this->get('/admin/articles?kind=article&done=trashed', $this->admin)->getBody());
+        self::assertStringNotContainsString('/admin/articles/' . $id . '"', (string) $this->get('/admin/articles', $this->admin)->getBody());
+
+        // Pages come back to the pages list.
+        $page = $this->published(['slug' => 'ueber'], 'page');
+        self::assertSame('/admin/articles?kind=page&done=unpublished', $this->adminPost("/admin/articles/$page/unpublish", ['back' => 'list'])->getHeaderLine('Location'));
+    }
+
     public function testNewestComesFirstAndPagesWork(): void
     {
         for ($i = 1; $i <= 21; ++$i) {

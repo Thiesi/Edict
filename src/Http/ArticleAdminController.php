@@ -40,6 +40,12 @@ final readonly class ArticleAdminController
 
         return $this->html($request, $response, 'admin/articles.html.twig', [
             'articles' => $articles,
+            // What a quick action from this list (or the editor's trash button) just did.
+            'done' => match ($query['done'] ?? null) {
+                'unpublished' => 'unpublished',
+                'trashed' => 'trashed',
+                default => null,
+            },
             'likes' => $kind === 'article' ? $this->votes->counts(array_map(static fn(Article $article): int => $article->id, $articles)) : [],
             'kind' => $kind,
             'trash' => $trash,
@@ -225,6 +231,12 @@ final readonly class ArticleAdminController
         $article = $this->article($request, $args);
         $this->articles->unpublish($article->id);
 
+        // From the list's quick actions, back to the list; from the editor, back to the editor.
+        $body = $request->getParsedBody();
+        if (is_array($body) && ($body['back'] ?? null) === 'list') {
+            return $response->withStatus(303)->withHeader('Location', '/admin/articles?' . ($article->kind === 'page' ? 'kind=page&' : '') . 'done=unpublished');
+        }
+
         return self::toEdit($response, $article->id);
     }
 
@@ -236,7 +248,7 @@ final readonly class ArticleAdminController
         $article = $this->article($request, $args);
         $this->articles->trash($article->id);
 
-        return $response->withStatus(303)->withHeader('Location', '/admin/articles?kind=' . $article->kind);
+        return $response->withStatus(303)->withHeader('Location', '/admin/articles?kind=' . $article->kind . '&done=trashed');
     }
 
     /**
