@@ -140,6 +140,12 @@ final class SiteFlowTest extends DbTestCase
         self::assertStringContainsString('<h1>Sign in</h1>', (string) $login->getBody());
         self::assertSame('/account', $this->get('/login', $this->admin)->getHeaderLine('Location'));
         self::assertSame('/account', $this->get('/login?theme=../../etc', $this->admin)->getHeaderLine('Location'), 'an unknown theme is no preview');
+
+        // A page that isn't there is drawn in the preview too, and the preview ends with it.
+        $missing = $this->get('/no-such-article?theme=' . $other, $this->admin);
+        self::assertSame(404, $missing->getStatusCode());
+        self::assertStringContainsString('theme-' . $other . '"', (string) $missing->getBody());
+        self::assertStringContainsString('theme-' . Themes::DEFAULT . '"', (string) $this->get('/', $this->admin)->getBody(), 'the next page is back in the applied theme');
     }
 
     public function testReadersCannotChangeTheSite(): void

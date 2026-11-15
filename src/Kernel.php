@@ -66,6 +66,9 @@ final class Kernel
         $default = $errors->getDefaultErrorHandler();
         if ($default instanceof ErrorHandler) {
             $default->registerErrorRenderer('text/html', ErrorPage::class);
+            // Also for requests without an Accept header (curl, some bots), which would
+            // otherwise get Slim's own page.
+            $default->setDefaultErrorRenderer('text/html', ErrorPage::class);
         }
         if ($default instanceof ErrorHandlerInterface) {
             $errors->setErrorHandler(

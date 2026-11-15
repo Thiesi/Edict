@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Edict\Http;
 
 use Edict\Services;
+use Edict\Site\Settings;
 use Slim\Error\Renderers\HtmlErrorRenderer;
 use Slim\Exception\HttpException;
 use Slim\Interfaces\ErrorRendererInterface;
@@ -20,8 +21,10 @@ final readonly class ErrorPage implements ErrorRendererInterface
 
     public function __invoke(\Throwable $exception, bool $displayErrorDetails): string
     {
-        // Developers want the stack trace, not a pretty page.
-        if ($displayErrorDetails) {
+        // Developers want the stack trace for a real fault. A 404, 403 or 405 has none
+        // worth reading, so those get the themed page everywhere, which also lets the
+        // browser tests (in development mode) check it.
+        if ($displayErrorDetails && !$exception instanceof HttpException) {
             return (new HtmlErrorRenderer())($exception, true);
         }
 
@@ -39,6 +42,13 @@ final readonly class ErrorPage implements ErrorRendererInterface
             return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
                 . '<title>' . $title . '</title></head><body>'
                 . '<h1>' . $title . '</h1><p>' . $text . '</p><p><a href="/">To the home page</a></p></body></html>';
+        } finally {
+            // A theme preview the request asked for ends with its error page (see SitePreviewMiddleware).
+            try {
+                $this->services->get(Settings::class)->preview(null);
+            } catch (\Throwable) {
+                // Without a database there is no preview to end.
+            }
         }
     }
 }

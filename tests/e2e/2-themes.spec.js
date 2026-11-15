@@ -4,8 +4,6 @@ import { expect, test } from '@playwright/test';
 const THEMES = ['decree', 'broadsheet', 'quiet', 'almanac', 'terminal', 'zine', 'blueprint', 'gallery'];
 
 // The admin is signed in, so ?theme= previews each theme without applying it.
-// The error page is missing here on purpose: tests run in development mode, where
-// Slim's own detailed error page appears instead of the themed one.
 for (const colorScheme of ['light', 'dark']) {
     test.describe(`in ${colorScheme}`, () => {
         test.use({ colorScheme });
@@ -36,6 +34,10 @@ for (const colorScheme of ['light', 'dark']) {
                 await check(`/search?q=${encodeURIComponent(word)}&theme=${theme}`);
                 await expect(page.locator('.search-results li').first()).toBeVisible();
                 await check(`/login?theme=${theme}`);
+                // The error page, through an article address that doesn't exist, so the
+                // preview has applied by the time the 404 is drawn.
+                await check(`/no-such-article-${theme}?theme=${theme}`);
+                await expect(page.locator('main h1')).toHaveText('Not found');
 
                 expect(problems).toEqual([]);
             });

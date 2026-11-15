@@ -11,6 +11,7 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
+use Slim\Exception\HttpException;
 
 /**
  * "?theme=quiet" shows a page in another theme, to the admin only, for the theme
@@ -30,12 +31,19 @@ final readonly class SitePreviewMiddleware implements MiddlewareInterface
         }
 
         $settings = $this->services->get(Settings::class);
+        // A preview never outlives the page it was asked for.
         $settings->preview($theme);
         try {
-            return $handler->handle($request);
-        } finally {
-            // A preview never outlives the page it was asked for.
+            $response = $handler->handle($request);
+        } catch (HttpException $answer) {
+            // A 404 or 403 is still that page: ErrorPage draws it in the preview, then ends it.
+            throw $answer;
+        } catch (\Throwable $fault) {
             $settings->preview(null);
+            throw $fault;
         }
+        $settings->preview(null);
+
+        return $response;
     }
 }
