@@ -15,6 +15,8 @@
     --focus: #2563eb;
     --measure: 36rem;
     --gutter: 1.5rem;
+    --control-bg: transparent;
+    --control-border: var(--border);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -123,4 +125,113 @@ blockquote {
 .like-button[aria-pressed='true'] {
     border-color: var(--fg);
     background: var(--fg);
+}
+
+/* Controls barely there: a hairline, plain words. Only the main action is solid. */
+.site-header-bar {
+    margin-top: 0.5rem;
+}
+
+.site-header .site-search input {
+    width: 8rem;
+    padding-left: 0;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+    background: none;
+}
+
+.site-header .site-search input:is(:hover, :focus) {
+    border-bottom-color: var(--fg);
+}
+
+.site-header .site-search button {
+    border-color: transparent;
+    color: var(--muted);
+}
+
+.site-header .site-search button:hover {
+    background: none;
+    color: var(--fg);
+}
+
+button:hover,
+.button:hover {
+    border-color: var(--fg);
+    background: none;
+}
+
+.button-primary:hover {
+    background: var(--accent);
+    opacity: 0.85;
+}
+
+/* A calmer scale: fewer sizes, more air between parts. */
+article h2 {
+    margin-top: 2.75rem;
+    font-size: 1.45rem;
+}
+
+article h3 {
+    margin-top: 2rem;
+    font-size: 1.2rem;
+}
+
+.summary-meta {
+    margin-bottom: 0.35rem;
+}
+
+.lang-filter a {
+    padding-left: 0;
+    border: 0;
+    color: var(--muted);
+}
+
+.lang-filter [aria-current] {
+    border: 0;
+    background: none;
+    color: var(--fg);
+}
+
+.tags a {
+    padding: 0;
+    border: 0;
+    color: var(--muted);
+    text-decoration: underline;
+}
+
+.tags a:hover {
+    color: var(--fg);
+}
+
+.notice {
+    padding-left: var(--space-3);
+    border-left: 2px solid var(--fg);
+    background: none;
+}
+
+.empty {
+    padding: 0;
+    border: 0;
+    text-align: left;
+}
+
+th {
+    background: none;
+    font-weight: 600;
+}
+
+th,
+td {
+    border-width: 0 0 1px;
+    padding-left: 0;
+}
+
+.audio-player,
+.file-card {
+    background: none;
+}
+
+.pager {
+    margin-top: 3.5rem;
 }
