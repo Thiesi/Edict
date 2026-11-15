@@ -37,7 +37,22 @@ The log of that run lists the releases afterwards. The next push to `main` deplo
 
 **Which build is this?** Every page on staging ends with a small link to the commit it was built from. Production doesn't show it, but its `/healthz` names the release.
 
-**Production** isn't set up yet. It comes with S11, and each deploy will need an approval in GitHub.
+**Production:** Actions → "Production deploy" → Run workflow, from `main`. Leave "commit" empty to ship what staging runs now, or name a commit on `main`. The workflow:
+
+1. Finds the CI run on `main` that built that commit **and deployed it to staging successfully**. Anything else is refused: production only gets what staging has run.
+2. Waits for the owner's approval in the GitHub environment `production`.
+3. Ships that run's bundle unchanged (nothing is rebuilt) through `edict-deploy production`, which checks `/healthz` and flips back on failure, as on staging.
+4. Checks `https://edict.networkxxiii.de/healthz` from outside: healthy, and on that commit.
+
+CI keeps bundles for 30 days, so an older commit can't be deployed; deploy a newer one. Rollback: Actions → "Production rollback", which also waits for an approval.
+
+```sh
+gh workflow run production-deploy.yml --repo Thiesi/Edict
+gh workflow run production-deploy.yml --repo Thiesi/Edict -f commit=<sha>
+gh workflow run production-rollback.yml --repo Thiesi/Edict
+```
+
+**GitHub setup (owner):** an environment `production` with the owner as required reviewer and deployments restricted to `main`, holding the secret `EDICT_PRODUCTION_DEPLOY_KEY`. It's a separate key from staging's, and lives only there.
 
 ## Host setup for staging
 
@@ -116,6 +131,29 @@ The OAuth redirect URLs to register are `https://staging.edict.networkxxiii.de/a
 **The deploy key is a code-execution credential.** Each tarball's PHP runs as the deploy user, who can read `.env`, so holding the key means access to the staging secrets. Keep one key per instance, held only by that instance's GitHub environment.
 
 If a machine dies mid-deploy, the lock stays and the forced-command key can't clear it. Ops removes it with `rmdir /usr/local/share/edict-staging/.deploy.lock`, after checking that no deploy is running.
+
+## Host setup for production
+
+The same as staging, with these differences:
+
+| Item | Staging | Production |
+|---|---|---|
+| Site | `Staging.Edict.NetWorkXXIII.de` | `Edict.NetWorkXXIII.de` (DNS and certificate are live) |
+| Vhost | as above | `Use VHost Edict.NetWorkXXIII.de 80` / `Use TLSVHost Edict.NetWorkXXIII.de 443`, same `/media/` rules for PDFs and downloads, **no** `X-Robots-Tag` |
+| Base | `/usr/local/share/edict-staging` | `/usr/local/share/edict` |
+| Pool user | `edictstg` | `edict` |
+| Deploy user | `edictstg-deploy` | `edict-deploy`, with `command="/usr/local/sbin/edict-deploy production ssh",…` and the same `Match User` entry |
+| Settings | `edict-deploy.staging.conf` | `/usr/local/etc/edict-deploy.production.conf` with `BASE=/usr/local/share/edict` and `HEALTH_URL=https://edict.networkxxiii.de/healthz` |
+| Database | role and database `edictstg` | role and database `edict` |
+| Data | `/home/edictstg/data` | `/home/edict/data` |
+| `.env` | `APP_ENV=staging` | `APP_ENV=production`, `APP_URL=https://Edict.NetWorkXXIII.de`, its own `APP_SECRET`, database password and deploy key |
+| Worker | cron, every minute | the same, as the pool user `edict` |
+| Logs | two vhost logs | two more, with newsyslog entries |
+| Backups | covered | covered: `/usr/local/share` (`.env`), `/home` (data) and `/var/db` (PostgreSQL) |
+
+The OAuth redirect URLs to register are `https://edict.networkxxiii.de/auth/{google,twitch}/callback`. The owner adds them to the existing Google and Twitch apps, or creates separate apps for production.
+
+Production never shows the commit link under pages, and `/healthz` names the release.
 
 ## Checks only Roanoke can answer
 

@@ -1,0 +1,120 @@
+name: Production deploy
+
+# Actions → "Production deploy" → Run workflow, from main. Ships the exact bundle that CI
+# built and deployed to staging; nothing is rebuilt. Leave "commit" empty for what staging
+# runs now (the newest successful run on main). The job waits for an approval in the
+# GitHub environment "production" before it touches the host.
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Commit on main to deploy (7–40 hex digits); empty for what staging runs now
+        type: string
+        required: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  resolve:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      sha: ${{ steps.find.outputs.sha }}
+      run_id: ${{ steps.find.outputs.run_id }}
+    steps:
+      # Finds the CI run on main that built this commit and deployed it to staging. A
+      # commit that never got there, or whose bundle has expired, is refused.
+      - name: Find the staging-tested bundle
+        id: find
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT: ${{ inputs.commit }}
+        run: |
+          set -eu
+          runs="repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=main&event=push&status=success&per_page=50"
+          if [ -n "$COMMIT" ]; then
+              if ! printf '%s' "$COMMIT" | grep -Eq '^[0-9a-f]{7,40}$'; then
+                  echo "::error::Not a commit: expected 7 to 40 lowercase hex digits"
+                  exit 1
+              fi
+              sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$COMMIT" --jq .sha)
+              run_id=$(gh api "$runs" --jq "[.workflow_runs[] | select(.head_sha == \"$sha\")][0].id // empty")
+          else
+              sha=$(gh api "$runs" --jq '.workflow_runs[0].head_sha // empty')
+              run_id=$(gh api "$runs" --jq '.workflow_runs[0].id // empty')
+          fi
+          if [ -z "${sha:-}" ] || [ -z "${run_id:-}" ]; then
+              echo "::error::No successful CI run on main (with its staging deploy) for ${COMMIT:-the newest commit}"
+              exit 1
+          fi
+          staged=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/jobs" --jq '[.jobs[] | select(.name == "deploy-staging" and .conclusion == "success")] | length')
+          if [ "$staged" != 1 ]; then
+              echo "::error::Commit $sha was not deployed to staging successfully, so it doesn't go to production"
+              exit 1
+          fi
+          live=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/artifacts" --jq "[.artifacts[] | select(.name == \"edict-$sha\" and .expired == false)] | length")
+          if [ "$live" != 1 ]; then
+              echo "::error::The bundle for $sha has expired (CI keeps bundles 30 days). Deploy a newer commit"
+              exit 1
+          fi
+          echo "sha=$sha" >>"$GITHUB_OUTPUT"
+          echo "run_id=$run_id" >>"$GITHUB_OUTPUT"
+          echo "Deploying $sha, built and staged by run $run_id" >>"$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    needs: resolve
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Required reviewers on this environment are what make every deploy wait for the owner.
+    environment: production
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    env:
+      DEPLOY_TARGET: edict-deploy@roanoke.networkxxiii.de
+      HEALTH_URL: https://edict.networkxxiii.de/healthz
+      SHA: ${{ needs.resolve.outputs.sha }}
+    steps:
+      # Pinned to a commit, because this job holds the deploy key. This is v4.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: edict-${{ needs.resolve.outputs.sha }}
+          path: ${{ runner.temp }}/release
+          run-id: ${{ needs.resolve.outputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Prepare SSH
+        env:
+          DEPLOY_KEY: ${{ secrets.EDICT_PRODUCTION_DEPLOY_KEY }}
+        run: |
+          umask 077
+          mkdir "$RUNNER_TEMP/ssh"
+          printf '%s\n' "$DEPLOY_KEY" >"$RUNNER_TEMP/ssh/key"
+          # Pinned, never scanned: this is Roanoke's public host key.
+          echo 'roanoke.networkxxiii.de ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAK5ya0+YqAGmWL/7WDzh4BsxMuxchOSC3zvOoDQ9qHo' >"$RUNNER_TEMP/ssh/known_hosts"
+
+      # The key can only run edict-deploy on the host, which reads the tarball from stdin,
+      # checks the new release's /healthz itself and flips back if it isn't healthy.
+      - name: Deploy
+        run: |
+          ssh -i "$RUNNER_TEMP/ssh/key" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=20 \
+              -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/ssh/known_hosts" \
+              "$DEPLOY_TARGET" deploy <"$RUNNER_TEMP/release/edict-$SHA.tar.gz"
+
+      - name: Remove the key
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/ssh"
+
+      # From outside, as readers reach it: healthy, and running this commit.
+      - name: Check the live site
+        run: |
+          set -eu
+          health=$(curl -fsS --max-time 20 "$HEALTH_URL")
+          echo "$health"
+          printf '%s' "$health" | jq -e --arg sha "${SHA:0:12}" '.status == "ok" and (.release | endswith("-" + $sha))' >/dev/null \
+              || { echo "::error::$HEALTH_URL is not healthy on ${SHA:0:12}"; exit 1; }
+          echo "Live: $(printf '%s' "$health" | jq -r .release)" >>"$GITHUB_STEP_SUMMARY"
