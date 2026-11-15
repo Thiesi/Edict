@@ -41,6 +41,12 @@ const statusLine = field('save-status');
 const errorLine = field('editor-errors');
 
 // Only what Edict\Content\Body allows. Adding a block type means changing both.
+// Tiptap takes the formatting menu out of the page whenever it hides it, and puts it
+// back to show it. It doesn't do so at the start, though, so until the first selection
+// the menu would sit in the page where the template has it. Out it goes, as after a hide.
+const bubbleMenu = field('bubble-menu');
+bubbleMenu.remove();
+
 const editor = new Editor({
     element: field('body'),
     // Tiptap would add its base styles as a <style> element, which the CSP forbids. They're in editor.css.
@@ -54,7 +60,7 @@ const editor = new Editor({
         }),
         TableKit.configure({ table: { resizable: false } }),
         Placeholder.configure({ placeholder: "Write, or type '/' for blocks" }),
-        BubbleMenu.configure({ element: field('bubble-menu') }),
+        BubbleMenu.configure({ element: bubbleMenu }),
         MediaImage,
         MediaGallery,
         MediaPlayer.configure({ csrf: () => state.csrf, refreshCsrf: () => refreshToken() }),
@@ -706,7 +712,7 @@ const commands = {
     },
 };
 
-field('bubble-menu').addEventListener('click', (event) => {
+bubbleMenu.addEventListener('click', (event) => {
     const button = event.target.closest('[data-command]');
     if (button) {
         commands[button.dataset.command]();
