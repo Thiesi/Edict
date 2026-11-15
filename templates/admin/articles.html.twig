@@ -22,10 +22,12 @@
         <a href="/admin/articles?trash=1&amp;kind={{ kind }}"{% if trash %} aria-current="page"{% endif %}>Trash</a>
     </nav>
     {% if trash %}<p class="page-lede">Deleted permanently after {{ trash_days }} days in the trash.</p>{% endif %}
+    {% if done == 'unpublished' %}<p class="notice notice-ok" role="status">Unpublished. Readers no longer see it; publish it again from the editor.</p>{% endif %}
+    {% if done == 'trashed' %}<p class="notice notice-ok" role="status">Moved to the trash. You can restore it from the Trash tab for {{ trash_days }} days.</p>{% endif %}
 
     {% if articles %}
         <table class="list" role="table">
-            <thead><tr role="row"><th role="columnheader">Title</th><th role="columnheader">Status</th><th role="columnheader">Language</th>{% if likes %}<th role="columnheader" class="num">Likes</th>{% endif %}{% if trash %}<th role="columnheader">Actions</th>{% endif %}</tr></thead>
+            <thead><tr role="row"><th role="columnheader">Title</th><th role="columnheader">Status</th><th role="columnheader">Language</th>{% if likes %}<th role="columnheader" class="num">Likes</th>{% endif %}<th role="columnheader">Actions</th></tr></thead>
             <tbody>
                 {% for article in articles %}
                     <tr role="row">
@@ -49,6 +51,20 @@
                                     <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
                                     <label class="check"><input type="checkbox" name="confirm" value="yes" required> Delete permanently</label>
                                     <button class="button-small button-danger" type="submit">Delete</button>
+                                </form>
+                            </td>
+                        {% else %}
+                            <td role="cell" class="cell-wide cell-actions">
+                                {% if article.isPublished %}
+                                    <form method="post" action="/admin/articles/{{ article.id }}/unpublish">
+                                        <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                                        <input type="hidden" name="back" value="list">
+                                        <button class="button-small" type="submit">Unpublish<span class="visually-hidden"> {{ article.workingTitle }}</span></button>
+                                    </form>
+                                {% endif %}
+                                <form method="post" action="/admin/articles/{{ article.id }}/trash">
+                                    <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                                    <button class="button-small button-danger" type="submit">Move to trash<span class="visually-hidden"> {{ article.workingTitle }}</span></button>
                                 </form>
                             </td>
                         {% endif %}
