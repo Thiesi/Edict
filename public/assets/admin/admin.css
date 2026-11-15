@@ -850,6 +850,69 @@ form.inline {
     color: var(--ink);
 }
 
+/* Settings forms: fields as wide as their content needs, never wider than the panel. */
+.settings input:not([type='checkbox'], [type='radio'], [type='file'], [type='color']),
+.settings textarea,
+.settings select {
+    display: block;
+    width: 100%;
+    max-width: 36rem;
+}
+
+.field > label > input:not([type='checkbox'], [type='radio'], [type='file'], [type='color']) {
+    display: block;
+    width: 100%;
+    max-width: 22rem;
+    margin-top: var(--space-1);
+    font-weight: 400;
+}
+
+.field > label > input[inputmode='numeric'] {
+    max-width: 8rem;
+    letter-spacing: 0.15em;
+}
+
+.field > label > input[type='file'] {
+    display: block;
+    margin-top: var(--space-1);
+    font-weight: 400;
+}
+
+/* Something beside the page's main job. */
+.panel-aside {
+    margin-top: var(--space-6);
+    background: none;
+}
+
+/* Passkeys: one panel per key, its name and dates, then what can be done with it. */
+.key-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.key-line {
+    margin: 0;
+    font-weight: 600;
+}
+
+.key-rename {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.key-rename label {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    color: var(--muted);
+    font-size: 0.875rem;
+    font-weight: 400;
+}
+
 /* The sign-in page: one card in the middle. */
 .admin-login {
     display: grid;
