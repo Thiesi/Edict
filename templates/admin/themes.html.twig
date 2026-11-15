@@ -15,63 +15,74 @@
     <ul class="theme-list">
         {% for id, theme in themes %}
             <li class="theme-card{% if id == current %} is-current{% endif %}">
-                <iframe src="/?theme={{ id }}" title="Preview of {{ theme.name }}" loading="lazy" tabindex="-1"></iframe>
-                <h2>{{ theme.name }}{% if id == current %} <small>(in use)</small>{% endif %}</h2>
-                <p>{{ theme.character }}</p>
-                <p>
-                    <a href="/?theme={{ id }}" target="_blank" rel="noopener">Open the preview</a>
-                    {% if id != current %}
-                        <form method="post" action="/admin/themes">
-                            <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
-                            <input type="hidden" name="theme" value="{{ id }}">
-                            <button type="submit">Use {{ theme.name }}</button>
-                        </form>
-                    {% endif %}
-                </p>
+                <div class="theme-preview"><iframe src="/?theme={{ id }}" title="Preview of {{ theme.name }}" loading="lazy" tabindex="-1"></iframe></div>
+                <div class="theme-about">
+                    <h2>{{ theme.name }}{% if id == current %} <span class="pill pill-ok">in use</span>{% endif %}</h2>
+                    <p>{{ theme.character }}</p>
+                    <div class="actions">
+                        {% if id != current %}
+                            <form method="post" action="/admin/themes">
+                                <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                                <input type="hidden" name="theme" value="{{ id }}">
+                                <button class="button-small" type="submit">Use {{ theme.name }}</button>
+                            </form>
+                        {% endif %}
+                        <a href="/?theme={{ id }}" target="_blank" rel="noopener">Open the preview</a>
+                    </div>
+                </div>
             </li>
         {% endfor %}
     </ul>
 
-    <section id="look" aria-labelledby="look-heading">
-        <h2 id="look-heading">Make it yours</h2>
-        <p>On top of whichever theme you use: your own accent colour, a logo, and the icon in browser tabs and on home screens.</p>
+    <section class="look" id="look" aria-labelledby="look-heading">
+        <h2 class="look-heading" id="look-heading">Make it yours</h2>
+        <p class="page-lede">On top of whichever theme you use: your own accent colour, a logo, and the icon in browser tabs and on home screens.</p>
         {% if saved %}<p class="notice" role="status">Saved.</p>{% endif %}
         {% if errors %}<p class="notice notice-error" role="alert">Please check the marked fields. Nothing was saved.</p>{% endif %}
         <form method="post" action="/admin/themes/look" enctype="multipart/form-data">
             <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
-            <fieldset>
-                <legend>Accent colour, for links and buttons</legend>
-                <label><input type="radio" name="accent_mode" value="theme"{% if look.accent_mode == 'theme' %} checked{% endif %}> The theme’s own</label><br>
-                <label><input type="radio" name="accent_mode" value="own"{% if look.accent_mode == 'own' %} checked{% endif %}> My own:</label>
-                <label class="visually-hidden" for="accent">Accent colour</label>
-                <input id="accent" type="color" name="accent" value="{{ look.accent }}"{% if errors.accent is defined %} aria-invalid="true"{% endif %}>
-                {% if errors.accent is defined %}<br><small>{{ errors.accent }}</small>{% endif %}
-                {% if fitted %}
-                    <p><small>In {{ theme_name(current) }}, links use
-                        <span class="swatch swatch-light">{{ fitted.light.accent }}</span> in light mode and
-                        <span class="swatch swatch-dark">{{ fitted.dark.accent }}</span> in dark mode.
-                        {% if fitted.light.adjusted or fitted.dark.adjusted %}Edict made it lighter or darker where needed, so links stay readable; the hue stays yours.{% endif %}
-                    </small></p>
-                {% endif %}
-            </fieldset>
-            <fieldset>
-                <legend>Logo, in the header</legend>
-                {% if logo %}<p><img class="look-preview" src="{{ logo.src }}" alt="Current logo"></p>{% elseif has_logo %}<p><small>The logo is being prepared; reload in a moment.</small></p>{% endif %}
-                <p><label>{{ has_logo ? 'Replace with' : 'Upload' }} an image <input type="file" name="logo" accept="image/png,image/jpeg,image/webp,image/avif,image/gif"{% if errors.logo is defined %} aria-invalid="true"{% endif %}></label>
-                    {% if errors.logo is defined %}<br><small>{{ errors.logo }}</small>{% endif %}</p>
-                <p><small>A wide image with a transparent background works best (PNG or WebP). It is shown up to 3rem high.</small></p>
-                <p><label><input type="checkbox" name="logo_only" value="1"{% if look.logo_only %} checked{% endif %}> Show only the logo, not the site name next to it (the name stays for screen readers)</label></p>
-                {% if has_logo %}<p><label><input type="checkbox" name="logo_remove" value="1"> Remove the logo</label></p>{% endif %}
-            </fieldset>
-            <fieldset>
-                <legend>Site icon, in browser tabs and on home screens</legend>
-                {% if icons %}<p><img class="look-preview look-icon" src="{{ icons[192] }}" alt="Current site icon" width="64" height="64"></p>{% elseif has_favicon %}<p><small>The icon is being prepared; reload in a moment.</small></p>{% else %}<p><small>Edict’s seal is used until you choose one.</small></p>{% endif %}
-                <p><label>{{ has_favicon ? 'Replace with' : 'Upload' }} an image <input type="file" name="favicon" accept="image/png,image/jpeg,image/webp,image/avif,image/gif"{% if errors.favicon is defined %} aria-invalid="true"{% endif %}></label>
-                    {% if errors.favicon is defined %}<br><small>{{ errors.favicon }}</small>{% endif %}</p>
-                <p><small>Square works best, at least 512 × 512 pixels; anything else is cut to a square from the middle.</small></p>
-                {% if has_favicon %}<p><label><input type="checkbox" name="favicon_remove" value="1"> Go back to Edict’s seal</label></p>{% endif %}
-            </fieldset>
-            <p><button type="submit">Save</button></p>
+            <div class="look-grid">
+                <fieldset class="panel">
+                    <legend>Accent colour, for links and buttons</legend>
+                    <p><label class="check"><input type="radio" name="accent_mode" value="theme"{% if look.accent_mode == 'theme' %} checked{% endif %}> The theme’s own</label></p>
+                    <p class="look-own">
+                        <label class="check"><input type="radio" name="accent_mode" value="own"{% if look.accent_mode == 'own' %} checked{% endif %}> My own:</label>
+                        <label class="visually-hidden" for="accent">Accent colour</label>
+                        <input id="accent" type="color" name="accent" value="{{ look.accent }}"{% if errors.accent is defined %} aria-invalid="true"{% endif %}>
+                    </p>
+                    {% if errors.accent is defined %}<small class="field-error">{{ errors.accent }}</small>{% endif %}
+                    {% if fitted %}
+                        <p><small>In {{ theme_name(current) }}, links use
+                            <span class="swatch swatch-light">{{ fitted.light.accent }}</span> in light mode and
+                            <span class="swatch swatch-dark">{{ fitted.dark.accent }}</span> in dark mode.
+                            {% if fitted.light.adjusted or fitted.dark.adjusted %}Edict made it lighter or darker where needed, so links stay readable; the hue stays yours.{% endif %}
+                        </small></p>
+                        {# A disabled colour field shows the colour itself; an inline style could not, the page's policy forbids those. #}
+                        <p class="swatch-chips">
+                            <input type="color" value="{{ fitted.light.accent }}" disabled aria-label="The colour in light mode">
+                            <input type="color" value="{{ fitted.dark.accent }}" disabled aria-label="The colour in dark mode">
+                        </p>
+                    {% endif %}
+                </fieldset>
+                <fieldset class="panel">
+                    <legend>Logo, in the header</legend>
+                    {% if logo %}<p><img class="look-preview" src="{{ logo.src }}" alt="Current logo"></p>{% elseif has_logo %}<p><small>The logo is being prepared; reload in a moment.</small></p>{% endif %}
+                    <p class="field"><label>{{ has_logo ? 'Replace with' : 'Upload' }} an image <input type="file" name="logo" accept="image/png,image/jpeg,image/webp,image/avif,image/gif"{% if errors.logo is defined %} aria-invalid="true"{% endif %}></label>
+                        {% if errors.logo is defined %}<small class="field-error">{{ errors.logo }}</small>{% endif %}
+                        <small>A wide image with a transparent background works best (PNG or WebP). It is shown up to 3rem high.</small></p>
+                    <p><label class="check"><input type="checkbox" name="logo_only" value="1"{% if look.logo_only %} checked{% endif %}> Show only the logo, not the site name next to it (the name stays for screen readers)</label></p>
+                    {% if has_logo %}<p><label class="check"><input type="checkbox" name="logo_remove" value="1"> Remove the logo</label></p>{% endif %}
+                </fieldset>
+                <fieldset class="panel">
+                    <legend>Site icon, in browser tabs and on home screens</legend>
+                    {% if icons %}<p><img class="look-preview look-icon" src="{{ icons[192] }}" alt="Current site icon" width="64" height="64"></p>{% elseif has_favicon %}<p><small>The icon is being prepared; reload in a moment.</small></p>{% else %}<p><small>Edict’s seal is used until you choose one.</small></p>{% endif %}
+                    <p class="field"><label>{{ has_favicon ? 'Replace with' : 'Upload' }} an image <input type="file" name="favicon" accept="image/png,image/jpeg,image/webp,image/avif,image/gif"{% if errors.favicon is defined %} aria-invalid="true"{% endif %}></label>
+                        {% if errors.favicon is defined %}<small class="field-error">{{ errors.favicon }}</small>{% endif %}
+                        <small>Square works best, at least 512 × 512 pixels; anything else is cut to a square from the middle.</small></p>
+                    {% if has_favicon %}<p><label class="check"><input type="checkbox" name="favicon_remove" value="1"> Go back to Edict’s seal</label></p>{% endif %}
+                </fieldset>
+            </div>
+            <p class="actions"><button class="button-primary" type="submit">Save</button></p>
         </form>
     </section>
 {% endblock %}

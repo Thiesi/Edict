@@ -1,53 +1,138 @@
-.look-preview {
-    max-width: 12rem;
-    max-height: 4rem;
-    background: repeating-conic-gradient(#ccc 0% 25%, #fff 0% 50%) 50% / 16px 16px;
-}
-
-.look-icon {
-    border-radius: 12px;
-}
-
-.swatch {
-    font-family: ui-monospace, Menlo, Consolas, monospace;
-}
-
-/* The theme picker: each theme's real home page, scaled down. */
+/*
+ * The theme picker and "Make it yours". Builds on admin.css and uses its tokens.
+ * Each card shows the theme's real home page, scaled down.
+ */
 .theme-list {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
-    gap: 1.5rem;
+    grid-template-columns: repeat(auto-fill, minmax(min(17rem, 100%), 1fr));
+    gap: var(--space-4);
+    margin: 0 0 var(--space-6);
     padding: 0;
     list-style: none;
 }
 
 .theme-card {
-    padding: 0.75rem;
-    border: 1px solid #ccc;
-    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    overflow: hidden;
 }
 
+/* The theme in use: the accent as an edge, and the words "in use" beside its name. */
 .theme-card.is-current {
-    border: 3px solid #1a56db;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+}
+
+/* The page is drawn at twice the card's width and scaled to half, so it reads as a desktop page. */
+.theme-preview {
+    height: 15rem;
+    border-bottom: 1px solid var(--line);
+    overflow: hidden;
 }
 
 .theme-card iframe {
     display: block;
     width: 200%;
-    height: 36rem;
-    margin-bottom: -18rem;
-    border: 1px solid #ddd;
+    height: 30rem;
+    border: 0;
     transform: scale(0.5);
     transform-origin: 0 0;
     pointer-events: none;
 }
 
-.theme-card h2 {
-    margin: 0.5rem 0 0;
-    font-size: 1.2rem;
+.theme-about {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    padding: var(--space-3) var(--space-4) var(--space-4);
 }
 
-.theme-card form {
-    display: inline;
-    margin-left: 0.75rem;
+.theme-about h2 {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    margin: 0 0 var(--space-1);
+}
+
+.theme-about p {
+    color: var(--muted);
+    font-size: 0.875rem;
+}
+
+.theme-about .actions {
+    margin-top: auto;
+    padding-top: var(--space-2);
+    font-size: 0.875rem;
+}
+
+/* Make it yours. */
+.look-heading {
+    font-size: 1.25rem;
+}
+
+.look-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr));
+    gap: var(--space-4);
+    align-items: start;
+}
+
+.look-grid > fieldset {
+    margin: 0;
+    min-width: 0;
+}
+
+.look-own {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+input[type='color'] {
+    width: 3rem;
+    height: 2rem;
+    padding: 0.15rem;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    background: var(--surface);
+    cursor: pointer;
+}
+
+.swatch {
+    font-family: var(--font-mono);
+}
+
+/* The fitted colours themselves, light mode then dark mode, each on that mode's ground. */
+.swatch-chips {
+    display: flex;
+    gap: var(--space-2);
+}
+
+.swatch-chips input[type='color'] {
+    cursor: default;
+}
+
+.swatch-chips input[type='color']:first-child {
+    background: #fff;
+}
+
+.swatch-chips input[type='color']:last-child {
+    background: #1b1c21;
+}
+
+/* A logo is usually drawn for one ground, so it is shown on a chequered one. */
+.look-preview {
+    max-width: 12rem;
+    max-height: 4rem;
+    border-radius: 4px;
+    background: repeating-conic-gradient(#ccc 0% 25%, #fff 0% 50%) 50% / 16px 16px;
+}
+
+.look-icon {
+    border-radius: 12px;
 }
