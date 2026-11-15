@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, statSync } from 'node:fs';
 
 import { expect, test } from '@playwright/test';
+import { fillTags } from './helpers.js';
 
 const CHUNK_BYTES = 8_388_608;
 // The library also holds recordings, videos and files by now. Picture tiles insert an image.
@@ -107,7 +108,7 @@ test('a cover image is chosen from the library and shows above the article and i
     await newArticle(page);
     await page.getByLabel('Title').fill('With a cover');
     // Related to the editor tests' articles, so the theme checks see a related cover.
-    await page.getByLabel('Tags', { exact: true }).fill('Reading aids');
+    await fillTags(page, 'Reading aids');
 
     await page.getByRole('button', { name: 'Choose a cover image…' }).click();
     const panel = page.locator('#media-panel');
