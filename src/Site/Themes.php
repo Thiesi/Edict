@@ -21,6 +21,7 @@ final class Themes
         'terminal' => ['name' => 'Terminal', 'character' => 'Monospace and retro: phosphor green in the dark, for the nerdy articles.'],
         'zine' => ['name' => 'Zine', 'character' => 'Loud: big type, high contrast, an asymmetrical layout, unapologetic colour.'],
         'blueprint' => ['name' => 'Blueprint', 'character' => 'A drawing sheet: grid paper, a title block, numbered sections and figures. For how-it-works writing.'],
+        'gallery' => ['name' => 'Gallery', 'character' => 'Pictures first: a wall of covers, wide images, type the size of a wall label. Posts without a picture hang as labels.'],
     ];
 
     /**
@@ -37,6 +38,7 @@ final class Themes
         'terminal' => ['light' => '#e9efe6', 'dark' => '#050805'],
         'zine' => ['light' => '#fffdf2', 'dark' => '#0d0d0d'],
         'blueprint' => ['light' => '#f3f6fb', 'dark' => '#0f2747'],
+        'gallery' => ['light' => '#f2f1ee', 'dark' => '#121214'],
     ];
 
     /**

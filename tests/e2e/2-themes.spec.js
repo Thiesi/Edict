@@ -1,7 +1,7 @@
 import { AxeBuilder } from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 
-const THEMES = ['decree', 'broadsheet', 'quiet', 'almanac', 'terminal', 'zine', 'blueprint'];
+const THEMES = ['decree', 'broadsheet', 'quiet', 'almanac', 'terminal', 'zine', 'blueprint', 'gallery'];
 
 // The admin is signed in, so ?theme= previews each theme without applying it.
 // The error page is missing here on purpose: tests run in development mode, where
