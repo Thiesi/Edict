@@ -19,6 +19,29 @@ final class Settings
     public const MAX_WORDS = 500;
     private const MAX_AUTO_CLOSE_DAYS = 3650;
 
+    /**
+     * Every setting the export carries, with the type it must have. None is a secret:
+     * credentials and keys live in .env and the admin tables, never here.
+     */
+    private const EXPORTED = [
+        'title' => 'string',
+        'description' => 'string',
+        'menu' => 'links',
+        'footer' => 'links',
+        'theme' => 'string',
+        'accent' => 'string',
+        'logo' => 'int',
+        'logo_only' => 'bool',
+        'favicon' => 'int',
+        'imprint' => 'string',
+        'privacy' => 'string',
+        'comment_default' => 'string',
+        'comment_auto_close_days' => 'int',
+        'comment_words' => 'strings',
+        'comment_word_action' => 'string',
+        'comment_alerts' => 'bool',
+    ];
+
     private ?SiteSettings $loaded = null;
     private ?string $preview = null;
     /** @var array<string, mixed>|null */
@@ -197,6 +220,66 @@ final class Settings
         }
 
         return $errors;
+    }
+
+    /**
+     * The stored settings, for the export. Only what was ever saved: anything else
+     * keeps its default after a restore, too.
+     *
+     * @return array<string, mixed>
+     */
+    public function export(): array
+    {
+        return array_intersect_key($this->values(), self::EXPORTED);
+    }
+
+    /**
+     * Checks settings from an export before anything is written. Keys this version
+     * doesn't know are ignored, so an export from a newer version still restores.
+     *
+     * @param array<mixed> $values
+     *
+     * @return string|null what is wrong, or null
+     */
+    public static function importProblem(array $values): ?string
+    {
+        foreach (self::EXPORTED as $key => $type) {
+            if (!array_key_exists($key, $values)) {
+                continue;
+            }
+            $value = $values[$key];
+            $ok = match ($type) {
+                'string' => is_string($value),
+                'int' => is_int($value) && $value >= 0,
+                'bool' => is_bool($value),
+                'strings' => is_array($value) && array_is_list($value) && array_filter($value, static fn(mixed $item): bool => !is_string($item)) === [],
+                default => is_array($value) && array_is_list($value) && array_filter(
+                    $value,
+                    static fn(mixed $link): bool => !is_array($link) || !is_string($link['label'] ?? null) || !is_string($link['url'] ?? null),
+                ) === [],
+            };
+            if (!$ok) {
+                return "The setting \"$key\" has the wrong type.";
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Stores settings checked by importProblem(), replacing those of the same name.
+     *
+     * @param array<mixed> $values
+     */
+    public function import(array $values): void
+    {
+        $known = [];
+        foreach (array_keys(self::EXPORTED) as $key) {
+            if (array_key_exists($key, $values)) {
+                $known[$key] = $key === 'menu' || $key === 'footer' ? self::links($values[$key]) : $values[$key];
+            }
+        }
+        $this->store($known);
     }
 
     /**

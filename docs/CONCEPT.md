@@ -85,7 +85,7 @@ Browser ──HTTPS──▶ Apache (macro vhost, TLS via acme.sh)
 - Static pages (About, Imprint/Impressum, Privacy) use the same editor but are not listed as articles.
 - **Published-version history.** Each publish keeps the version it replaces, the last 20 per article, with one-click restore into the draft. There is no diff view. Autosaved drafts are not kept, so without this, pressing Update would replace the live text with no way back.
 - **Writing conveniences:** word count and reading time in the editor, tag suggestions from existing tags, renaming a tag everywhere, and an "updated on" date on articles changed after publishing.
-- **Export everything** as a JSON download (articles, pages, tags), so the content is never locked in. Media files are already plain files in the backups.
+- **Export everything** as a JSON download (articles, pages, tags, settings, media rows), so the content is never locked in, and restore it into an empty install (`docs/BACKUP.md`). Media files are already plain files in the backups.
 - Hard delete with confirmation, and a 30-day trash before that.
 
 **WYSIWYG editor**

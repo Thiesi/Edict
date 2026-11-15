@@ -11,6 +11,7 @@ use Edict\Cli\AdminIdentitiesCommand;
 use Edict\Cli\AdminResetCommand;
 use Edict\Cli\AdminRevokeSessionsCommand;
 use Edict\Cli\CacheWarmupCommand;
+use Edict\Cli\ContentRestoreCommand;
 use Edict\Cli\MigrateCommand;
 use Edict\Cli\WorkerCommand;
 use Edict\Kernel;
@@ -33,5 +34,6 @@ $console->addCommands([
     $services->get(AdminDisallowCommand::class),
     $services->get(AdminEmailCommand::class),
     $services->get(AdminIdentitiesCommand::class),
+    $services->get(ContentRestoreCommand::class),
 ]);
 exit($console->run());

@@ -66,10 +66,29 @@
             </p>
         </section>
 
-        <section class="panel" aria-labelledby="backup-heading">
+        <section class="panel" id="backup" aria-labelledby="backup-heading">
             <h2 class="card-label" id="backup-heading">Backup</h2>
-            <p>Articles, pages, comments and settings as one file.</p>
+            {% if restore_result %}
+                <div class="notice" role="status">
+                    <p><strong>Restored.</strong></p>
+                    <ul>{% for line in restore_result %}<li>{{ line }}</li>{% endfor %}</ul>
+                </div>
+            {% endif %}
+            {% if restore_error %}<p class="notice notice-error" role="alert"><strong>Nothing was restored.</strong> {{ restore_error }}</p>{% endif %}
+            <p>One file with the articles and pages (with drafts, tags and trash), the site settings, and the list of media. The media files themselves are in the server’s backup. Comments, likes and reader accounts are not included.</p>
+            {% if not restore_possible %}<p>Restoring from a file works only on a site without articles, pages or media, such as one set up again after losing its database.</p>{% endif %}
             <p class="actions"><a class="button" href="/admin/export">Export everything (JSON)</a></p>
+            {% if restore_possible %}
+                <form class="confirm-form" method="post" action="/admin/restore" enctype="multipart/form-data">
+                    <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                    <h3>Restore from a file</h3>
+                    <p>This site has no articles, pages or media yet, so an export can be restored into it, for example after losing the database.</p>
+                    <p class="field"><label>Export file <input name="file" type="file" accept=".json,application/json" required></label></p>
+                    <p class="field"><label>Password <input name="password" type="password" autocomplete="current-password" required></label></p>
+                    <p class="field"><label>Authenticator code <input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required></label></p>
+                    <p class="actions"><button class="button-primary" type="submit">Restore</button></p>
+                </form>
+            {% endif %}
         </section>
 
         <section class="panel" aria-labelledby="sessions-heading">

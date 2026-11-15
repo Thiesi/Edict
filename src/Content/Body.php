@@ -94,6 +94,24 @@ final class Body
     }
 
     /**
+     * What saving would refuse rather than cut down, so no text is ever dropped
+     * without saying so. The editor's autosave and the restore of an export both ask.
+     *
+     * @return string|null the message, or null if clean() keeps everything that matters
+     */
+    public static function problem(mixed $document): ?string
+    {
+        if (self::isTooDeep($document)) {
+            return 'The lists or quotes are nested too deeply.';
+        }
+        if (self::hasOversizedGallery($document)) {
+            return 'A gallery can have up to ' . self::MAX_GALLERY_ITEMS . ' images.';
+        }
+
+        return null;
+    }
+
+    /**
      * @param array<mixed> $document
      */
     public static function encode(array $document): string

@@ -267,7 +267,10 @@ final readonly class MediaLibrary
         }
     }
 
-    private static function jobFor(string $kind): string
+    /**
+     * The job that makes a media row's public versions, by its kind.
+     */
+    public static function jobFor(string $kind): string
     {
         return match ($kind) {
             'image' => ImageProcessor::JOB,
@@ -503,6 +506,52 @@ final readonly class MediaLibrary
         $this->jobs->enqueue(AvProcessor::POSTER_JOB, ['media_id' => $mediaId, 'seconds' => round($seconds, 3)]);
 
         return self::posterPreset($seconds);
+    }
+
+    /**
+     * The media rows, for the export: enough to rebuild them over the originals, which
+     * stay on disk (and in the host's backup) when the database is lost. Variants are
+     * left out, since the worker makes them again. A video's chosen poster frame is
+     * kept as its point in time; descriptions (alt texts) live in the article bodies.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function export(): array
+    {
+        $stmt = $this->pdo->query(
+            "SELECT m.id, m.sha256, m.kind, m.extension, m.bytes, m.original_name, m.width, m.height, m.status,
+                    EXTRACT(EPOCH FROM m.created_at)::bigint AS created_at, m.meta->>'restore_poster' AS restore_poster,
+                    (SELECT v.preset FROM media_variant v WHERE v.media_id = m.id AND v.preset ~ '^poster-[0-9]+$' LIMIT 1) AS poster
+             FROM media m ORDER BY m.id",
+        );
+        $media = [];
+        foreach ($stmt === false ? [] : $stmt->fetchAll() as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $poster = $row['poster'] ?? null;
+            // Restored, and the worker hasn't taken that frame again yet.
+            $pending = $row['restore_poster'] ?? null;
+            $media[] = [
+                'id' => Row::int($row, 'id'),
+                'sha256' => Row::str($row, 'sha256'),
+                'kind' => Row::str($row, 'kind'),
+                'extension' => Row::str($row, 'extension'),
+                'bytes' => Row::int($row, 'bytes'),
+                'original_name' => Row::str($row, 'original_name'),
+                'width' => Row::intOrNull($row, 'width'),
+                'height' => Row::intOrNull($row, 'height'),
+                'status' => Row::str($row, 'status'),
+                'created_at' => gmdate(DATE_ATOM, Row::int($row, 'created_at')),
+                'poster_seconds' => match (true) {
+                    is_string($poster) => ((int) substr($poster, strlen('poster-'))) / 1000,
+                    is_numeric($pending) => (float) $pending,
+                    default => null,
+                },
+            ];
+        }
+
+        return $media;
     }
 
     /**
