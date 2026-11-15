@@ -61,6 +61,29 @@ final class FeedFlowTest extends DbTestCase
         self::assertStringNotContainsString('A draft.', $body);
     }
 
+    public function testTheMainSiteMayReadTheFeedInTheBrowser(): void
+    {
+        $this->article('first', 'en', 'First', 'Text.', 'News');
+
+        foreach (['https://networkxxiii.de', 'https://www.networkxxiii.de', 'https://network23.de', 'https://www.network23.de'] as $origin) {
+            $response = $this->get('/feed.atom', [], ['Origin' => $origin]);
+            self::assertSame(200, $response->getStatusCode());
+            self::assertSame($origin, $response->getHeaderLine('Access-Control-Allow-Origin'));
+            self::assertSame('Origin', $response->getHeaderLine('Vary'));
+            self::assertSame('public, max-age=600', $response->getHeaderLine('Cache-Control'));
+            self::assertSame('', $response->getHeaderLine('Access-Control-Allow-Credentials'));
+        }
+
+        foreach (['https://evil.example', 'https://networkxxiii.de.evil.example', 'http://networkxxiii.de', 'null', ''] as $origin) {
+            $response = $this->get('/feed.atom', [], $origin === '' ? [] : ['Origin' => $origin]);
+            self::assertSame('', $response->getHeaderLine('Access-Control-Allow-Origin'), "not for '$origin'");
+            self::assertSame('Origin', $response->getHeaderLine('Vary'), 'so caches keep answers apart');
+        }
+
+        self::assertSame('https://network23.de', $this->get('/feed.atom?lang=en', [], ['Origin' => 'https://network23.de'])->getHeaderLine('Access-Control-Allow-Origin'), 'the language feeds too');
+        self::assertSame('', $this->get('/tag/news/feed.atom', [], ['Origin' => 'https://networkxxiii.de'])->getHeaderLine('Access-Control-Allow-Origin'), 'tag feeds were not asked for');
+    }
+
     public function testFeedsPerLanguageAndPerTag(): void
     {
         $this->article('first', 'en', 'First', 'English.', 'News');
