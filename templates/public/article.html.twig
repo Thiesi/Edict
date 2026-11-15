@@ -37,6 +37,9 @@
                     {% endif %}
                 </p>
             {% endif %}
+            {% if is_admin|default(false) and not preview|default(false) %}
+                <p class="admin-edit"><a href="/admin/articles/{{ article.id }}">Edit this {{ article.kind == 'page' ? 'page' : 'article' }}</a></p>
+            {% endif %}
             {{ article_cover(article) }}
             {% if article.teaser %}<p class="teaser">{{ article.teaser }}</p>{% endif %}
             {{ article.bodyJson|body_html }}

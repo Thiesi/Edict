@@ -86,6 +86,28 @@ final class CommentFlowTest extends DbTestCase
         return (int) ($match[1] ?? 0);
     }
 
+    public function testOnlyTheAdminSeesTheWayIntoTheAdminAndTheEditor(): void
+    {
+        $edit = '<a href="/admin/articles/' . $this->article . '">Edit this article</a>';
+        $menu = '<a href="/admin">Admin</a>';
+
+        foreach ([null, $this->reader()] as $who) {
+            $html = $this->page($who);
+            self::assertStringNotContainsString($edit, $html);
+            self::assertStringNotContainsString($menu, $html);
+        }
+
+        $admin = $this->admin();
+        $html = $this->page($admin);
+        self::assertStringContainsString($edit, $html);
+        self::assertStringContainsString($menu, $html);
+        self::assertStringContainsString($menu, (string) $this->get('/', $admin['cookies'])->getBody(), 'on every public page');
+        self::assertStringNotContainsString('Edit this', (string) $this->get('/', $admin['cookies'])->getBody(), 'only where there is something to edit');
+        self::assertStringContainsString($menu, (string) $this->get('/account', $admin['cookies'])->getBody());
+        self::assertStringContainsString('<a href="/account">Account</a>', (string) $this->get('/admin', $admin['cookies'])->getBody(), 'and back from the admin');
+        self::assertStringNotContainsString('Edit this', (string) $this->get('/admin/articles/' . $this->article . '/preview', $admin['cookies'])->getBody(), 'the preview has its own way back');
+    }
+
     /**
      * @param array{id: int, cookies: array<string, string>, csrf: string}|null $who
      */

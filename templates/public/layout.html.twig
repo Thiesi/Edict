@@ -64,6 +64,7 @@
                     <ul>
                         {% for link in site.menu %}<li><a href="{{ link.url }}">{{ link.label }}</a></li>{% endfor %}
                         <li><a href="/archive">Archive</a></li>
+                        {% if is_admin|default(false) %}<li><a href="/admin">Admin</a></li>{% endif %}
                         <li>{% if signed_in|default(false) %}<a href="/account">Your account</a>{% else %}<a href="/login">Sign in</a>{% endif %}</li>
                     </ul>
                 </nav>
