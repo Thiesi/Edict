@@ -22,6 +22,7 @@
         <a href="/admin/articles?trash=1&amp;kind={{ kind }}"{% if trash %} aria-current="page"{% endif %}>Trash</a>
     </nav>
     {% if trash %}<p class="page-lede">Deleted permanently after {{ trash_days }} days in the trash.</p>{% endif %}
+    {% if done == 'unscheduled' %}<p class="notice notice-ok" role="status">Schedule cancelled. It is a draft again; schedule or publish it from the editor.</p>{% endif %}
     {% if done == 'unpublished' %}<p class="notice notice-ok" role="status">Unpublished. Readers no longer see it; publish it again from the editor.</p>{% endif %}
     {% if done == 'trashed' %}<p class="notice notice-ok" role="status">Moved to the trash. You can restore it from the Trash tab for {{ trash_days }} days.</p>{% endif %}
 
@@ -35,7 +36,7 @@
                             {% if trash %}{{ article.workingTitle }}{% else %}<a href="/admin/articles/{{ article.id }}">{{ article.workingTitle }}</a>{% endif %}
                             <span class="address">/{{ article.slug }}</span>
                         </td>
-                        <td role="cell"><span class="pill pill-{{ article.status }}">{{ article.status }}</span>{% if article.hasPendingChanges %}<span class="visually-hidden">, </span> <span class="pill pill-pending">changes pending</span>{% endif %}</td>
+                        <td role="cell">{% if article.scheduled %}<span class="pill pill-scheduled">scheduled</span> <time class="when" datetime="{{ article.publishedAt|article_iso }}">{{ article.publishedAt|admin_datetime }}</time>{% else %}<span class="pill pill-{{ article.status }}">{{ article.status }}</span>{% endif %}{% if article.hasPendingChanges %}<span class="visually-hidden">, </span> <span class="pill pill-pending">changes pending</span>{% endif %}</td>
                         <td role="cell"><span class="lang-mark">{{ article.lang|upper }}</span></td>
                         {% if likes %}
                             {% set count = likes[article.id] ?? {real: 0, adjustment: 0, shown: 0} %}
@@ -59,7 +60,7 @@
                                     <form method="post" action="/admin/articles/{{ article.id }}/unpublish">
                                         <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
                                         <input type="hidden" name="back" value="list">
-                                        <button class="button-small" type="submit">Unpublish<span class="visually-hidden"> {{ article.workingTitle }}</span></button>
+                                        <button class="button-small" type="submit">{{ article.scheduled ? 'Cancel schedule' : 'Unpublish' }}<span class="visually-hidden"> {{ article.workingTitle }}</span></button>
                                     </form>
                                 {% endif %}
                                 <form method="post" action="/admin/articles/{{ article.id }}/trash">

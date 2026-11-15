@@ -27,6 +27,9 @@ final readonly class Article
         public ?int $coverMediaId = null,
         public string $coverAlt = '',
         public ?int $revisedAt = null,
+        // Published, with a publish time still ahead when this was loaded. Readers see
+        // it from then on, with nothing else having to happen.
+        public bool $scheduled = false,
     ) {}
 
     /**
@@ -69,6 +72,23 @@ final readonly class Article
         return $this->status === 'published';
     }
 
+    /**
+     * Published and its time has come: readers see it.
+     */
+    public function isLive(): bool
+    {
+        return $this->isPublished() && !$this->scheduled;
+    }
+
+    /**
+     * Only a piece readers have never seen can be scheduled. A published date is kept
+     * from the first publish, so moving it later would change a date readers saw.
+     */
+    public function canBeScheduled(): bool
+    {
+        return $this->deletedAt === null && ($this->publishedAt === null || $this->scheduled);
+    }
+
     public function hasPendingChanges(): bool
     {
         return $this->isPublished() && $this->draftJson !== null;
@@ -99,6 +119,7 @@ final readonly class Article
             $input->cover,
             $input->coverAlt,
             $this->revisedAt,
+            $this->scheduled,
         );
     }
 }

@@ -11,11 +11,17 @@ use Edict\Database\Row;
  * Article storage. "Public" means published, out of the trash and with a publish
  * date that has passed; every public read goes through PUBLIC_WHERE. Listings add
  * LISTED, so static pages are reachable but never appear in them.
+ *
+ * Scheduling is publishing with a date ahead: the row is published at once and
+ * PUBLIC_WHERE keeps it from readers until then. Going live needs no job and no
+ * request; every public read simply starts to include it.
  */
 final readonly class Articles
 {
     public const TRASH_DAYS = 30;
     public const KEEP_REVISIONS = 20;
+    /** How far ahead a piece can be scheduled. */
+    public const MAX_SCHEDULE_DAYS = 3660;
     private const PLACEHOLDER_TITLE = 'Untitled';
 
     private const COLUMNS = "a.id, a.kind, a.slug, a.lang, a.title, a.teaser, a.body_json::text AS body_json, a.status,
@@ -94,48 +100,66 @@ final readonly class Articles
      * if the article was never public, and keep its address if it was. If a published
      * article changes its slug, the old address keeps working through a redirect.
      *
+     * With a time ahead, the same happens, but readers see it only from then on. That
+     * is only for pieces readers have never seen (see Article::canBeScheduled). A
+     * scheduled piece published again without a time goes live now.
+     *
      * The draft is only cleared if it is still the version that was read, so text
      * autosaved a moment ago can't vanish.
+     *
+     * @param int|null $at when readers get to see it, if not now
      *
      * @throws SlugTaken
      * @throws StaleDraft
      */
-    public function publish(Article $article, ArticleInput $input): void
+    public function publish(Article $article, ArticleInput $input, ?int $at = null): void
     {
-        $this->transaction(function () use ($article, $input): void {
-            $slug = $input->slug === '' && $article->publishedAt !== null ? $article->slug : $this->slugFor($input, $article->id);
+        $this->transaction(function () use ($article, $input, $at): void {
+            $now = $this->clock->now();
+            if ($at !== null && ($at <= $now || !$article->canBeScheduled())) {
+                throw new \LogicException('Only a piece readers have never seen can be scheduled, and only for later.');
+            }
+            // Readers have seen it, under its current address. A scheduled piece they haven't.
+            $wasPublic = $article->publishedAt !== null && $article->publishedAt <= $now;
+            $slug = $input->slug === '' && $wasPublic ? $article->slug : $this->slugFor($input, $article->id);
 
             if ($slug !== $article->slug) {
                 $this->pdo->prepare('DELETE FROM slug_redirect WHERE old_slug = ?')->execute([$slug]);
-                if ($article->publishedAt !== null) {
+                if ($wasPublic) {
                     $this->pdo->prepare('INSERT INTO slug_redirect (old_slug, article_id) VALUES (?, ?)')
                         ->execute([$article->slug, $article->id]);
                 }
             }
 
-            $now = $this->clock->now();
+            $goesLive = $at ?? $now;
             // Changed after its first publish: readers see "Updated on". The same text again isn't a change.
-            $revised = $article->publishedAt !== null && !$article->liveInput()->sameContentAs($input);
+            $revised = $wasPublic && !$article->liveInput()->sameContentAs($input);
             $update = $this->pdo->prepare(
                 // A cover that isn't an image, or no longer exists, is simply none.
                 "UPDATE article SET slug = ?, lang = ?, title = ?, teaser = ?, body_json = ?, status = 'published',
                         cover_media_id = (SELECT id FROM media WHERE id = ? AND kind = 'image'), cover_alt = ?,
                         body_text = edict_body_text(?::jsonb),
-                        published_at = coalesce(published_at, to_timestamp(?)), updated_at = to_timestamp(?),
+                        -- Kept from the first time readers saw it. Not seen yet: now, or the scheduled time.
+                        published_at = CASE WHEN published_at IS NULL OR published_at > to_timestamp(?) THEN to_timestamp(?) ELSE published_at END,
+                        updated_at = to_timestamp(?),
                         revised_at = CASE WHEN ?::boolean THEN to_timestamp(?) ELSE revised_at END,
                         draft = NULL, draft_version = draft_version + 1, draft_writer = NULL
                  WHERE id = ? AND draft_version = ? AND deleted_at IS NULL",
             );
             $update->execute([
                 $slug, $input->lang, $input->title, $input->teaser, $input->body, $input->cover, $input->coverAlt, $input->body,
-                $now, $now, $revised ? 'true' : 'false', $now, $article->id, $article->draftVersion,
+                $now, $goesLive, $now, $revised ? 'true' : 'false', $now, $article->id, $article->draftVersion,
             ]);
             if ($update->rowCount() !== 1) {
                 throw new StaleDraft();
             }
 
             $this->setTags($article->id, $input);
-            $this->keepRevision($article->id, $input, $now);
+            if (!$wasPublic) {
+                // A version scheduled before and replaced now never reached readers.
+                $this->forgetUnseenRevisions($article->id, $now);
+            }
+            $this->keepRevision($article->id, $input, $goesLive);
         });
     }
 
@@ -191,7 +215,7 @@ final readonly class Articles
             if (!is_array($row)) {
                 continue;
             }
-            $article = self::hydrate($row);
+            $article = $this->hydrate($row);
             $articles[] = [
                 'id' => $article->id,
                 'kind' => $article->kind,
@@ -233,11 +257,38 @@ final readonly class Articles
         )->execute([$articleId, $articleId, self::KEEP_REVISIONS]);
     }
 
-    public function unpublish(int $id): void
+    /**
+     * Takes it away from readers. A scheduled piece they haven't seen yet goes back
+     * to being a draft, as before scheduling: no date, and no published version.
+     *
+     * @return string|null the new status, or null if it wasn't published
+     */
+    public function unpublish(int $id): ?string
     {
-        $this->pdo->prepare(
-            "UPDATE article SET status = 'unpublished', updated_at = to_timestamp(?) WHERE id = ? AND status = 'published'",
-        )->execute([$this->clock->now(), $id]);
+        return $this->transaction(function () use ($id): ?string {
+            $now = $this->clock->now();
+            // Both CASEs see the row as it was.
+            $stmt = $this->pdo->prepare(
+                "UPDATE article SET
+                     status = CASE WHEN published_at > to_timestamp(?) THEN 'draft' ELSE 'unpublished' END,
+                     published_at = CASE WHEN published_at > to_timestamp(?) THEN NULL ELSE published_at END,
+                     updated_at = to_timestamp(?)
+                 WHERE id = ? AND status = 'published' RETURNING status",
+            );
+            $stmt->execute([$now, $now, $now, $id]);
+            $status = $stmt->fetchColumn();
+            if ($status === 'draft') {
+                $this->forgetUnseenRevisions($id, $now);
+            }
+
+            return is_string($status) ? $status : null;
+        });
+    }
+
+    private function forgetUnseenRevisions(int $articleId, int $now): void
+    {
+        $this->pdo->prepare('DELETE FROM article_revision WHERE article_id = ? AND published_at > to_timestamp(?)')
+            ->execute([$articleId, $now]);
     }
 
     public function trash(int $id): void
@@ -272,7 +323,7 @@ final readonly class Articles
         $stmt = $this->pdo->prepare('SELECT ' . self::COLUMNS . ' FROM article a WHERE a.id = ?');
         $stmt->execute([$id]);
 
-        return self::one($stmt);
+        return $this->one($stmt);
     }
 
     public function findPublic(string $slug): ?Article
@@ -280,7 +331,7 @@ final readonly class Articles
         $stmt = $this->pdo->prepare('SELECT ' . self::COLUMNS . ' FROM article a WHERE a.slug = ? AND ' . self::PUBLIC_WHERE);
         $stmt->execute([$slug, $this->clock->now()]);
 
-        return self::one($stmt);
+        return $this->one($stmt);
     }
 
     /**
@@ -308,7 +359,7 @@ final readonly class Articles
         );
         $stmt->execute([$this->clock->now(), $lang, $lang, $limit, $offset]);
 
-        return self::all($stmt);
+        return $this->all($stmt);
     }
 
     /**
@@ -333,7 +384,7 @@ final readonly class Articles
         $results = [];
         foreach ($stmt->fetchAll() as $row) {
             if (is_array($row)) {
-                $results[] = ['article' => self::hydrate($row), 'excerpt' => Row::str($row, 'excerpt')];
+                $results[] = ['article' => $this->hydrate($row), 'excerpt' => Row::str($row, 'excerpt')];
             }
         }
 
@@ -358,7 +409,7 @@ final readonly class Articles
         $stmt = $this->pdo->prepare('SELECT ' . self::COLUMNS . " FROM article a WHERE a.kind = 'page' AND " . self::PUBLIC_WHERE . ' ORDER BY a.title');
         $stmt->execute([$this->clock->now()]);
 
-        return self::all($stmt);
+        return $this->all($stmt);
     }
 
     public function publicCount(?string $lang = null): int
@@ -381,7 +432,7 @@ final readonly class Articles
         );
         $stmt->execute([$tagSlug, $this->clock->now(), $limit, $offset]);
 
-        return self::all($stmt);
+        return $this->all($stmt);
     }
 
     /**
@@ -404,6 +455,22 @@ final readonly class Articles
         }
 
         return $entries;
+    }
+
+    /**
+     * Tags with at least one article readers can see, for the sitemap.
+     *
+     * @return list<string> slugs
+     */
+    public function publicTagSlugs(): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT DISTINCT y.slug FROM tag y JOIN article_tag x ON x.tag_id = y.id JOIN article a ON a.id = x.article_id
+             WHERE ' . self::LISTED . self::PUBLIC_WHERE . ' ORDER BY y.slug',
+        );
+        $stmt->execute([$this->clock->now()]);
+
+        return array_values(array_filter($stmt->fetchAll(\PDO::FETCH_COLUMN), is_string(...)));
     }
 
     public function publicCountByTag(string $tagSlug): int
@@ -436,7 +503,24 @@ final readonly class Articles
         );
         $stmt->execute([$kind]);
 
-        return self::all($stmt);
+        return $this->all($stmt);
+    }
+
+    /**
+     * What goes live by itself later, soonest first. Articles and pages alike.
+     *
+     * @return list<Article>
+     */
+    public function scheduled(int $limit): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT ' . self::COLUMNS . " FROM article a
+             WHERE a.deleted_at IS NULL AND a.status = 'published' AND a.published_at > to_timestamp(?)
+             ORDER BY a.published_at, a.id LIMIT ?",
+        );
+        $stmt->execute([$this->clock->now(), $limit]);
+
+        return $this->all($stmt);
     }
 
     /**
@@ -454,7 +538,7 @@ final readonly class Articles
         );
         $stmt->execute([$limit]);
 
-        return self::all($stmt);
+        return $this->all($stmt);
     }
 
     public function lastLanguage(): string
@@ -609,22 +693,22 @@ final readonly class Articles
         $this->pdo->exec('DELETE FROM tag t WHERE NOT EXISTS (SELECT 1 FROM article_tag x WHERE x.tag_id = t.id)');
     }
 
-    private static function one(\PDOStatement $stmt): ?Article
+    private function one(\PDOStatement $stmt): ?Article
     {
         $row = $stmt->fetch();
 
-        return is_array($row) ? self::hydrate($row) : null;
+        return is_array($row) ? $this->hydrate($row) : null;
     }
 
     /**
      * @return list<Article>
      */
-    private static function all(\PDOStatement $stmt): array
+    private function all(\PDOStatement $stmt): array
     {
         $articles = [];
         foreach ($stmt->fetchAll() as $row) {
             if (is_array($row)) {
-                $articles[] = self::hydrate($row);
+                $articles[] = $this->hydrate($row);
             }
         }
 
@@ -634,7 +718,7 @@ final readonly class Articles
     /**
      * @param array<mixed> $row
      */
-    private static function hydrate(array $row): Article
+    private function hydrate(array $row): Article
     {
         $tags = [];
         $decoded = json_decode(Row::str($row, 'tags'), true);
@@ -645,6 +729,8 @@ final readonly class Articles
         }
 
         $draft = $row['draft'] ?? null;
+        $status = Row::str($row, 'status');
+        $publishedAt = Row::intOrNull($row, 'published_at');
 
         return new Article(
             Row::int($row, 'id'),
@@ -654,8 +740,8 @@ final readonly class Articles
             Row::str($row, 'title'),
             Row::str($row, 'teaser'),
             Row::str($row, 'body_json'),
-            Row::str($row, 'status'),
-            Row::intOrNull($row, 'published_at'),
+            $status,
+            $publishedAt,
             Row::int($row, 'updated_at'),
             Row::intOrNull($row, 'deleted_at'),
             $tags,
@@ -664,6 +750,7 @@ final readonly class Articles
             Row::intOrNull($row, 'cover_media_id'),
             Row::str($row, 'cover_alt'),
             Row::intOrNull($row, 'revised_at'),
+            $status === 'published' && $publishedAt !== null && $publishedAt > $this->clock->now(),
         );
     }
 

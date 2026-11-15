@@ -36,6 +36,23 @@
             {% endif %}
         </section>
 
+        {% if scheduled %}
+            <section class="panel" aria-labelledby="scheduled-heading">
+                <h2 class="card-label" id="scheduled-heading">Scheduled</h2>
+                <ul class="plain-list">
+                    {% for article in scheduled %}
+                        <li>
+                            <a href="/admin/articles/{{ article.id }}">{{ article.workingTitle }}</a>
+                            <span>
+                                {% if article.kind == 'page' %}<span class="pill">page</span>{% endif %}
+                                <time class="when" datetime="{{ article.publishedAt|article_iso }}">{{ article.publishedAt|admin_datetime }}</time>
+                            </span>
+                        </li>
+                    {% endfor %}
+                </ul>
+            </section>
+        {% endif %}
+
         <section class="panel" aria-labelledby="storage-heading">
             <h2 class="card-label" id="storage-heading">Storage</h2>
             {% set gb = 1000000000 %}

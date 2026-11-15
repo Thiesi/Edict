@@ -12,14 +12,41 @@
             <span id="word-count" class="editor-count" aria-live="off"></span>
             <span class="editor-bar-end">
                 <a class="button button-quiet" id="preview" href="/admin/articles/{{ article.id }}/preview" target="_blank" rel="noopener">Preview</a>
-                {% if article.isPublished and not article.deletedAt %}<a class="button button-quiet" href="/{{ article.slug }}" target="_blank" rel="noopener">View</a>{% endif %}
+                {% if article.isLive and not article.deletedAt %}<a class="button button-quiet" href="/{{ article.slug }}" target="_blank" rel="noopener">View</a>{% endif %}
                 <a class="button button-quiet" href="#details-start">Details</a>
                 <button type="button" id="media-toggle" aria-expanded="false" aria-controls="media-panel">Media</button>
                 {% if not article.deletedAt %}
-                    <button class="button-primary" type="button" id="publish">{{ article.isPublished ? 'Update' : 'Publish' }}</button>
+                    {% if article.canBeScheduled and not article.scheduled %}
+                        <button class="button-quiet" type="button" id="schedule-toggle" aria-expanded="false" aria-controls="schedule-panel">Schedule…</button>
+                    {% endif %}
+                    {# The label follows the time field: "Schedule" while a time is set. #}
+                    <button class="button-primary" type="button" id="publish" data-now-label="{{ article.isLive ? 'Update' : 'Publish' }}">{{ publish_at ? 'Schedule' : (article.isLive ? 'Update' : 'Publish') }}</button>
                 {% endif %}
             </span>
         </header>
+
+        {% if article.scheduled and not article.deletedAt %}
+            <div class="editor-banner editor-scheduled" id="scheduled-banner">
+                <p>
+                    Scheduled for <strong><time datetime="{{ article.publishedAt|article_iso }}">{{ article.publishedAt|admin_datetime }}</time></strong> (Berlin time). It goes live by itself then.
+                    {% if article.hasPendingChanges %}Your changes since then go live only once you schedule or publish again.{% endif %}
+                </p>
+                <button type="button" id="schedule-change" aria-expanded="false" aria-controls="schedule-panel">Change time</button>
+                <button type="button" id="publish-now">Publish now</button>
+                <form method="post" action="/admin/articles/{{ article.id }}/unpublish">
+                    <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                    <button type="submit">Cancel schedule</button>
+                </form>
+            </div>
+        {% endif %}
+        {% if article.canBeScheduled %}
+            <div id="schedule-panel" class="editor-schedule" hidden>
+                <label for="publish-at">Publish at</label>
+                <input type="datetime-local" id="publish-at" value="{{ publish_at }}" min="{{ publish_at_min }}" step="60" aria-describedby="publish-at-help">
+                <button type="button" id="publish-at-clear">Clear</button>
+                <small id="publish-at-help">Berlin time. Readers see it from then on; until then it stays hidden everywhere.</small>
+            </div>
+        {% endif %}
 
         <div id="restore-banner" class="editor-banner" role="alert" hidden>
             <span id="restore-message"></span>
@@ -107,7 +134,7 @@
                     {% for revision in revisions %}
                         <li>
                             <time datetime="{{ revision.publishedAt|article_iso }}">{{ revision.publishedAt|date('Y-m-d H:i') }}</time>: {{ revision.title }}
-                            {% if loop.first %}<small>(what readers see{% if article.hasPendingChanges %}, before your changes{% endif %})</small>{% endif %}
+                            {% if loop.first %}<small>(what readers {{ article.scheduled ? 'will see' : 'see' }}{% if article.hasPendingChanges %}, before your changes{% endif %})</small>{% endif %}
                             <form method="post" action="/admin/articles/{{ article.id }}/revisions/{{ revision.id }}/restore">
                                 <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
                                 <button class="button-quiet" type="submit">Restore into the draft</button>
@@ -118,13 +145,13 @@
             {% endif %}
             <div class="editor-fate">
                 <p>
-                    Status: <strong>{{ article.status }}</strong>{% if article.hasPendingChanges %}, with changes readers don't see yet{% endif %}.
+                    Status: <strong>{% if article.scheduled %}scheduled for <time datetime="{{ article.publishedAt|article_iso }}">{{ article.publishedAt|admin_datetime }}</time>{% else %}{{ article.status }}{% endif %}</strong>{% if article.hasPendingChanges %}, with changes readers don't see yet{% endif %}.
                 </p>
                 {% if not article.deletedAt %}
                     {% if article.isPublished %}
                         <form method="post" action="/admin/articles/{{ article.id }}/unpublish">
                             <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
-                            <button type="submit">Unpublish</button>
+                            <button type="submit">{{ article.scheduled ? 'Cancel schedule' : 'Unpublish' }}</button>
                         </form>
                     {% endif %}
                     <form method="post" action="/admin/articles/{{ article.id }}/trash">

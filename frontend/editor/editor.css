@@ -964,3 +964,52 @@ body {
     font-size: 0.85rem;
     white-space: nowrap;
 }
+
+/* Scheduling: the time field under the bar, and the line saying when a scheduled piece goes live. */
+.editor-schedule,
+.editor-scheduled {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem 0.6rem;
+    margin: 0;
+    padding: 0.6rem 1rem;
+    border-bottom: 1px solid var(--line);
+    background: var(--bg);
+    color: var(--ink);
+    font: 0.9rem var(--ui);
+}
+
+.editor-schedule[hidden] {
+    display: none;
+}
+
+.editor-schedule label {
+    font-weight: 600;
+}
+
+.editor-schedule input {
+    padding: 0.3rem 0.5rem;
+}
+
+.editor-schedule small {
+    flex-basis: 100%;
+    color: var(--muted);
+}
+
+.editor-scheduled p {
+    flex: 1 1 20rem;
+    margin: 0;
+}
+
+.editor-scheduled form {
+    display: inline;
+    margin: 0;
+}
+
+.editor-schedule button,
+.editor-scheduled button {
+    margin: 0;
+    padding: 0.2em 0.6em;
+    font-size: 0.85rem;
+}

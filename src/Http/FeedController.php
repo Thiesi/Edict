@@ -44,7 +44,8 @@ final readonly class FeedController
     {
         $slug = $args['slug'] ?? '';
         $name = $this->articles->tagName($slug);
-        if ($name === null) {
+        // As the tag page: a tag only on drafts, unpublished or scheduled pieces doesn't exist for readers.
+        if ($name === null || $this->articles->publicCountByTag($slug) === 0) {
             throw new HttpNotFoundException($request);
         }
 
@@ -59,10 +60,8 @@ final readonly class FeedController
         foreach ($this->articles->sitemap(self::SITEMAP_LIMIT) as $entry) {
             $xml .= self::url($base . '/' . $entry['slug'], $entry['updated']);
         }
-        foreach ($this->articles->tags() as $tag) {
-            if ($tag['count'] > 0) {
-                $xml .= self::url($base . '/tag/' . $tag['slug'], null);
-            }
+        foreach ($this->articles->publicTagSlugs() as $tag) {
+            $xml .= self::url($base . '/tag/' . $tag, null);
         }
         $response->getBody()->write($xml . "</urlset>\n");
 
