@@ -34,7 +34,7 @@ for (const colorScheme of ['light', 'dark']) {
                 await expect(page.locator('.article-nav a')).toHaveCount(2);
                 await expect(page.locator('.related-item')).toHaveCount(3);
                 await expect(page.locator('.related .article-cover-thumb')).toHaveCount(1);
-                await expect(page.locator('.article-meta .reading-time')).toHaveText('1 min read');
+                await expect(page.locator('.article-meta .reading-time')).toHaveText(/^1 (min read|Min\. Lesezeit)$/);
 
                 // A list with its pager, a search with results, and the sign-in page.
                 await check(`/archive?theme=${theme}`);
