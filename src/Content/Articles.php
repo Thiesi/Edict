@@ -29,7 +29,7 @@ final readonly class Articles
         EXTRACT(EPOCH FROM a.published_at)::bigint AS published_at,
         EXTRACT(EPOCH FROM a.updated_at)::bigint AS updated_at,
         EXTRACT(EPOCH FROM a.deleted_at)::bigint AS deleted_at,
-        EXTRACT(EPOCH FROM a.revised_at)::bigint AS revised_at,
+        EXTRACT(EPOCH FROM a.revised_at)::bigint AS revised_at, a.reading_minutes,
         (SELECT coalesce(json_agg(json_build_object('slug', t.slug, 'name', t.name) ORDER BY t.name), '[]')::text
          FROM article_tag at JOIN tag t ON t.id = at.tag_id WHERE at.article_id = a.id) AS tags";
 
@@ -357,6 +357,71 @@ final readonly class Articles
         $slug = $stmt->fetchColumn();
 
         return is_string($slug) ? $slug : null;
+    }
+
+    /**
+     * The public articles just before and after this one by publish date, across all
+     * languages, for "previous" and "next" under it. Pages have none.
+     *
+     * @return array{previous: Article|null, next: Article|null}
+     */
+    public function neighbours(Article $article): array
+    {
+        if ($article->kind !== 'article') {
+            return ['previous' => null, 'next' => null];
+        }
+        // The row's own timestamp, not the rounded epoch, so equal seconds still order by id.
+        $neighbour = function (string $direction) use ($article): ?Article {
+            [$compare, $order] = $direction === 'older' ? ['<', 'DESC'] : ['>', 'ASC'];
+            $stmt = $this->pdo->prepare(
+                'SELECT ' . self::COLUMNS . ' FROM article a WHERE ' . self::LISTED . self::PUBLIC_WHERE . "
+                 AND (a.published_at, a.id) $compare (SELECT b.published_at, b.id FROM article b WHERE b.id = ?)
+                 ORDER BY a.published_at $order, a.id $order LIMIT 1",
+            );
+            $stmt->execute([$this->clock->now(), $article->id]);
+
+            return $this->one($stmt);
+        };
+
+        return ['previous' => $neighbour('older'), 'next' => $neighbour('newer')];
+    }
+
+    /**
+     * Public articles sharing the most tags with this one, newest first among equals.
+     * None without a shared tag: no guessing from the text.
+     *
+     * @return list<Article>
+     */
+    public function related(Article $article, int $limit): array
+    {
+        if ($article->kind !== 'article') {
+            return [];
+        }
+        $stmt = $this->pdo->prepare(
+            'SELECT ' . self::COLUMNS . ' FROM article a
+             JOIN (
+                 SELECT x.article_id, count(*) AS shared FROM article_tag x
+                 JOIN article_tag mine ON mine.tag_id = x.tag_id AND mine.article_id = ?
+                 WHERE x.article_id <> ? GROUP BY x.article_id
+             ) s ON s.article_id = a.id
+             WHERE ' . self::LISTED . self::PUBLIC_WHERE . '
+             ORDER BY s.shared DESC, a.published_at DESC, a.id DESC LIMIT ?',
+        );
+        $stmt->execute([$article->id, $article->id, $this->clock->now(), $limit]);
+
+        return $this->all($stmt);
+    }
+
+    /**
+     * The reading time a body would get on publishing, for the preview of a draft.
+     * The same function as the stored column (migration 0018), so the two agree.
+     */
+    public function readingMinutes(string $bodyJson): int
+    {
+        $stmt = $this->pdo->prepare('SELECT edict_reading_minutes(edict_body_text(?::jsonb))');
+        $stmt->execute([$bodyJson]);
+
+        return Row::int(['n' => $stmt->fetchColumn()], 'n');
     }
 
     /**
@@ -762,6 +827,7 @@ final readonly class Articles
             Row::str($row, 'cover_alt'),
             Row::intOrNull($row, 'revised_at'),
             $status === 'published' && $publishedAt !== null && $publishedAt > $this->clock->now(),
+            Row::int($row, 'reading_minutes'),
         );
     }
 

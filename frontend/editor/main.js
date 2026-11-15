@@ -837,7 +837,8 @@ lastBody = JSON.stringify(editor.getJSON());
 const countLine = field('word-count');
 const showCount = () => {
     const words = editor.getText().trim().split(/\s+/).filter(Boolean).length;
-    const minutes = Math.max(1, Math.round(words / 200));
+    // As readers will see it (migration 0018): 220 words a minute, rounded up.
+    const minutes = Math.max(1, Math.ceil(words / 220));
     countLine.textContent = words === 0 ? '' : `${words.toLocaleString()} ${words === 1 ? 'word' : 'words'} · ${minutes} min read`;
 };
 editor.on('update', showCount);

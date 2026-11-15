@@ -454,6 +454,67 @@ th {
     content: '-- ' / '';
 }
 
+/* Reading aids: the neighbours as commands in brackets, related articles as a listing. */
+.article-nav {
+    border-top-style: dashed;
+}
+
+.article-nav-label {
+    font-size: var(--text-sm);
+    letter-spacing: 0;
+    text-transform: lowercase;
+}
+
+.article-nav-prev .article-nav-label::before {
+    content: '[<- ';
+    content: '[<- ' / '';
+}
+
+.article-nav-prev .article-nav-label::after {
+    content: ']';
+    content: ']' / '';
+}
+
+.article-nav-next .article-nav-label::before {
+    content: '[';
+    content: '[' / '';
+}
+
+.article-nav-next .article-nav-label::after {
+    content: ' ->]';
+    content: ' ->]' / '';
+}
+
+.article-nav-title {
+    font-size: var(--text-sm);
+}
+
+.article-nav a:hover .article-nav-title,
+.article-nav a:focus-visible .article-nav-title {
+    background: var(--fg);
+    color: var(--bg);
+    text-decoration: none;
+}
+
+.related-item {
+    padding-bottom: var(--space-3);
+    border-bottom: 1px dashed var(--border);
+}
+
+.related-title {
+    font-size: var(--text-sm);
+    text-decoration: none;
+}
+
+.related-title:hover {
+    text-decoration: underline;
+}
+
+.related .article-cover-thumb {
+    flex-basis: 4.5rem;
+    width: 4.5rem;
+}
+
 @media print {
     :is(button, .button, .file-download)::before,
     :is(button, .button, .file-download)::after,

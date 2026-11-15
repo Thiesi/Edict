@@ -106,6 +106,8 @@ test('the media library reuses an uploaded image', async ({ page }) => {
 test('a cover image is chosen from the library and shows above the article and in the list', async ({ page }) => {
     await newArticle(page);
     await page.getByLabel('Title').fill('With a cover');
+    // Related to the editor tests' articles, so the theme checks see a related cover.
+    await page.getByLabel('Tags', { exact: true }).fill('Reading aids');
 
     await page.getByRole('button', { name: 'Choose a cover image…' }).click();
     const panel = page.locator('#media-panel');

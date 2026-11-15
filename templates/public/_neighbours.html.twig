@@ -1,0 +1,18 @@
+{# The public articles before and after this one by date, in any language (PublicController). #}
+{% if neighbours.previous or neighbours.next %}
+    <nav class="article-nav" aria-label="More articles">
+        <ul>
+            {% for rel, item in {prev: neighbours.previous, next: neighbours.next} %}
+                {% if item %}
+                    <li class="article-nav-{{ rel }}">
+                        <a href="/{{ item.slug }}" rel="{{ rel }}">
+                            <span class="article-nav-label">{{ rel == 'prev' ? 'Previous' : 'Next' }}<span class="visually-hidden">:</span></span>
+                            <span class="article-nav-title" lang="{{ item.lang }}">{{ item.title }}</span>
+                        </a>
+                        <time datetime="{{ item.publishedAt|article_iso }}" lang="{{ item.lang }}">{{ item.publishedAt|article_date(item.lang) }}</time>
+                    </li>
+                {% endif %}
+            {% endfor %}
+        </ul>
+    </nav>
+{% endif %}

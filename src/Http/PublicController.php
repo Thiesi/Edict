@@ -24,6 +24,7 @@ final readonly class PublicController
     private const HOME_ARTICLES = 10;
     private const PER_PAGE = 20;
     private const MAX_QUERY = 200;
+    private const RELATED = 3;
 
     public function __construct(private Environment $twig, private Articles $articles, private Votes $votes, private Comments $comments) {}
 
@@ -155,6 +156,8 @@ final readonly class PublicController
             'session' => $session,
             'banned' => $session !== null && $this->votes->isBanned($session->userId),
             'csrf_field' => CsrfMiddleware::FIELD,
+            'neighbours' => $this->articles->neighbours($article),
+            'related' => $this->articles->related($article, self::RELATED),
             'comments' => $isArticle ? [
                 'thread' => $this->comments->thread($article->id, $session?->userId, $isAdmin),
                 'count' => $this->comments->count($article->id),

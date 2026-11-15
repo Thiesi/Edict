@@ -23,6 +23,7 @@
             {% if article.kind == 'article' and article.publishedAt %}
                 <p class="article-meta">
                     <time datetime="{{ article.publishedAt|article_iso }}">{{ article.publishedAt|article_date(article.lang) }}</time>
+                    · <span class="reading-time">{{ article.readingTime }}</span>
                     {% if article.revisedAt and article.revisedAt - article.publishedAt > 86400 %}
                         · <span class="updated">{{ article.lang == 'de' ? 'Aktualisiert am' : 'Updated on' }} <time datetime="{{ article.revisedAt|article_iso }}">{{ article.revisedAt|article_date(article.lang) }}</time></span>
                     {% endif %}
@@ -38,6 +39,8 @@
             </p>
         {% endif %}
         {% if likes is defined and likes %}{% include 'public/_likes.html.twig' %}{% endif %}
+        {% if neighbours is defined %}{% include 'public/_neighbours.html.twig' %}{% endif %}
+        {% if related is defined and related %}{% include 'public/_related.html.twig' %}{% endif %}
         {% if comments is defined and comments %}{% include 'public/_comments.html.twig' %}{% endif %}
     </main>
     <script src="/assets/lightbox.js" defer></script>

@@ -30,7 +30,17 @@ final readonly class Article
         // Published, with a publish time still ahead when this was loaded. Readers see
         // it from then on, with nothing else having to happen.
         public bool $scheduled = false,
+        // From the published body's words, stored when it was published (migration 0018).
+        public int $readingMinutes = 1,
     ) {}
+
+    /**
+     * "6 min read", in the article's own language, like the rest of its meta line.
+     */
+    public function readingTime(): string
+    {
+        return $this->lang === 'de' ? $this->readingMinutes . ' Min. Lesezeit' : $this->readingMinutes . ' min read';
+    }
 
     /**
      * What the editor shows: the draft, or the live version if nothing differs.
@@ -96,8 +106,10 @@ final readonly class Article
 
     /**
      * This article as its draft would look, for the preview.
+     *
+     * @param int|null $readingMinutes the draft's reading time, if known (Articles::readingMinutes)
      */
-    public function asDraft(): self
+    public function asDraft(?int $readingMinutes = null): self
     {
         $input = $this->input();
 
@@ -120,6 +132,7 @@ final readonly class Article
             $input->coverAlt,
             $this->revisedAt,
             $this->scheduled,
+            $readingMinutes ?? $this->readingMinutes,
         );
     }
 }

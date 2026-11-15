@@ -414,6 +414,56 @@ hr {
     margin-top: 0;
 }
 
+/* Reading aids: register entries, ruled and labelled in mono capitals. */
+.article-nav {
+    border-top: 1.5px solid var(--fg);
+}
+
+.article-nav-label,
+.related-meta,
+.article-nav time {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.article-nav-title,
+.related-title {
+    color: var(--fg);
+    text-decoration: none;
+}
+
+.article-nav a:hover .article-nav-title,
+.related-title:hover {
+    color: var(--accent);
+    text-decoration: underline;
+}
+
+.related > h2 {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.related-list {
+    gap: 0;
+}
+
+.related-item {
+    padding: var(--space-3) 0;
+    border-top: 1px dashed var(--border);
+}
+
+.related-item:first-child {
+    border-top: 1.5px solid var(--fg);
+}
+
+.related-title {
+    font-size: 1.05rem;
+}
+
 @media print {
     body {
         background-image: none;

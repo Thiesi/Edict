@@ -247,3 +247,33 @@ figcaption,
 .panel-welcome {
     border-left: 3px solid var(--margin-line);
 }
+
+/* Reading aids: a dotted line to write on, italic labels, and the list's polaroids. */
+.article-nav {
+    border-top-style: dotted;
+}
+
+.article-nav-label,
+.related-meta,
+.article-nav time {
+    font-style: italic;
+}
+
+.article-nav-label {
+    font-size: var(--text-sm);
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+.related > h2 {
+    font-style: italic;
+    font-weight: 600;
+}
+
+.related-title {
+    font-size: 1.1rem;
+}
+
+.related-item:nth-child(even) .article-cover-thumb img {
+    transform: rotate(-2deg);
+}

@@ -505,3 +505,67 @@ main > h1 {
 .site-footer ul {
     justify-content: center;
 }
+
+/* Reading aids: wall labels. Related articles hang as a row of pictures on wide screens. */
+.article-nav,
+.related {
+    max-width: var(--measure);
+    margin-right: auto;
+    margin-left: auto;
+}
+
+.article-nav-label,
+.related-meta,
+.article-nav time {
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.article-nav-title,
+.related-title {
+    color: var(--fg);
+    font-size: 1.3rem;
+    text-decoration: none;
+}
+
+.article-nav a:hover .article-nav-title,
+.related-title:hover {
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.2em;
+}
+
+.related > h2 {
+    font-size: 1.6rem;
+    font-weight: 400;
+    text-align: center;
+}
+
+@media (min-width: 40rem) {
+    .related-list {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: var(--space-5);
+    }
+
+    .related-item {
+        flex-direction: column-reverse;
+        justify-content: flex-end;
+        gap: var(--space-3);
+    }
+
+    .related .article-cover-thumb {
+        flex-basis: auto;
+        width: 100%;
+    }
+
+    .related-text {
+        flex: 0 0 auto;
+    }
+
+    /* Without a picture it hangs as a label, under a rule. */
+    .related-item:not(:has(.article-cover-thumb)) .related-text {
+        padding-top: var(--space-3);
+        border-top: 1px solid var(--fg);
+    }
+}

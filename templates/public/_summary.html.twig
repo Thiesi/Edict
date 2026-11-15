@@ -4,6 +4,7 @@
     <p class="summary-meta">
         <time datetime="{{ article.publishedAt|article_iso }}">{{ article.publishedAt|article_date(article.lang) }}</time>
         · <abbr lang="en" title="{{ article.lang == 'de' ? 'German' : 'English' }}">{{ article.lang|upper }}</abbr>
+        · <span class="reading-time">{{ article.readingTime }}</span>
     </p>
     {% if article.teaser %}<p class="summary-teaser">{{ article.teaser }}</p>{% endif %}
 </li>

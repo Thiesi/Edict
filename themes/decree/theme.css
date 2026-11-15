@@ -310,3 +310,36 @@ hr {
     justify-content: center;
     text-align: center;
 }
+
+/* Reading aids: a gold rule opens them, as it closes the other parts; labels in small capitals. */
+.article-nav {
+    border-top: 1px solid var(--gold);
+}
+
+.article-nav-label,
+.related-meta {
+    font-variant: small-caps;
+    letter-spacing: 0.04em;
+}
+
+.article-nav-label {
+    font-size: var(--text-sm);
+    text-transform: none;
+}
+
+.article-nav-title,
+.related-title {
+    font-weight: 600;
+}
+
+.related > h2 {
+    text-align: center;
+}
+
+.related > h2::after {
+    content: '';
+    display: block;
+    width: 3rem;
+    margin: 0.5rem auto 0;
+    border-bottom: 2px solid var(--gold);
+}

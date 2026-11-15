@@ -380,3 +380,73 @@ th {
 .confirm-form {
     border-color: var(--rule);
 }
+
+/* Reading aids: a thick rule opens the part; related stories run as a strip of columns. */
+.article-nav {
+    border-top: 2px solid var(--rule);
+}
+
+.article-nav-label,
+.related-meta {
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.article-nav-title,
+.related-title {
+    color: var(--fg);
+    font-weight: 900;
+    text-decoration: none;
+}
+
+.related-title:hover {
+    text-decoration: underline;
+}
+
+.related {
+    padding-top: var(--space-2);
+    border-top: 1px solid var(--rule);
+}
+
+.related > h2 {
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.related-title {
+    font-size: 1.1rem;
+    line-height: 1.15;
+}
+
+@media (min-width: 40rem) {
+    .related-list {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0;
+        margin: 0 -0.75rem;
+        clip-path: inset(0 0 0 1px);
+    }
+
+    .related-item {
+        flex-direction: column-reverse;
+        justify-content: flex-end;
+        gap: var(--space-2);
+        padding: 0 0.75rem;
+        border-left: 1px solid var(--rule);
+    }
+
+    .related .article-cover-thumb {
+        flex-basis: auto;
+        width: 100%;
+    }
+
+    .related .article-cover-thumb img {
+        aspect-ratio: 16 / 9;
+    }
+
+    .related-text {
+        flex: 0 0 auto;
+    }
+}

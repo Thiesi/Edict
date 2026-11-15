@@ -1,0 +1,18 @@
+{# Up to three public articles sharing the most tags with this one (PublicController). #}
+<section class="related" aria-labelledby="related-heading">
+    <h2 id="related-heading">Related articles</h2>
+    <ul class="related-list">
+        {% for item in related %}
+            <li class="related-item" lang="{{ item.lang }}">
+                <div class="related-text">
+                    <a class="related-title" href="/{{ item.slug }}">{{ item.title }}</a>
+                    <p class="related-meta">
+                        <time datetime="{{ item.publishedAt|article_iso }}">{{ item.publishedAt|article_date(item.lang) }}</time>
+                        · <span class="reading-time">{{ item.readingTime }}</span>
+                    </p>
+                </div>
+                {{ article_cover(item, true) }}
+            </li>
+        {% endfor %}
+    </ul>
+</section>

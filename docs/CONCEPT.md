@@ -130,6 +130,7 @@ Browser ──HTTPS──▶ Apache (macro vhost, TLS via acme.sh)
 - **Menu and footer**, edited in the admin area, plus site settings (title, description). Static pages are not listed anywhere else, and Impressum and Datenschutz must be reachable from every page under German law, so the site doesn't launch without this.
 - **Full-text search** with PostgreSQL, stemming each article in its own language (de/en), with no extra service.
 - **Language filter** on the home page and archive, for readers who follow only German or only English.
+- **Reading aids:** under an article, links to the previous and next public article by date (all languages), and up to three related articles by shared tags (none without a shared tag). A reading time ("6 min read", 220 words a minute) in the article's meta line and in listings, stored with the published text.
 - ✅ Clean URLs: `/my-article-slug`. Articles and static pages share one namespace. System paths (`/login`, `/auth/…`, `/account`, `/healthz`, `/tag/…`, `/archive`, `/feed.atom`, `/media/…`, `/assets/…`, the admin path, `/sitemap.xml`, …) are reserved and can't be used as slugs. Renamed slugs redirect permanently (301).
 - ✅ **Atom feed with full text** (`/feed.atom`, plus a per-tag and a per-language feed). Each entry carries its article's language. Images are included; audio and video appear as links or enclosures.
 - Legal page templates for Impressum and Datenschutz (in German, since the operator is German).

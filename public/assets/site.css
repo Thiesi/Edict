@@ -571,6 +571,137 @@ article > p:has(> time) {
     margin-left: auto;
 }
 
+/* Reading aids under an article (#88): previous and next by date, then related
+   articles by shared tags. Themes restyle them through these classes. */
+.reading-time {
+    white-space: nowrap;
+}
+
+.article-nav {
+    margin: var(--space-6) 0 0;
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--border);
+    font-size: var(--text-sm);
+}
+
+.article-nav ul {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-4);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.article-nav-next {
+    grid-column: 2;
+    text-align: end;
+}
+
+.article-nav a {
+    display: block;
+    text-decoration: none;
+}
+
+.article-nav-label {
+    display: block;
+    color: var(--muted);
+    font-size: var(--text-xs);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.article-nav-prev .article-nav-label::before {
+    content: '← ';
+    content: '← ' / '';
+}
+
+.article-nav-next .article-nav-label::after {
+    content: ' →';
+    content: ' →' / '';
+}
+
+.article-nav-title {
+    display: block;
+    font-family: var(--font-heading);
+    font-size: var(--text-md);
+    line-height: 1.3;
+}
+
+.article-nav a:hover .article-nav-title,
+.article-nav a:focus-visible .article-nav-title {
+    text-decoration: underline;
+}
+
+.article-nav time {
+    display: block;
+    margin-top: var(--space-1);
+    color: var(--muted);
+}
+
+@media (max-width: 30rem) {
+    .article-nav ul {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .article-nav-next {
+        grid-column: auto;
+    }
+}
+
+.related {
+    margin: var(--space-6) 0 0;
+}
+
+.related > h2 {
+    margin: 0 0 var(--space-3);
+    font-size: var(--text-lg);
+}
+
+.related-list {
+    display: grid;
+    gap: var(--space-4);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.related-item {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+}
+
+.related-text {
+    flex: 1;
+    min-width: 0;
+    line-height: 1.3;
+}
+
+.related-title {
+    font-family: var(--font-heading);
+    font-size: var(--text-md);
+    line-height: 1.3;
+}
+
+.related-meta {
+    margin: var(--space-1) 0 0;
+    color: var(--muted);
+    font-size: var(--text-sm);
+}
+
+/* The listing thumbnail, smaller. Each theme treats it as it treats covers in its lists. */
+.related .article-cover-thumb {
+    flex: 0 0 5rem;
+    float: none;
+    width: 5rem;
+    margin: 0;
+}
+
+.related .article-cover-thumb img {
+    aspect-ratio: 4 / 3;
+}
+
 .teaser {
     font-style: italic;
 }
@@ -1491,6 +1622,8 @@ mark {
     .site-footer nav,
     .lang-filter,
     .likes,
+    .article-nav,
+    .related,
     .comment-form,
     .comment-actions,
     .comment-mode,
