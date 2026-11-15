@@ -17,6 +17,8 @@ const ADMIN_PAGES = [
     '/admin/articles',
     '/admin/articles?kind=page',
     '/admin/articles?trash=1',
+    '/admin/media-library',
+    '/admin/media-library?show=unused&sort=size',
     '/admin/tags',
     '/admin/comments',
     '/admin/site',

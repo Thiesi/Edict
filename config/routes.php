@@ -9,6 +9,7 @@ use Edict\Http\CommentController;
 use Edict\Http\FeedController;
 use Edict\Http\HealthAction;
 use Edict\Http\MediaController;
+use Edict\Http\MediaLibraryController;
 use Edict\Http\Middleware\RequireAdmin;
 use Edict\Http\Middleware\RequireLogin;
 use Edict\Http\OAuthController;
@@ -75,6 +76,8 @@ return static function (App $app): void {
         $group->get('/media', [MediaController::class, 'index']);
         $group->get('/media/{id:[0-9]+}', [MediaController::class, 'show']);
         $group->post('/media/{id:[0-9]+}/poster', [MediaController::class, 'poster']);
+        $group->get('/media-library', [MediaLibraryController::class, 'index']);
+        $group->post('/media-library/{id:[0-9]+}/delete', [MediaLibraryController::class, 'delete']);
 
         $group->get('/csrf', [ArticleAdminController::class, 'csrf']);
         $group->get('/articles', [ArticleAdminController::class, 'index']);

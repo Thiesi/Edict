@@ -36,6 +36,23 @@
             {% endif %}
         </section>
 
+        {% if scheduled %}
+            <section class="panel" aria-labelledby="scheduled-heading">
+                <h2 class="card-label" id="scheduled-heading">Scheduled</h2>
+                <ul class="plain-list">
+                    {% for article in scheduled %}
+                        <li>
+                            <a href="/admin/articles/{{ article.id }}">{{ article.workingTitle }}</a>
+                            <span>
+                                {% if article.kind == 'page' %}<span class="pill">page</span>{% endif %}
+                                <time class="when" datetime="{{ article.publishedAt|article_iso }}">{{ article.publishedAt|admin_datetime }}</time>
+                            </span>
+                        </li>
+                    {% endfor %}
+                </ul>
+            </section>
+        {% endif %}
+
         <section class="panel" aria-labelledby="storage-heading">
             <h2 class="card-label" id="storage-heading">Storage</h2>
             {% set gb = 1000000000 %}
@@ -45,7 +62,7 @@
                 Media: {{ (storage.usedBytes / gb)|number_format(1) }} of {{ (storage.maxBytes / gb)|number_format(1) }} GB,
                 {{ storage.files|number_format }} of {{ storage.maxFiles|number_format }} files.
                 {% if storage.freeBytes is not null %}Free disk: {{ (storage.freeBytes / gb)|number_format(1) }} GB (uploads stop below {{ (storage.minFreeBytes / gb)|number_format(1) }} GB).{% endif %}
-                {% if storage.low %}<strong>Running low.</strong> Ask Ops for room, or remove media nobody needs.{% endif %}
+                {% if storage.low %}<strong>Running low.</strong> Ask Ops for room, or <a href="/admin/media-library?show=unused&amp;sort=size">remove media nobody needs</a>.{% endif %}
             </p>
         </section>
 

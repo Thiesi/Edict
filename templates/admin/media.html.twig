@@ -1,0 +1,118 @@
+{% extends 'admin/layout.html.twig' %}
+
+{% set section = 'media' %}
+{% set kinds = {image: 'Image', video: 'Video', audio: 'Recording', file: 'File'} %}
+
+{% block title %}Media · Edict{% endblock %}
+
+{% block main %}
+    <header class="page-head">
+        <h1>Media</h1>
+    </header>
+    <p class="page-lede">
+        {{ total }} {{ total == 1 ? 'item' : 'items' }}, {{ (storage.usedBytes / 1000000000)|number_format(1) }} of {{ (storage.maxBytes / 1000000000)|number_format(1) }} GB with all their versions.
+        Uploads happen in the editor. Here you can delete what nobody uses.
+    </p>
+    {% if done %}<p class="notice" role="status">{{ done }}</p>{% endif %}
+    {% if error %}<p class="notice notice-error" role="alert">{{ error }}</p>{% endif %}
+
+    <nav class="tabs" aria-label="Media">
+        <a href="{{ urls.all }}"{% if view.show == 'all' %} aria-current="page"{% endif %}>All <span class="tab-count">{{ total }}</span></a>
+        <a href="{{ urls.unused }}"{% if view.show == 'unused' %} aria-current="page"{% endif %}>Unused <span class="tab-count">{{ unused_count }}</span></a>
+    </nav>
+    <p class="sort-links">
+        <span id="sort-label">Sort:</span>
+        <a href="{{ urls.newest }}" aria-describedby="sort-label"{% if view.sort == 'newest' %} aria-current="true"{% endif %}>Newest first</a>
+        <a href="{{ urls.size }}" aria-describedby="sort-label"{% if view.sort == 'size' %} aria-current="true"{% endif %}>Largest first</a>
+        {% if view.show == 'unused' and unused_count %}<span class="sort-note">Deleting all of these would free {{ unused_bytes }}.</span>{% endif %}
+    </p>
+
+    {% if items %}
+        <table class="list media-list" role="table">
+            <thead>
+                <tr role="row">
+                    <th role="columnheader"><span class="visually-hidden">Preview</span></th>
+                    <th role="columnheader">Name</th>
+                    <th role="columnheader">Kind</th>
+                    <th role="columnheader" class="num">Size</th>
+                    <th role="columnheader">Uploaded</th>
+                    <th role="columnheader">Used in</th>
+                    <th role="columnheader">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                    <tr role="row">
+                        <td role="cell" class="cell-thumb">
+                            <span class="media-thumb">
+                                {%- if item.thumb -%}
+                                    <img src="{{ item.thumb.url }}" width="{{ item.thumb.width }}" height="{{ item.thumb.height }}" alt="" loading="lazy" decoding="async">
+                                {%- elseif item.kind == 'audio' -%}
+                                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+                                {%- elseif item.kind == 'video' -%}
+                                    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="5" width="15" height="14" rx="2"/><path d="m17 10 5-3v10l-5-3z"/></svg>
+                                {%- elseif item.kind == 'image' -%}
+                                    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg>
+                                {%- else -%}
+                                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+                                {%- endif -%}
+                            </span>
+                        </td>
+                        <td role="cell" class="cell-title">
+                            <span class="media-name">{{ item.name }}</span>
+                            {% if item.status != 'ready' %}<span class="pill{{ item.status == 'processing' ? ' pill-pending' : '' }}">{{ item.status }}</span>{% endif %}
+                            {% if item.status == 'failed' and item.error %}<small class="media-error">{{ item.error }}</small>{% endif %}
+                        </td>
+                        <td role="cell">{{ kinds[item.kind] ?? item.kind }}</td>
+                        <td role="cell" class="num">
+                            {{ item.storedSize }}
+                            {%- if item.storedBytes != item.bytes %}<small class="media-original">original {{ item.size }}</small>{% endif %}
+                        </td>
+                        <td role="cell" class="cell-date"><span class="cell-unit">Uploaded </span><time datetime="{{ item.uploadedAt|article_iso }}">{{ item.uploadedAt|date('Y-m-d') }}</time></td>
+                        <td role="cell" class="cell-wide cell-uses">
+                            {% if item.uses %}
+                                <ul class="uses">
+                                    {% for use in item.uses %}
+                                        <li>
+                                            <a href="{{ use.url }}">{{ use.title }}</a>
+                                            {% if use.type == 'page' %}<span class="pill">page</span>{% endif %}
+                                            {% if use.trashed %}<span class="pill">in the trash</span>{% endif %}
+                                            <small>{{ use.places|join(', ') }}</small>
+                                        </li>
+                                    {% endfor %}
+                                </ul>
+                            {% else %}
+                                <span class="unused">Not used</span>
+                            {% endif %}
+                            {% if item.oldVersions %}<small class="old-versions">Also in {{ item.oldVersions }} old {{ item.oldVersions == 1 ? 'version' : 'versions' }}{% if not item.uses %}, which would show a gap where it was{% endif %}.</small>{% endif %}
+                        </td>
+                        <td role="cell" class="cell-wide cell-delete">
+                            {% if item.uses %}
+                                <button class="button-small button-danger" type="button" disabled aria-describedby="why-{{ item.id }}">Delete<span class="visually-hidden"> {{ item.name }}</span></button>
+                                <small class="delete-why" id="why-{{ item.id }}">In use. Remove it from the places listed first.</small>
+                            {% else %}
+                                <form method="post" action="/admin/media-library/{{ item.id }}/delete">
+                                    <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                                    <input type="hidden" name="show" value="{{ view.show }}">
+                                    <input type="hidden" name="sort" value="{{ view.sort }}">
+                                    <input type="hidden" name="page" value="{{ view.page }}">
+                                    <label class="check"><input type="checkbox" name="confirm" value="yes" required> Delete permanently<span class="visually-hidden"> {{ item.name }}</span></label>
+                                    <button class="button-small button-danger" type="submit">Delete<span class="visually-hidden"> {{ item.name }}</span></button>
+                                </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% if pages > 1 %}
+            <nav class="pager" aria-label="Pages">
+                {% if view.page > 1 %}<a class="button button-small" href="{{ urls.previous }}">Previous</a>{% endif %}
+                <span>Page {{ view.page }} of {{ pages }}</span>
+                {% if view.page < pages %}<a class="button button-small" href="{{ urls.next }}">Next</a>{% endif %}
+            </nav>
+        {% endif %}
+    {% else %}
+        <p class="empty">{{ view.show == 'unused' ? 'Everything uploaded is in use.' : 'Nothing uploaded yet. Add pictures, recordings and files from the editor.' }}</p>
+    {% endif %}
+{% endblock %}

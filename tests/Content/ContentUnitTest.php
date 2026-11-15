@@ -305,6 +305,20 @@ final class ContentUnitTest extends TestCase
         self::assertSame('2026-03-06T00:30:00+01:00', ArticleDate::iso($timestamp));
     }
 
+    public function testScheduleTimesAreBerlinTime(): void
+    {
+        // 18:00 in Berlin is 17:00 UTC in winter and 16:00 UTC in summer.
+        self::assertSame(1_794_762_000, ArticleDate::fromFieldValue('2026-11-15T18:00'));
+        self::assertSame(gmmktime(16, 0, 0, 7, 1, 2027), ArticleDate::fromFieldValue('2027-07-01T18:00'));
+        self::assertSame(1_794_762_000, ArticleDate::fromFieldValue('2026-11-15T18:00:00'), 'seconds, as some browsers send them');
+        self::assertSame('15 Nov 2026, 18:00', ArticleDate::adminDateTime(1_794_762_000));
+        self::assertSame('2026-11-15T18:00', ArticleDate::fieldValue(1_794_762_000));
+
+        foreach (['', 'tomorrow', '2026-11-15', '2026-11-15 18:00', '2026-02-30T12:00', '2026-11-15T25:00', '2027-03-28T02:30', '12026-11-15T18:00'] as $value) {
+            self::assertNull(ArticleDate::fromFieldValue($value), $value === '' ? 'empty' : $value);
+        }
+    }
+
     public function testTagsAreCleanedAndDeduplicated(): void
     {
         $input = ArticleInput::fromArray(['tags' => ' PHP , php,  Web  Dev,,???, Größe ']);

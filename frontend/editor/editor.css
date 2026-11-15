@@ -577,6 +577,27 @@ body {
     color: var(--surface);
 }
 
+/* Media deleted from the Media page that an old version still points at. Readers
+   see nothing there; the editor says so plainly, in a box where the media was. */
+.media-missing {
+    margin: 0.25rem 0;
+    padding: 0.75rem;
+    border: 1px dashed var(--muted);
+    border-radius: 4px;
+    color: var(--ink);
+    font: 0.85rem var(--ui);
+}
+
+/* Clear of the remove button in the corner. */
+.editor-media .media-missing,
+.editor-gallery .media-missing {
+    padding-right: 2.5rem;
+}
+
+.editor-cover .media-missing {
+    flex: 1 1 100%;
+}
+
 /* The media library: a panel at the side. */
 .media-panel {
     position: fixed;
@@ -963,4 +984,53 @@ body {
     color: var(--muted);
     font-size: 0.85rem;
     white-space: nowrap;
+}
+
+/* Scheduling: the time field under the bar, and the line saying when a scheduled piece goes live. */
+.editor-schedule,
+.editor-scheduled {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem 0.6rem;
+    margin: 0;
+    padding: 0.6rem 1rem;
+    border-bottom: 1px solid var(--line);
+    background: var(--bg);
+    color: var(--ink);
+    font: 0.9rem var(--ui);
+}
+
+.editor-schedule[hidden] {
+    display: none;
+}
+
+.editor-schedule label {
+    font-weight: 600;
+}
+
+.editor-schedule input {
+    padding: 0.3rem 0.5rem;
+}
+
+.editor-schedule small {
+    flex-basis: 100%;
+    color: var(--muted);
+}
+
+.editor-scheduled p {
+    flex: 1 1 20rem;
+    margin: 0;
+}
+
+.editor-scheduled form {
+    display: inline;
+    margin: 0;
+}
+
+.editor-schedule button,
+.editor-scheduled button {
+    margin: 0;
+    padding: 0.2em 0.6em;
+    font-size: 0.85rem;
 }

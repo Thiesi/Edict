@@ -684,6 +684,20 @@ form.inline {
     color: var(--warn);
 }
 
+/* Published, but not live until its time: the published colour as an outline only. */
+.pill-scheduled {
+    background: none;
+    box-shadow: inset 0 0 0 1px var(--ok);
+    color: var(--ok);
+}
+
+/* When a scheduled piece goes live, next to its pill. */
+.when {
+    color: var(--muted);
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+
 .lang-mark {
     padding: 0 0.35em;
     border: 1px solid var(--line-strong);
@@ -807,6 +821,153 @@ form.inline {
     .cell-unit {
         display: inline;
         color: var(--muted);
+    }
+}
+
+/* The Media page: a small picture per row, where each item is used, and Delete. */
+.tab-count {
+    margin-left: 0.2em;
+    color: var(--muted);
+    font-size: 0.85em;
+    font-variant-numeric: tabular-nums;
+}
+
+.sort-links {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-1) var(--space-3);
+    margin: 0 0 var(--space-4);
+    color: var(--muted);
+}
+
+.sort-links a {
+    color: var(--muted);
+}
+
+.sort-links a[aria-current='true'] {
+    color: var(--ink);
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.sort-note {
+    color: var(--ink);
+}
+
+.media-thumb {
+    display: grid;
+    place-items: center;
+    width: 4rem;
+    height: 4rem;
+    border-radius: 4px;
+    background: var(--idle-bg);
+    color: var(--idle);
+    overflow: hidden;
+}
+
+.media-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.media-thumb svg {
+    width: 1.75rem;
+    height: 1.75rem;
+    fill: none;
+    stroke: currentcolor;
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.media-list .cell-thumb {
+    width: 4rem;
+}
+
+.media-name {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.media-error,
+.media-original,
+.old-versions,
+.delete-why {
+    display: block;
+    color: var(--muted);
+    font-size: 0.8rem;
+}
+
+.media-original {
+    white-space: nowrap;
+}
+
+.uses {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.uses li + li {
+    margin-top: var(--space-1);
+}
+
+.uses small {
+    color: var(--muted);
+}
+
+.unused {
+    color: var(--muted);
+}
+
+.media-list td.cell-delete {
+    width: 11rem;
+}
+
+.media-list .cell-date {
+    white-space: nowrap;
+}
+
+.media-list .cell-delete label {
+    white-space: nowrap;
+}
+
+.delete-why {
+    margin-top: var(--space-1);
+}
+
+.pager {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3);
+    margin: var(--space-4) 0;
+}
+
+@media (max-width: 40rem) {
+    .media-list .cell-thumb {
+        width: auto;
+    }
+
+    .media-list .cell-title {
+        flex: 1 1 0;
+        min-width: 10rem;
+    }
+
+    .media-list td.cell-delete {
+        width: auto;
+    }
+
+    .media-list td.num {
+        text-align: left;
+    }
+
+    .media-original {
+        display: inline;
+        margin-left: 0.3em;
     }
 }
 

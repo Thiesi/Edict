@@ -656,14 +656,24 @@ const showCoverMedia = (media) => {
     field('cover-choose').textContent = fields.cover.value === '' ? 'Choose a cover image…' : 'Choose another…';
 };
 
+const coverMissing = field('cover-missing');
+
 function showCover() {
     const id = fields.cover.value;
     showCoverMedia(null);
+    coverMissing.hidden = true;
     if (id === '') {
         return;
     }
     fetch(`/admin/media/${id}`, { credentials: 'same-origin', redirect: 'manual' })
-        .then((response) => (response.ok ? response.json() : null))
+        .then((response) => {
+            // Deleted from the Media page, and brought back here by restoring an old version.
+            if (response.status === 404 && fields.cover.value === id) {
+                coverMissing.hidden = false;
+            }
+
+            return response.ok ? response.json() : null;
+        })
         .then((media) => {
             if (fields.cover.value === id) {
                 showCoverMedia(media);
@@ -674,6 +684,7 @@ function showCover() {
 
 function setCover(media) {
     fields.cover.value = media === null ? '' : String(media.id);
+    coverMissing.hidden = true;
     showCoverMedia(media);
     changed();
 }
@@ -750,19 +761,20 @@ const showErrors = (messages) => {
     }
 };
 
-field('publish')?.addEventListener('click', async () => {
+// at: a datetime-local value in the site's time to schedule for, or '' for now. The server checks it.
+const publish = async (at) => {
     showErrors([]);
     if (!(await flush())) {
-        showErrors(['Publishing has to wait until the text is saved.']);
+        showErrors([`${at ? 'Scheduling' : 'Publishing'} has to wait until the text is saved.`]);
 
         return;
     }
 
     let response;
     try {
-        response = await post('publish', { version: state.version });
+        response = await post('publish', at ? { version: state.version, at } : { version: state.version });
     } catch {
-        showErrors(['No connection. Nothing was published.']);
+        showErrors([`No connection. Nothing was ${at ? 'scheduled' : 'published'}.`]);
 
         return;
     }
@@ -772,10 +784,50 @@ field('publish')?.addEventListener('click', async () => {
         window.location.assign(data.redirect);
     } else if (data.errors) {
         showErrors(Object.values(data.errors));
+        if (data.errors.at) {
+            showSchedule(true);
+        }
     } else {
         showErrors([data.error ?? 'Nothing was published. Please reload the page and try again.']);
     }
+};
+
+/* Scheduling: a time in the field turns Publish into Schedule */
+
+const publishButton = field('publish');
+const publishAt = field('publish-at');
+const schedulePanel = field('schedule-panel');
+const scheduleToggles = [field('schedule-toggle'), field('schedule-change')].filter(Boolean);
+
+const showPublishLabel = () => {
+    if (publishButton) {
+        publishButton.textContent = publishAt?.value ? 'Schedule' : publishButton.dataset.nowLabel;
+    }
+};
+
+const showSchedule = (open) => {
+    if (!schedulePanel) {
+        return;
+    }
+    schedulePanel.hidden = !open;
+    scheduleToggles.forEach((toggle) => toggle.setAttribute('aria-expanded', String(open)));
+    if (open) {
+        publishAt.focus();
+    }
+};
+
+scheduleToggles.forEach((toggle) => toggle.addEventListener('click', () => showSchedule(schedulePanel.hidden)));
+publishAt?.addEventListener('input', showPublishLabel);
+field('publish-at-clear')?.addEventListener('click', () => {
+    publishAt.value = '';
+    showPublishLabel();
+    publishAt.focus();
 });
+// A reload can keep what was typed in the field: the button has to say what it will do.
+showPublishLabel();
+
+publishButton?.addEventListener('click', () => publish(publishAt?.value ?? ''));
+field('publish-now')?.addEventListener('click', () => publish(''));
 
 editor.commands.focus('end');
 lastBody = JSON.stringify(editor.getJSON());
