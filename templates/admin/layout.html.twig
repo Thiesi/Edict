@@ -1,0 +1,58 @@
+{% extends 'base.html.twig' %}
+
+{#
+    The frame of every admin page except the editor and the sign-in page: the menu at
+    the side, the page beside it. A page says where it is with {% set section = '…' %}.
+    The admin's look is its own (admin.css) and never follows the site's theme.
+#}
+
+{% block head %}
+    <link rel="stylesheet" href="/assets/admin/admin.css?v={{ asset_version }}">
+    {% block admin_head %}{% endblock %}
+{% endblock %}
+
+{% block body_class %}admin{% endblock %}
+
+{% block body %}
+    {% set section = section|default('') %}
+    {% set waiting = admin_held_comments() %}
+    <a class="skip-link" href="#content">Skip to the content</a>
+    <div class="admin-shell">
+        <header class="admin-side">
+            <a class="admin-brand" href="/admin"><img src="/favicon.svg" alt="" width="28" height="28"><span>Edict</span></a>
+            <nav class="admin-nav" aria-label="Admin">
+                <ul>
+                    {% for id, item in {
+                        overview: {url: '/admin', label: 'Overview'},
+                        articles: {url: '/admin/articles', label: 'Articles'},
+                        pages: {url: '/admin/articles?kind=page', label: 'Pages'},
+                        comments: {url: '/admin/comments', label: 'Comments'},
+                        tags: {url: '/admin/tags', label: 'Tags'},
+                        site: {url: '/admin/site', label: 'Site'},
+                        themes: {url: '/admin/themes', label: 'Themes'},
+                        passkeys: {url: '/admin/passkeys', label: 'Passkeys'},
+                    } %}
+                        <li{% if id == 'site' %} class="nav-gap"{% endif %}>
+                            <a href="{{ item.url }}"{% if id == section %} aria-current="page"{% endif %}>
+                                {{- item.label -}}
+                                {%- if id == 'comments' and waiting %} <span class="admin-count"><span class="visually-hidden">, </span>{{ waiting }}<span class="visually-hidden"> waiting</span></span>{% endif -%}
+                            </a>
+                        </li>
+                    {% endfor %}
+                </ul>
+            </nav>
+            <div class="admin-side-end">
+                <a href="/">View the site</a>
+                {% if csrf_token|default('') %}
+                    <form method="post" action="/admin/logout">
+                        <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                        <button class="button-quiet button-small" type="submit">Sign out</button>
+                    </form>
+                {% endif %}
+            </div>
+        </header>
+        <main class="admin-main" id="content">
+            {% block main %}{% endblock %}
+        </main>
+    </div>
+{% endblock %}

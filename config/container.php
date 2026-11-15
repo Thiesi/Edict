@@ -10,6 +10,7 @@ use Edict\Config;
 use Edict\Content\Article;
 use Edict\Content\ArticleDate;
 use Edict\Content\BodyRenderer;
+use Edict\Content\Comments;
 use Edict\Content\CommentText;
 use Edict\Database\ConnectionFactory;
 use Edict\Database\Migrator;
@@ -68,6 +69,8 @@ return [
         // The theme, name, menu and footer. Read only by pages that show them.
         $twig->addFunction(new TwigFunction('site', static fn(): SiteSettings => $services->get(Settings::class)->site()));
         $twig->addFunction(new TwigFunction('site_look', static fn(): Look => $services->get(Look::class)));
+        // For the admin menu's badge. Asked only by admin pages, so nobody else pays for the query.
+        $twig->addFunction(new TwigFunction('admin_held_comments', static fn(): int => $services->get(Comments::class)->heldCount()));
         $twig->addFunction(new TwigFunction('theme_name', static fn(string $id): string => Themes::ALL[$id]['name'] ?? $id));
         $twig->addFilter(new TwigFilter('article_date', ArticleDate::format(...)));
         $twig->addFilter(new TwigFilter('article_iso', ArticleDate::iso(...)));

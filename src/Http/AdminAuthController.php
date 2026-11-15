@@ -9,6 +9,7 @@ use Edict\Auth\LoginThrottle;
 use Edict\Auth\OAuth\ProviderRegistry;
 use Edict\Auth\Session;
 use Edict\Auth\SessionStore;
+use Edict\Content\Articles;
 use Edict\Content\Comments;
 use Edict\Http\Middleware\CsrfMiddleware;
 use Edict\Http\Middleware\SessionMiddleware;
@@ -19,6 +20,9 @@ use Twig\Environment;
 
 final readonly class AdminAuthController
 {
+    /** How many unfinished pieces the dashboard offers to continue. */
+    private const DASHBOARD_DRAFTS = 5;
+
     public function __construct(
         private Environment $twig,
         private AdminAccount $admin,
@@ -28,6 +32,7 @@ final readonly class AdminAuthController
         private ProviderRegistry $providers,
         private Comments $comments,
         private MediaLibrary $library,
+        private Articles $articles,
     ) {}
 
     public function showLogin(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
@@ -82,6 +87,7 @@ final readonly class AdminAuthController
         $response->getBody()->write($this->twig->render('admin/dashboard.html.twig', [
             'display_name' => $session?->displayName,
             'held_comments' => $this->comments->heldCount(),
+            'drafts' => $this->articles->unfinished(self::DASHBOARD_DRAFTS),
             'storage' => $this->library->usage(),
             'csrf_field' => CsrfMiddleware::FIELD,
             'csrf_token' => $session?->csrfToken,

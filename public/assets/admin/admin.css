@@ -1,0 +1,913 @@
+/*
+ * The admin's own look: a quiet workshop. Neutral, the same whatever theme the site
+ * wears, light and dark, system fonts only. The one colour is the red of Edict's
+ * seal, kept for the main action on a page, the current place in the menu, and
+ * whatever waits for the admin. A status is always a word in a pill, never colour alone.
+ */
+:root {
+    color-scheme: light dark;
+    --bg: #f6f6f4;
+    --surface: #fff;
+    --ink: #1b1c20;
+    --muted: #5c5e66;
+    --line: #dfdfda;
+    --line-strong: #8f9199;
+    --hover: #eeeeea;
+    --accent: #9e1f25;
+    --accent-ink: #fff;
+    --danger: #b3261e;
+    --ok-bg: #dff1e6;
+    --ok: #175c39;
+    --warn-bg: #fbecc8;
+    --warn: #6f4a00;
+    --idle-bg: #e9e9e5;
+    --idle: #4c4e55;
+    --radius: 6px;
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-5: 1.5rem;
+    --space-6: 2rem;
+    --motion-fast: 120ms;
+    --font: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --font-mono: ui-monospace, 'Cascadia Mono', Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #131418;
+        --surface: #1b1c21;
+        --ink: #e8e8e6;
+        --muted: #a0a2aa;
+        --line: #303238;
+        --line-strong: #6f727b;
+        --hover: #24262c;
+        --accent: #ee8a8e;
+        --accent-ink: #1b0b0c;
+        --danger: #ff8a80;
+        --ok-bg: #173526;
+        --ok: #8fdcb0;
+        --warn-bg: #3b2e0c;
+        --warn: #f0cd7c;
+        --idle-bg: #2a2c32;
+        --idle: #b9bbc2;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    :root {
+        --motion-fast: 0s;
+    }
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font);
+    font-size: 0.9375rem;
+    line-height: 1.5;
+    overflow-wrap: break-word;
+}
+
+h1 {
+    margin: 0;
+    font-size: 1.5rem;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+}
+
+h2 {
+    margin: 0 0 var(--space-3);
+    font-size: 1.05rem;
+    line-height: 1.3;
+}
+
+h3 {
+    margin: var(--space-4) 0 var(--space-2);
+    font-size: 0.95rem;
+}
+
+p {
+    margin: 0 0 var(--space-3);
+}
+
+a {
+    color: var(--accent);
+    text-underline-offset: 0.15em;
+}
+
+small {
+    color: var(--muted);
+    font-size: 0.85rem;
+}
+
+code {
+    padding: 0.05em 0.3em;
+    border-radius: 4px;
+    background: var(--hover);
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+}
+
+blockquote {
+    margin: var(--space-2) 0 var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border-left: 3px solid var(--line-strong);
+    background: var(--bg);
+}
+
+blockquote p {
+    margin: 0;
+}
+
+:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+/* Buttons are given a display above, which would otherwise undo the hidden attribute. */
+[hidden] {
+    display: none !important;
+}
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.skip-link {
+    position: absolute;
+    top: -10rem;
+    left: var(--space-3);
+    z-index: 10;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius);
+    background: var(--accent);
+    color: var(--accent-ink);
+}
+
+.skip-link:focus {
+    top: var(--space-2);
+}
+
+/* Buttons and fields. States: hover, pressed, focus (the ring above), disabled. */
+button,
+.button {
+    display: inline-block;
+    margin: 0;
+    padding: 0.4em 0.85em;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+    font-weight: 550;
+    line-height: 1.4;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color var(--motion-fast), border-color var(--motion-fast), transform var(--motion-fast);
+}
+
+button:hover,
+.button:hover {
+    background: var(--hover);
+}
+
+button:active,
+.button:active {
+    transform: translateY(1px);
+}
+
+button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.button-primary {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--accent-ink);
+}
+
+.button-primary:hover {
+    background: color-mix(in srgb, var(--accent) 88%, var(--ink));
+}
+
+.button-danger {
+    border-color: var(--danger);
+    color: var(--danger);
+}
+
+.button-quiet {
+    border-color: transparent;
+    background: none;
+    color: var(--muted);
+    font-weight: 400;
+}
+
+.button-quiet:hover {
+    border-color: var(--line);
+    color: var(--ink);
+}
+
+.button-small {
+    padding: 0.2em 0.6em;
+    font-size: 0.85rem;
+}
+
+input:not([type='checkbox'], [type='radio'], [type='file'], [type='color'], [type='range'], [type='hidden']),
+select,
+textarea {
+    max-width: 100%;
+    margin: 0;
+    padding: 0.4em 0.6em;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+    line-height: 1.4;
+}
+
+textarea {
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    resize: vertical;
+}
+
+input[aria-invalid='true'],
+select[aria-invalid='true'],
+textarea[aria-invalid='true'] {
+    border-color: var(--danger);
+    outline: 1px solid var(--danger);
+}
+
+input[type='checkbox'],
+input[type='radio'] {
+    accent-color: var(--accent);
+}
+
+input[type='file'] {
+    max-width: 100%;
+    font: inherit;
+}
+
+label {
+    font-weight: 550;
+}
+
+fieldset {
+    margin: 0 0 var(--space-4);
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+}
+
+fieldset label,
+label.check {
+    font-weight: 400;
+}
+
+legend {
+    padding: 0 var(--space-2);
+    font-weight: 600;
+}
+
+/* The frame: the menu at the side, the page beside it. On a phone the menu lies across the top. */
+.admin-shell {
+    display: grid;
+    grid-template-columns: 13.5rem minmax(0, 1fr);
+    min-height: 100vh;
+}
+
+.admin-side {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    padding: var(--space-4) var(--space-3);
+    border-right: 1px solid var(--line);
+    background: var(--surface);
+}
+
+.admin-brand {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 0 var(--space-2);
+    color: var(--ink);
+    font-size: 1.05rem;
+    font-weight: 650;
+    text-decoration: none;
+}
+
+.admin-brand img {
+    display: block;
+    width: 1.75rem;
+    height: 1.75rem;
+}
+
+.admin-nav ul {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.admin-nav a {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    padding: 0.4rem var(--space-2);
+    border-radius: var(--radius);
+    color: var(--muted);
+    text-decoration: none;
+    transition: background-color var(--motion-fast), color var(--motion-fast);
+}
+
+.admin-nav a:hover {
+    background: var(--hover);
+    color: var(--ink);
+}
+
+.admin-nav a[aria-current='page'] {
+    background: var(--hover);
+    box-shadow: inset 3px 0 0 var(--accent);
+    color: var(--ink);
+    font-weight: 600;
+}
+
+.admin-nav .nav-gap {
+    margin-top: var(--space-3);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--line);
+}
+
+.admin-count {
+    min-width: 1.5em;
+    padding: 0 0.45em;
+    border-radius: 99px;
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-align: center;
+}
+
+.admin-side-end {
+    display: grid;
+    gap: var(--space-2);
+    margin-top: auto;
+    padding: var(--space-3) var(--space-2) 0;
+    border-top: 1px solid var(--line);
+    font-size: 0.875rem;
+}
+
+.admin-side-end a {
+    color: var(--muted);
+}
+
+.admin-main {
+    min-width: 0;
+    max-width: 62rem;
+    padding: var(--space-5) var(--space-6) var(--space-6);
+}
+
+@media (max-width: 48rem) {
+    .admin-shell {
+        grid-template-columns: minmax(0, 1fr);
+        min-height: 0;
+    }
+
+    .admin-side {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-2) var(--space-3);
+        padding: var(--space-2) var(--space-3);
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+    }
+
+    /* Out of sight, still the link's name. */
+    .admin-side .admin-brand span {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+    }
+
+    /* The menu takes a row of its own under the seal, and scrolls sideways if it must. */
+    .admin-nav {
+        flex: 1 1 100%;
+        order: 3;
+        min-width: 0;
+        overflow-x: auto;
+    }
+
+    .admin-nav ul {
+        flex-direction: row;
+    }
+
+    .admin-nav a {
+        white-space: nowrap;
+    }
+
+    .admin-nav a[aria-current='page'] {
+        box-shadow: inset 0 -3px 0 var(--accent);
+    }
+
+    .admin-nav .nav-gap {
+        margin: 0 0 0 var(--space-2);
+        padding: 0 0 0 var(--space-2);
+        border-top: 0;
+        border-left: 1px solid var(--line);
+    }
+
+    .admin-side-end {
+        display: flex;
+        align-items: center;
+        margin: 0 0 0 auto;
+        padding: 0;
+        border-top: 0;
+    }
+
+    .admin-main {
+        padding: var(--space-4) var(--space-3) var(--space-6);
+    }
+}
+
+/* The top of a page: its name, and the one thing most often done there. */
+.page-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2) var(--space-4);
+    margin-bottom: var(--space-4);
+}
+
+.page-lede {
+    color: var(--muted);
+}
+
+.tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+    margin: 0 0 var(--space-4);
+    border-bottom: 1px solid var(--line);
+}
+
+.tabs a {
+    margin-bottom: -1px;
+    padding: 0.45rem 0.75rem;
+    border-bottom: 2px solid transparent;
+    color: var(--muted);
+    text-decoration: none;
+}
+
+.tabs a:hover {
+    color: var(--ink);
+}
+
+.tabs a[aria-current='page'] {
+    border-bottom-color: var(--accent);
+    color: var(--ink);
+    font-weight: 600;
+}
+
+/* Messages. */
+.notice,
+.attention {
+    margin: 0 0 var(--space-4);
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius);
+    background: var(--ok-bg);
+    color: var(--ok);
+    font-weight: 550;
+}
+
+.notice-error {
+    background: var(--surface);
+    box-shadow: inset 4px 0 0 var(--danger);
+    color: var(--ink);
+}
+
+.attention {
+    background: var(--warn-bg);
+    color: var(--warn);
+}
+
+.attention a,
+.notice a {
+    color: inherit;
+}
+
+.field-error {
+    display: block;
+    margin-top: var(--space-1);
+    color: var(--ink);
+    font-weight: 600;
+}
+
+.field-error::before {
+    content: '';
+    display: inline-block;
+    width: 0.6em;
+    height: 0.6em;
+    margin-right: 0.4em;
+    border-radius: 50%;
+    background: var(--danger);
+}
+
+.empty {
+    margin: var(--space-4) 0;
+    padding: var(--space-5) var(--space-4);
+    border: 1px dashed var(--line-strong);
+    border-radius: var(--radius);
+    color: var(--muted);
+    text-align: center;
+}
+
+/* Panels and cards. */
+.panel {
+    margin: 0 0 var(--space-4);
+    padding: var(--space-4) var(--space-5);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+}
+
+.panel > :last-child,
+.panel form > :last-child {
+    margin-bottom: 0;
+}
+
+.cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr));
+    gap: var(--space-4);
+}
+
+.cards > .panel {
+    margin: 0;
+}
+
+.card-label {
+    margin: 0 0 var(--space-2);
+    color: var(--muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+}
+
+.big-number {
+    font-size: 1.5rem;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+}
+
+.big-number small {
+    font-size: 0.9rem;
+    font-weight: 400;
+}
+
+.meter {
+    display: block;
+    width: 100%;
+    height: 0.5rem;
+    margin: var(--space-2) 0;
+    border: 0;
+    border-radius: 99px;
+    background: var(--idle-bg);
+    appearance: none;
+    overflow: hidden;
+}
+
+.meter::-webkit-progress-bar {
+    background: var(--idle-bg);
+}
+
+.meter::-webkit-progress-value {
+    border-radius: 99px;
+    background: var(--ok);
+}
+
+.meter::-moz-progress-bar {
+    background: var(--ok);
+}
+
+.meter.is-low::-webkit-progress-value {
+    background: var(--danger);
+}
+
+.meter.is-low::-moz-progress-bar {
+    background: var(--danger);
+}
+
+.actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    margin: var(--space-3) 0 0;
+}
+
+form.inline {
+    display: inline;
+}
+
+.plain-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.plain-list > li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-1) var(--space-3);
+    padding: var(--space-2) 0;
+    border-top: 1px solid var(--line);
+}
+
+.plain-list > li:first-child {
+    border-top: 0;
+}
+
+/* A status is a word in a pill. The first letter is raised here; the word comes plain from the server. */
+.pill {
+    display: inline-block;
+    padding: 0.05em 0.6em;
+    border-radius: 99px;
+    background: var(--idle-bg);
+    color: var(--idle);
+    font-size: 0.78rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.pill::first-letter {
+    text-transform: uppercase;
+}
+
+.pill-published,
+.pill-ok {
+    background: var(--ok-bg);
+    color: var(--ok);
+}
+
+.pill-pending,
+.pill-held {
+    background: var(--warn-bg);
+    color: var(--warn);
+}
+
+.lang-mark {
+    padding: 0 0.35em;
+    border: 1px solid var(--line-strong);
+    border-radius: 4px;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+/* Lists as tables. On a phone each row becomes a small card. */
+.list {
+    width: 100%;
+    border-collapse: collapse;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+}
+
+.list th {
+    padding: 0.55rem 0.75rem;
+    color: var(--muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-align: left;
+    text-transform: uppercase;
+}
+
+.list td {
+    padding: 0.6rem 0.75rem;
+    border-top: 1px solid var(--line);
+    vertical-align: middle;
+}
+
+.list tbody tr:hover td {
+    background: var(--hover);
+}
+
+.list .cell-title a {
+    color: var(--ink);
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.list .cell-title a:hover {
+    text-decoration: underline;
+}
+
+.list .address {
+    display: block;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    overflow-wrap: anywhere;
+}
+
+.list .num {
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+/* A number's unit, said only where the column heading is out of sight (phones). */
+.cell-unit {
+    display: none;
+}
+
+.list td form {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+@media (max-width: 40rem) {
+    .list thead {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+    }
+
+    .list,
+    .list tbody {
+        display: block;
+    }
+
+    .list tr {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-1) var(--space-3);
+        padding: 0.65rem 0.75rem;
+        border-top: 1px solid var(--line);
+    }
+
+    .list tbody tr:first-child {
+        border-top: 0;
+    }
+
+    .list td {
+        padding: 0;
+        border: 0;
+    }
+
+    .list .cell-title,
+    .list .cell-wide {
+        flex: 1 1 100%;
+    }
+
+    .list tbody tr:hover td {
+        background: none;
+    }
+
+    .cell-unit {
+        display: inline;
+        color: var(--muted);
+    }
+}
+
+/* The comments queue. */
+.queue {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.queue > li {
+    padding: var(--space-3) 0;
+    border-top: 1px solid var(--line);
+}
+
+.queue > li:first-child {
+    padding-top: 0;
+    border-top: 0;
+}
+
+.queue-meta {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.875rem;
+}
+
+.queue-meta strong {
+    color: var(--ink);
+}
+
+.field {
+    margin: 0 0 var(--space-4);
+}
+
+.field > label {
+    display: block;
+    margin-bottom: var(--space-1);
+}
+
+.field small {
+    display: block;
+    margin-top: var(--space-1);
+}
+
+.field small.field-error {
+    color: var(--ink);
+}
+
+/* The sign-in page: one card in the middle. */
+.admin-login {
+    display: grid;
+    min-height: 100vh;
+    place-items: center;
+    padding: var(--space-4);
+}
+
+.login-card {
+    width: 100%;
+    max-width: 24rem;
+    padding: var(--space-5);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+}
+
+.login-card .admin-brand {
+    margin-bottom: var(--space-4);
+    padding: 0;
+}
+
+.login-card h1 {
+    margin-bottom: var(--space-4);
+}
+
+.login-card h2 {
+    margin-top: var(--space-5);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.login-card .field input {
+    width: 100%;
+}
+
+.login-card .button-primary,
+.login-card .button {
+    width: 100%;
+    text-align: center;
+}
+
+.login-card ul {
+    display: grid;
+    gap: var(--space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+/* The commit staging runs, shown by base.html.twig under every page. */
+body > small {
+    position: fixed;
+    right: var(--space-2);
+    bottom: var(--space-1);
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+}

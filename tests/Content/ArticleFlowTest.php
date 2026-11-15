@@ -6,6 +6,7 @@ namespace Edict\Tests\Content;
 
 use Edict\Auth\AdminAccount;
 use Edict\Auth\SessionStore;
+use Edict\Content\Article;
 use Edict\Content\Articles;
 use Edict\Content\Slugs;
 use Edict\Content\StaleDraft;
@@ -981,6 +982,35 @@ final class ArticleFlowTest extends DbTestCase
         $id = $this->published(['title' => 'About']);
 
         self::assertSame('about-2', $this->service(Articles::class)->find($id)?->slug);
+    }
+
+    public function testTheDashboardOffersWhatIsUnfinished(): void
+    {
+        self::assertStringContainsString('Nothing is unfinished', $this->dashboard());
+
+        $draft = $this->saved(['title' => 'Only a draft']);
+        $this->published(['title' => 'Done and dusted']);
+        $pending = $this->published(['title' => 'Live version']);
+        $this->save($pending, ['title' => 'Being reworked']);
+        $page = $this->saved(['title' => 'A page in progress'], 'page');
+        $binned = $this->saved(['title' => 'Thrown away']);
+        $this->adminPost("/admin/articles/$binned/trash");
+
+        $dashboard = $this->dashboard();
+        self::assertStringContainsString('<a href="/admin/articles/' . $draft . '">Only a draft</a>', $dashboard);
+        self::assertStringContainsString('<a href="/admin/articles/' . $pending . '">Being reworked</a>', $dashboard, 'by its working title');
+        self::assertStringContainsString('<a href="/admin/articles/' . $page . '">A page in progress</a>', $dashboard, 'pages too');
+        self::assertStringNotContainsString('Done and dusted', $dashboard, 'nothing left to do there');
+        self::assertStringNotContainsString('Thrown away', $dashboard, 'not from the trash');
+        self::assertStringNotContainsString('Nothing is unfinished', $dashboard);
+
+        $unfinished = $this->service(Articles::class)->unfinished(2);
+        self::assertSame([$page, $pending], array_map(static fn(Article $article): int => $article->id, $unfinished), 'most recently changed first, and no more than asked for');
+    }
+
+    private function dashboard(): string
+    {
+        return (string) $this->get('/admin', $this->admin)->getBody();
     }
 
     public function testTrashRestoreAndPermanentDelete(): void

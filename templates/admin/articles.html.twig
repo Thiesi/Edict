@@ -1,62 +1,62 @@
-{% extends 'base.html.twig' %}
+{% extends 'admin/layout.html.twig' %}
 
 {% set noun = kind == 'page' ? 'page' : 'article' %}
 {% set heading = trash ? 'Trash' : (kind == 'page' ? 'Pages' : 'Articles') %}
+{% set section = kind == 'page' ? 'pages' : 'articles' %}
 
 {% block title %}{{ heading }} · Edict{% endblock %}
 
-{% block body %}
-    <main>
+{% block main %}
+    <header class="page-head">
         <h1>{{ heading }}</h1>
-        <p>
-            <a href="/admin">Back to admin</a>
-            · <a href="/admin/articles">Articles</a>
-            · <a href="/admin/articles?kind=page">Pages</a>
-            · <a href="/admin/articles?trash=1&amp;kind={{ kind }}">Trash</a>
-        </p>
         {% if not trash %}
             <form method="post" action="/admin/articles">
                 <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
                 <input type="hidden" name="kind" value="{{ kind }}">
-                <button type="submit">New {{ noun }}</button>
+                <button class="button-primary" type="submit">New {{ noun }}</button>
             </form>
-        {% else %}
-            <p>Deleted permanently after {{ trash_days }} days in the trash.</p>
         {% endif %}
+    </header>
+    <nav class="tabs" aria-label="{{ kind == 'page' ? 'Pages' : 'Articles' }}">
+        <a href="/admin/articles{{ kind == 'page' ? '?kind=page' : '' }}"{% if not trash %} aria-current="page"{% endif %}>{{ kind == 'page' ? 'Pages' : 'Articles' }}</a>
+        <a href="/admin/articles?trash=1&amp;kind={{ kind }}"{% if trash %} aria-current="page"{% endif %}>Trash</a>
+    </nav>
+    {% if trash %}<p class="page-lede">Deleted permanently after {{ trash_days }} days in the trash.</p>{% endif %}
 
-        {% if articles %}
-            <table>
-                <thead><tr><th>Title</th><th>Status</th><th>Language</th><th>Address</th>{% if likes %}<th>Likes</th>{% endif %}{% if trash %}<th>Actions</th>{% endif %}</tr></thead>
-                <tbody>
-                    {% for article in articles %}
-                        <tr>
-                            <td>{% if trash %}{{ article.workingTitle }}{% else %}<a href="/admin/articles/{{ article.id }}">{{ article.workingTitle }}</a>{% endif %}</td>
-                            <td>{{ article.status }}{% if article.hasPendingChanges %}, changes pending{% endif %}</td>
-                            <td>{{ article.lang|upper }}</td>
-                            <td>/{{ article.slug }}</td>
-                            {% if likes %}
-                                {% set count = likes[article.id] ?? {real: 0, adjustment: 0, shown: 0} %}
-                                <td>{{ count.shown }}{% if count.adjustment != 0 %} <small>({{ count.real }} real, {{ count.adjustment > 0 ? '+' : '' }}{{ count.adjustment }})</small>{% endif %}</td>
-                            {% endif %}
-                            {% if trash %}
-                                <td>
-                                    <form method="post" action="/admin/articles/{{ article.id }}/restore">
-                                        <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
-                                        <button type="submit">Restore</button>
-                                    </form>
-                                    <form method="post" action="/admin/articles/{{ article.id }}/delete">
-                                        <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
-                                        <label><input type="checkbox" name="confirm" value="yes" required> Delete permanently</label>
-                                        <button type="submit">Delete</button>
-                                    </form>
-                                </td>
-                            {% endif %}
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        {% else %}
-            <p>{{ trash ? 'The trash is empty.' : 'Nothing here yet.' }}</p>
-        {% endif %}
-    </main>
+    {% if articles %}
+        <table class="list" role="table">
+            <thead><tr role="row"><th role="columnheader">Title</th><th role="columnheader">Status</th><th role="columnheader">Language</th>{% if likes %}<th role="columnheader" class="num">Likes</th>{% endif %}{% if trash %}<th role="columnheader">Actions</th>{% endif %}</tr></thead>
+            <tbody>
+                {% for article in articles %}
+                    <tr role="row">
+                        <td role="cell" class="cell-title">
+                            {% if trash %}{{ article.workingTitle }}{% else %}<a href="/admin/articles/{{ article.id }}">{{ article.workingTitle }}</a>{% endif %}
+                            <span class="address">/{{ article.slug }}</span>
+                        </td>
+                        <td role="cell"><span class="pill pill-{{ article.status }}">{{ article.status }}</span>{% if article.hasPendingChanges %}<span class="visually-hidden">, </span> <span class="pill pill-pending">changes pending</span>{% endif %}</td>
+                        <td role="cell"><span class="lang-mark">{{ article.lang|upper }}</span></td>
+                        {% if likes %}
+                            {% set count = likes[article.id] ?? {real: 0, adjustment: 0, shown: 0} %}
+                            <td role="cell" class="num">{{ count.shown }}{% if count.adjustment != 0 %} <small>({{ count.real }} real, {{ count.adjustment > 0 ? '+' : '' }}{{ count.adjustment }})</small>{% endif %}<span class="cell-unit"> {{ count.shown == 1 ? 'like' : 'likes' }}</span></td>
+                        {% endif %}
+                        {% if trash %}
+                            <td role="cell" class="cell-wide">
+                                <form method="post" action="/admin/articles/{{ article.id }}/restore">
+                                    <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                                    <button class="button-small" type="submit">Restore</button>
+                                </form>
+                                <form method="post" action="/admin/articles/{{ article.id }}/delete">
+                                    <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                                    <label class="check"><input type="checkbox" name="confirm" value="yes" required> Delete permanently</label>
+                                    <button class="button-small button-danger" type="submit">Delete</button>
+                                </form>
+                            </td>
+                        {% endif %}
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="empty">{{ trash ? 'The trash is empty.' : 'Nothing here yet.' }}</p>
+    {% endif %}
 {% endblock %}

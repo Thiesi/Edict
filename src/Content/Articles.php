@@ -439,6 +439,24 @@ final readonly class Articles
         return self::all($stmt);
     }
 
+    /**
+     * What the admin has not finished: drafts, and published pieces with changes
+     * readers don't see yet. Articles and pages alike, most recently changed first.
+     *
+     * @return list<Article>
+     */
+    public function unfinished(int $limit): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT ' . self::COLUMNS . " FROM article a
+             WHERE a.deleted_at IS NULL AND (a.status <> 'published' OR a.draft IS NOT NULL)
+             ORDER BY a.updated_at DESC, a.id DESC LIMIT ?",
+        );
+        $stmt->execute([$limit]);
+
+        return self::all($stmt);
+    }
+
     public function lastLanguage(): string
     {
         $stmt = $this->pdo->query('SELECT lang FROM article ORDER BY created_at DESC, id DESC LIMIT 1');
