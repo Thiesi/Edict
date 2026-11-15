@@ -17,8 +17,11 @@
     --border: #d9ccb2;
     --surface: #ece2cd;
     --margin-line: #c8786a;
+    --frame: #fff;
     --measure: 38rem;
     --gutter: 1.5rem;
+    --radius: 3px;
+    --control-border: var(--fg);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -31,6 +34,7 @@
         --border: #4a4236;
         --surface: #2c2720;
         --margin-line: #b06a5d;
+        --frame: #d9cfbb;
     }
 }
 
@@ -39,8 +43,30 @@ body {
     line-height: 1.65;
 }
 
+/*
+ * A notebook page, with its red margin line from the top edge to the bottom one:
+ * header, content and footer share one width and each carries its piece of the line.
+ */
+body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
 .site-header {
-    padding: 2.5rem var(--gutter) 1rem;
+    padding: 0;
+}
+
+.site-header-inner {
+    max-width: calc(var(--measure) + 2 * var(--gutter));
+    padding: 2.5rem var(--gutter) 1rem calc(var(--gutter) + 1.25rem);
+    border-left: 2px solid var(--margin-line);
+}
+
+.site-header,
+.site-content,
+.site-footer {
+    width: 100%;
 }
 
 .site-title {
@@ -58,7 +84,6 @@ body {
     border-bottom: 1px dotted currentColor;
 }
 
-/* A notebook page, with its red margin line. */
 .site-content {
     padding: 1.5rem var(--gutter) 2rem calc(var(--gutter) + 1.25rem);
     border-left: 2px solid var(--margin-line);
@@ -105,7 +130,7 @@ article > p:has(> time) {
 
 .article-cover-thumb img {
     padding: 0.35rem 0.35rem 1rem;
-    background: #fff;
+    background: var(--frame);
     box-shadow: 0 1px 3px rgb(0 0 0 / 25%);
     transform: rotate(2deg);
 }
@@ -129,5 +154,91 @@ blockquote::before {
 }
 
 .site-footer {
+    flex: 1 0 auto;
+    margin-top: 0;
+    padding: 2rem var(--gutter) 2rem calc(var(--gutter) + 1.25rem);
+    border-top: 0;
+    border-left: 2px solid var(--margin-line);
+    font-style: italic;
+}
+
+.site-footer nav {
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+}
+
+/* Pictures in the text are prints laid on the page: a quieter cousin of the list's polaroids. */
+figure.media-image img,
+figure.article-cover img {
+    padding: 0.4rem;
+    background: var(--frame);
+    box-shadow: 0 1px 3px rgb(0 0 0 / 22%);
+}
+
+/* Buttons are stamped labels; fields are lines to write on. */
+button,
+.button {
+    letter-spacing: 0.02em;
+}
+
+.button-primary {
+    border-color: var(--accent);
+}
+
+input:not([type='checkbox'], [type='radio'], [type='file'], [type='color'], [type='range'], [type='hidden']) {
+    border: 0;
+    border-bottom: 1px solid var(--muted);
+    border-radius: 0;
+    background: none;
+}
+
+input:not([type='checkbox'], [type='radio'], [type='file'], [type='color'], [type='range'], [type='hidden']):is(:hover, :focus) {
+    border-bottom-color: var(--accent);
+    background: var(--surface);
+}
+
+textarea,
+select {
+    --control-border: var(--border);
+}
+
+.comment-actions button {
+    letter-spacing: 0;
+}
+
+.notice {
+    border-left-color: var(--margin-line);
+    font-style: italic;
+}
+
+.summary-meta,
+figcaption,
+.pager-count,
+.search-count {
+    font-style: italic;
+}
+
+.tags a {
+    padding: 0;
+    border: 0;
+    border-bottom: 1px dotted currentcolor;
+    border-radius: 0;
+    font-style: italic;
+}
+
+.tags a:hover {
+    border-color: currentcolor;
+}
+
+.lang-filter a {
+    font-style: italic;
+}
+
+.comment.is-pinned > .comment-body {
+    border-left-color: var(--margin-line);
+}
+
+.empty {
+    border-style: dotted;
     font-style: italic;
 }

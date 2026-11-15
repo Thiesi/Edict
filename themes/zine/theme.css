@@ -22,6 +22,9 @@
     --logo-plate-pad: 0.3rem 0.6rem;
     --measure: 44rem;
     --wide: 70rem;
+    --radius: 0;
+    --control-bg: var(--bg);
+    --control-border: var(--border);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -206,6 +209,139 @@ blockquote {
     border: 3px solid var(--border);
     border-radius: 0;
     box-shadow: 4px 4px 0 var(--accent);
+}
+
+/*
+ * Buttons are cut-out labels with a hard shadow. Pressing one pushes it into its
+ * shadow. That is a change of state, not an animation, so it stays under reduced motion.
+ */
+button:not(.audio-play, .audio-speed, [class^='lightbox-']),
+.button,
+.file-download {
+    border: 3px solid var(--border);
+    box-shadow: 4px 4px 0 var(--accent);
+    color: var(--fg);
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+:is(button:not(.audio-play, .audio-speed, [class^='lightbox-']), .button, .file-download, .like-button):hover {
+    border-color: var(--border);
+    background: var(--pop);
+    color: #0d0d0d;
+}
+
+:is(button:not(.audio-play, .audio-speed, [class^='lightbox-']), .button, .file-download, .like-button):active {
+    box-shadow: none;
+    transform: translate(4px, 4px);
+}
+
+button.button-primary:not(.audio-play, .audio-speed, [class^='lightbox-']),
+a.button-primary {
+    background: var(--accent);
+    color: var(--accent-fg);
+}
+
+.like-button[aria-pressed='true']:hover {
+    color: #0d0d0d;
+}
+
+/* The admin's tools stay small and flat: they are not the show. */
+.comment-actions button {
+    border: 0;
+    box-shadow: none;
+    color: var(--muted);
+    font-weight: 400;
+    text-transform: none;
+}
+
+.comment-actions button:hover {
+    background: var(--pop);
+    color: #0d0d0d;
+}
+
+.comment-actions button:active {
+    transform: none;
+}
+
+input:not([type='checkbox'], [type='radio'], [type='file'], [type='color'], [type='range'], [type='hidden']),
+select,
+textarea {
+    border: 3px solid var(--border);
+}
+
+:is(input:not([type='checkbox'], [type='radio'], [type='file'], [type='color'], [type='range'], [type='hidden']), select, textarea):focus {
+    box-shadow: 4px 4px 0 var(--accent);
+}
+
+.comment-actions select {
+    border-width: 1px;
+}
+
+/* Messages shout in the accent colour. */
+.notice {
+    border: 3px solid var(--border);
+    background: var(--accent);
+    color: var(--accent-fg);
+    font-weight: 700;
+}
+
+.notice a {
+    color: inherit;
+}
+
+.lang-filter [aria-current] {
+    border-color: var(--border);
+    background: var(--pop);
+    color: #0d0d0d;
+}
+
+.tags a {
+    border: 3px solid var(--border);
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.tags a:hover {
+    border-color: var(--border);
+    background: var(--pop);
+    color: #0d0d0d;
+}
+
+th {
+    background: var(--pop);
+    color: #0d0d0d;
+}
+
+th,
+td {
+    border-width: 2px;
+}
+
+.empty {
+    border: 3px dashed var(--border);
+    color: var(--fg);
+    font-weight: 700;
+}
+
+.comments {
+    border-top: 6px solid var(--border);
+}
+
+.pager {
+    font-weight: 700;
+}
+
+.audio-player {
+    border: 3px solid var(--border);
+}
+
+/* On wide screens the margin on the right is there to be used: quotes and galleries lean into it. */
+@media (min-width: 64rem) {
+    article > blockquote,
+    article > .media-gallery {
+        margin-right: -8rem;
+    }
 }
 
 .site-footer {
