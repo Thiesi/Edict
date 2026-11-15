@@ -209,7 +209,36 @@ test('a pasted reference to a missing image says so and stops asking', async ({ 
         document.querySelector('.ProseMirror').dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
     });
 
-    await expect(page.locator('.editor-media')).toContainText('no longer exists');
+    await expect(page.locator('.editor-media .media-missing')).toContainText('was deleted from the media library');
+});
+
+test('a file nobody uses can be deleted on the Media page, and one in use cannot', async ({ page }, info) => {
+    await newArticle(page);
+    await page.getByLabel('Title').fill('Keeps its file');
+    const kept = info.outputPath('Kept notes.txt');
+    const spare = info.outputPath('Spare notes.txt');
+    execFileSync('sh', ['-c', `echo kept > "${kept}" && echo spare > "${spare}"`]);
+    await page.locator('#file-input').setInputFiles([kept, spare]);
+    await expect(page.locator('.editor-file')).toHaveCount(2, { timeout: 60_000 });
+    await page.locator('.editor-media', { hasText: 'Spare notes.txt' }).locator('.media-remove').click();
+    await expect(page.locator('.editor-media')).toHaveCount(1);
+    await saved(page);
+
+    await page.goto('/admin/media-library?show=unused');
+    const row = page.locator('tr', { hasText: 'Spare notes.txt' });
+    await expect(row).toContainText('Not used');
+    await expect(page.locator('tr', { hasText: 'Kept notes.txt' })).toHaveCount(0);
+    await row.getByLabel(/Delete permanently/).check();
+    await row.getByRole('button', { name: /Delete/ }).click();
+
+    await expect(page.locator('.notice')).toContainText('Deleted');
+    await expect(page.locator('tr', { hasText: 'Spare notes.txt' })).toHaveCount(0);
+
+    await page.goto('/admin/media-library');
+    const used = page.locator('tr', { hasText: 'Kept notes.txt' });
+    await expect(used.getByRole('link', { name: 'Keeps its file' })).toBeVisible();
+    await expect(used.getByRole('button', { name: /Delete/ })).toBeDisabled();
+    await expect(used).toContainText('In use');
 });
 
 test('any other file becomes a download card under its own name', async ({ page, request }, info) => {

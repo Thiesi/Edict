@@ -85,6 +85,37 @@ final readonly class MediaStore
         }
     }
 
+    /**
+     * Removes a deleted item's original and its versions, then the fan-out directories
+     * they leave empty. The names come from the hash and the variant rows; anything
+     * that doesn't look like one is left alone.
+     *
+     * @param list<array{preset: string, format: string}> $variants
+     */
+    public function discard(string $sha256, array $variants): void
+    {
+        if (preg_match('~^[0-9a-f]{64}$~D', $sha256) !== 1) {
+            return;
+        }
+
+        $original = $this->originalPath($sha256);
+        self::remove($original);
+        $dirs = [dirname($original)];
+        foreach ($variants as $variant) {
+            if (preg_match('~^[a-z0-9-]+$~D', $variant['preset']) === 1 && preg_match('~^[a-z0-9]+$~D', $variant['format']) === 1) {
+                $path = $this->variantPath($sha256, $variant['preset'], $variant['format']);
+                self::remove($path);
+                $dirs[] = dirname($path);
+            }
+        }
+
+        // ab/cd, then ab. rmdir refuses a directory that still holds anything.
+        foreach (array_unique($dirs) as $dir) {
+            @rmdir($dir);
+            @rmdir(dirname($dir));
+        }
+    }
+
     public function freeBytes(): int
     {
         $free = disk_free_space($this->root('media'));

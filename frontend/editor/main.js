@@ -656,14 +656,24 @@ const showCoverMedia = (media) => {
     field('cover-choose').textContent = fields.cover.value === '' ? 'Choose a cover image…' : 'Choose another…';
 };
 
+const coverMissing = field('cover-missing');
+
 function showCover() {
     const id = fields.cover.value;
     showCoverMedia(null);
+    coverMissing.hidden = true;
     if (id === '') {
         return;
     }
     fetch(`/admin/media/${id}`, { credentials: 'same-origin', redirect: 'manual' })
-        .then((response) => (response.ok ? response.json() : null))
+        .then((response) => {
+            // Deleted from the Media page, and brought back here by restoring an old version.
+            if (response.status === 404 && fields.cover.value === id) {
+                coverMissing.hidden = false;
+            }
+
+            return response.ok ? response.json() : null;
+        })
         .then((media) => {
             if (fields.cover.value === id) {
                 showCoverMedia(media);
@@ -674,6 +684,7 @@ function showCover() {
 
 function setCover(media) {
     fields.cover.value = media === null ? '' : String(media.id);
+    coverMissing.hidden = true;
     showCoverMedia(media);
     changed();
 }

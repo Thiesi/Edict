@@ -34,7 +34,9 @@ export const whenReady = (id, status, noun, waiting, isGone, onReady) => {
         try {
             const response = await fetch(`/admin/media/${id}`, { credentials: 'same-origin', redirect: 'manual' });
             if (response.status === 404) {
-                status.textContent = `This ${noun} no longer exists.`;
+                // Deleted from the Media page while an old version still pointed at it.
+                status.textContent = `This ${noun} was deleted from the media library. Readers see nothing here. Remove it, or insert another.`;
+                status.classList.add('media-missing');
 
                 return;
             }
@@ -54,6 +56,7 @@ export const whenReady = (id, status, noun, waiting, isGone, onReady) => {
             status.setAttribute('role', 'alert');
         } else {
             status.textContent = '';
+            status.classList.remove('media-missing');
             onReady(media);
         }
     };
