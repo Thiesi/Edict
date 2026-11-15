@@ -17,7 +17,6 @@ use Edict\Auth\SessionStore;
 use Edict\Config;
 use Edict\Http\Middleware\SessionMiddleware;
 use Edict\Mail\SecurityNotice;
-use Edict\Site\Themes;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Slim\Exception\HttpNotFoundException;
@@ -46,8 +45,7 @@ final readonly class OAuthController
     public function showLogin(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
     {
         $next = self::param($request->getQueryParams(), 'next');
-        $session = self::session($request);
-        if ($session !== null && !self::previewsATheme($request, $session)) {
+        if (self::session($request) !== null) {
             return self::redirect($response, FlowState::safeNext($next === '' ? '/account' : $next));
         }
 
@@ -295,17 +293,6 @@ final readonly class OAuthController
     private function provider(ServerRequestInterface $request, array $args): Provider
     {
         return $this->providers->get($args['provider'] ?? '') ?? throw new HttpNotFoundException($request);
-    }
-
-    /**
-     * The admin looking at this page in another theme ("?theme=quiet", as in the theme
-     * picker). Being signed in, they would otherwise never see the sign-in page.
-     */
-    private static function previewsATheme(ServerRequestInterface $request, Session $session): bool
-    {
-        $theme = $request->getQueryParams()['theme'] ?? null;
-
-        return $session->isAdmin && is_string($theme) && Themes::exists($theme);
     }
 
     private static function session(ServerRequestInterface $request): ?Session
