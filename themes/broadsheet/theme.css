@@ -210,11 +210,11 @@ article > p:has(> time) {
    whichever comes last. Never a comment. */
 /* The paragraph holds its drop cap: a short one grows to the letter's height instead of
    letting the next paragraph wrap around it. */
-article:not(.comment-body) > :is(h1, .article-meta, .article-cover, .teaser) + p:not(.article-meta, .teaser) {
+article:not(.comment-body) > :is(h1, .article-meta, .admin-edit, .article-cover, .teaser) + p:not(.article-meta, .admin-edit, .teaser) {
     display: flow-root;
 }
 
-article:not(.comment-body) > :is(h1, .article-meta, .article-cover, .teaser) + p:not(.article-meta, .teaser)::first-letter {
+article:not(.comment-body) > :is(h1, .article-meta, .admin-edit, .article-cover, .teaser) + p:not(.article-meta, .admin-edit, .teaser)::first-letter {
     float: left;
     margin: 0.1rem 0.4rem 0 0;
     font-family: var(--font-heading);

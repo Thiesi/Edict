@@ -115,6 +115,12 @@ body {
 
 /* The commit staging runs (base.html.twig; never in production): small and quiet in the
    bottom right corner, as in the admin, and out of the page's flow. */
+/* The admin's way from a page to its editor: small, in the theme's own link style. */
+.admin-edit {
+    margin: 0 0 1rem;
+    font-size: 0.85rem;
+}
+
 body > small {
     position: fixed;
     right: 0.5rem;
@@ -1617,6 +1623,7 @@ mark {
     }
 
     .skip-link,
+    .admin-edit,
     .site-search,
     .site-nav,
     .site-footer nav,

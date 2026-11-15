@@ -32,6 +32,7 @@
                         site: {url: '/admin/site', label: 'Site'},
                         themes: {url: '/admin/themes', label: 'Themes'},
                         passkeys: {url: '/admin/passkeys', label: 'Passkeys'},
+                        account: {url: '/account', label: 'Account'},
                     } %}
                         <li{% if id == 'site' %} class="nav-gap"{% endif %}>
                             <a href="{{ item.url }}"{% if id == section %} aria-current="page"{% endif %}>

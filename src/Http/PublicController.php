@@ -204,8 +204,11 @@ final readonly class PublicController
      */
     private function render(ServerRequestInterface $request, ResponseInterface $response, string $template, array $data): ResponseInterface
     {
-        $signedIn = $request->getAttribute(SessionMiddleware::ATTRIBUTE) instanceof Session;
-        $response->getBody()->write($this->twig->render($template, $data + ['signed_in' => $signedIn]));
+        $session = $request->getAttribute(SessionMiddleware::ATTRIBUTE);
+        $signedIn = $session instanceof Session;
+        // The admin gets links into the admin and the editor; readers never see them.
+        $isAdmin = $session instanceof Session && $session->isAdmin;
+        $response->getBody()->write($this->twig->render($template, $data + ['signed_in' => $signedIn, 'is_admin' => $isAdmin]));
         $response = $response->withHeader('Content-Type', 'text/html; charset=utf-8');
 
         // A signed-in page carries the reader's own like and token: never for a shared cache.
