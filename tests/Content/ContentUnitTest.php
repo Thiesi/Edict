@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Edict\Tests\Content;
 
+use Edict\Content\Article;
 use Edict\Content\ArticleDate;
 use Edict\Content\ArticleInput;
 use Edict\Content\Body;
@@ -373,5 +374,15 @@ final class ContentUnitTest extends TestCase
         self::assertSame('T', $input->title);
         self::assertEquals($input, ArticleInput::fromJson($input->toJson()));
         self::assertEquals(ArticleInput::fromArray([]), ArticleInput::fromJson('not json'));
+    }
+
+    public function testReadingTimeSpeaksTheArticlesLanguage(): void
+    {
+        $article = static fn(string $lang, int $minutes): Article => new Article(1, 'article', 's', $lang, 'T', '', Body::EMPTY, 'published', 1, 1, null, [], null, 1, readingMinutes: $minutes);
+
+        self::assertSame('6 min read', $article('en', 6)->readingTime());
+        self::assertSame('1 Min. Lesezeit', $article('de', 1)->readingTime());
+        self::assertSame(12, $article('en', 12)->asDraft()->readingMinutes, 'a preview keeps it unless told otherwise');
+        self::assertSame(3, $article('en', 12)->asDraft(3)->readingMinutes);
     }
 }

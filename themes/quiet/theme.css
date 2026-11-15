@@ -253,3 +253,24 @@ td {
 .panel-danger {
     border-color: var(--border);
 }
+
+/* Reading aids: a hairline and air, no capitals; covers stay hidden, as in the lists. */
+.article-nav {
+    margin-top: 3rem;
+    padding-top: var(--space-5);
+}
+
+.article-nav-label {
+    font-size: var(--text-sm);
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+.related {
+    margin-top: 3rem;
+}
+
+.related > h2 {
+    font-size: 1.1rem;
+    font-weight: 600;
+}

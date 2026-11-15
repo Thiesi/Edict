@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { fillTags } from './helpers.js';
 
 const newItem = async (page, kind = 'article') => {
     await page.goto(kind === 'page' ? '/admin/articles?kind=page' : '/admin/articles');
@@ -22,6 +23,8 @@ test('writes, autosaves, survives a reload and publishes', async ({ page, reques
 
     await newItem(page);
     await page.getByLabel('Title').fill('Über Größe');
+    // A shared tag, so the theme checks see previous, next and related articles (2-themes).
+    await fillTags(page, 'Reading aids');
     await page.locator('.ProseMirror').click();
     await page.keyboard.type('## A shortcut heading');
     await page.keyboard.press('Enter');
@@ -51,6 +54,7 @@ test('writes, autosaves, survives a reload and publishes', async ({ page, reques
 test('editing a published article stays private until Update', async ({ page, request, context }) => {
     await newItem(page);
     await page.getByLabel('Title').fill('Published one');
+    await fillTags(page, 'Reading aids, Editing');
     await page.locator('.ProseMirror').click();
     await page.keyboard.type('Original words');
     await saved(page);
@@ -295,6 +299,7 @@ test('schedules, refuses the past, changes the time, cancels and publishes now',
 
     await newItem(page);
     await page.getByLabel('Title').fill('Scheduled one');
+    await fillTags(page, 'Reading aids');
     await page.locator('.ProseMirror').click();
     await page.keyboard.type('Words for later');
     await saved(page);

@@ -332,8 +332,10 @@ final readonly class ArticleAdminController
      */
     public function preview(ServerRequestInterface $request, ResponseInterface $response, array $args): ResponseInterface
     {
+        $article = $this->article($request, $args);
+
         return $this->html($request, $response, 'public/article.html.twig', [
-            'article' => $this->article($request, $args)->asDraft(),
+            'article' => $article->asDraft($this->articles->readingMinutes($article->input()->body)),
             'preview' => true,
             'signed_in' => true,
         ])->withHeader('X-Robots-Tag', 'noindex');

@@ -29,6 +29,13 @@ for (const colorScheme of ['light', 'dark']) {
                 const word = ((await first.textContent()) ?? '').split(/[^\p{L}\p{N}]+/u).sort((a, b) => b.length - a.length)[0] ?? '';
                 await check(`${article}?theme=${theme}`);
 
+                // An article with previous, next and related articles (tagged in 1-editor and 2-media).
+                await check(`/published-one?theme=${theme}`);
+                await expect(page.locator('.article-nav a')).toHaveCount(2);
+                await expect(page.locator('.related-item')).toHaveCount(3);
+                await expect(page.locator('.related .article-cover-thumb')).toHaveCount(1);
+                await expect(page.locator('.article-meta .reading-time')).toHaveText(/^1 (min read|Min\. Lesezeit)$/);
+
                 // A list with its pager, a search with results, and the sign-in page.
                 await check(`/archive?theme=${theme}`);
                 await check(`/search?q=${encodeURIComponent(word)}&theme=${theme}`);

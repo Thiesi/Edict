@@ -24,3 +24,13 @@ export const totp = (offset = 0) => {
 
     return String((hash.readUInt32BE(position) & 0x7fffffff) % 1000000).padStart(6, '0');
 };
+
+/**
+ * Fills the editor's tags, which sit in the Details panel, closed at first.
+ */
+export const fillTags = async (page, tags) => {
+    await page.locator('#details').evaluate((details) => {
+        details.open = true;
+    });
+    await page.getByLabel('Tags', { exact: true }).fill(tags);
+};
