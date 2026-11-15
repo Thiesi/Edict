@@ -88,7 +88,7 @@ final readonly class AvProcessor
      */
     public function process(int $mediaId): void
     {
-        $stmt = $this->pdo->prepare('SELECT sha256, extension, bytes FROM media WHERE id = ?');
+        $stmt = $this->pdo->prepare("SELECT sha256, extension, bytes, meta->>'restore_poster' AS restore_poster FROM media WHERE id = ?");
         $stmt->execute([$mediaId]);
         $media = $stmt->fetch();
         if (!is_array($media)) {
@@ -96,6 +96,8 @@ final readonly class AvProcessor
         }
         $sha256 = Row::str($media, 'sha256');
         $bytes = Row::int($media, 'bytes');
+        // A restored video had a frame chosen as its poster. Taken again once the video exists.
+        $restorePoster = is_numeric($media['restore_poster'] ?? null) ? (float) $media['restore_poster'] : null;
         $demuxer = self::DEMUXERS[Row::str($media, 'extension')] ?? throw new MediaError('This file type can\'t be played.', true);
 
         $dir = $this->store->newJobDir();
@@ -122,6 +124,13 @@ final readonly class AvProcessor
             }
 
             $this->library->publish($mediaId, $sha256, $done['variants'], $done['width'], $done['height'], $kind, $done['meta']);
+            if ($kind === 'video' && $restorePoster !== null) {
+                try {
+                    $this->library->choosePoster($mediaId, $restorePoster);
+                } catch (MediaError) {
+                    // The video is fine; it keeps the default poster.
+                }
+            }
         } finally {
             MediaStore::remove($dir);
         }

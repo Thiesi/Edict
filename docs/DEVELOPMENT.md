@@ -75,6 +75,7 @@ Set `DATA_DIR` in `.env` to a folder outside the repo, and install libvips (`vip
 | `php bin/edict admin:email <address>` | Set the admin's notification address (`""` removes it; also on `/account`) |
 | `php bin/edict admin:disallow <google\|twitch> <id>` | Remove it again; ends all admin sessions |
 | `php bin/edict admin:identities` | List the allow-listed accounts |
+| `php bin/edict content:restore <file>` | Restore a JSON export into an install without articles, pages or media. See `docs/BACKUP.md` |
 
 Easier: sign in as admin and use the logins form on `/account` (password and authenticator code required). On the command line instead: sign in with the account on the site, copy its ID from `/account`, then run `admin:allow`. The ID moves from that new reader account to the admin account, and the reader account is deleted if it has no other login. Sign in again afterwards to get an admin session.
 

@@ -179,19 +179,26 @@ final readonly class Articles
     }
 
     /**
-     * Everything written, for the JSON export: what readers see, the draft, and the tags.
+     * Everything written, for the JSON export: what readers see, the draft, the tags,
+     * and the old addresses that still redirect. Published versions (revisions) stay
+     * out: up to 20 copies of each article would make the file many times larger.
      *
-     * @return array{exported_at: string, articles: list<array<string, mixed>>, tags: list<array{slug: string, name: string}>}
+     * @return array{articles: list<array<string, mixed>>, tags: list<array{slug: string, name: string}>}
      */
     public function export(): array
     {
         $articles = [];
-        $stmt = $this->pdo->query('SELECT ' . self::COLUMNS . ' FROM article a ORDER BY a.id');
+        $stmt = $this->pdo->query(
+            'SELECT ' . self::COLUMNS . ', a.comments_mode, EXTRACT(EPOCH FROM a.created_at)::bigint AS created_at,
+                    (SELECT coalesce(json_agg(r.old_slug ORDER BY r.old_slug), \'[]\')::text FROM slug_redirect r WHERE r.article_id = a.id) AS old_slugs
+             FROM article a ORDER BY a.id',
+        );
         foreach ($stmt === false ? [] : $stmt->fetchAll() as $row) {
             if (!is_array($row)) {
                 continue;
             }
             $article = self::hydrate($row);
+            $oldSlugs = json_decode(Row::str($row, 'old_slugs'), true);
             $articles[] = [
                 'id' => $article->id,
                 'kind' => $article->kind,
@@ -207,7 +214,11 @@ final readonly class Articles
                 'published_at' => $article->publishedAt === null ? null : gmdate(DATE_ATOM, $article->publishedAt),
                 'revised_at' => $article->revisedAt === null ? null : gmdate(DATE_ATOM, $article->revisedAt),
                 'updated_at' => gmdate(DATE_ATOM, $article->updatedAt),
+                'created_at' => gmdate(DATE_ATOM, Row::int($row, 'created_at')),
                 'in_trash' => $article->deletedAt !== null,
+                'deleted_at' => $article->deletedAt === null ? null : gmdate(DATE_ATOM, $article->deletedAt),
+                'comments_mode' => Row::str($row, 'comments_mode'),
+                'old_slugs' => is_array($oldSlugs) ? array_values(array_filter($oldSlugs, is_string(...))) : [],
                 'draft' => $article->draftJson === null ? null : json_decode($article->draftJson, true),
             ];
         }
@@ -219,7 +230,7 @@ final readonly class Articles
             }
         }
 
-        return ['exported_at' => gmdate(DATE_ATOM, $this->clock->now()), 'articles' => $articles, 'tags' => $tags];
+        return ['articles' => $articles, 'tags' => $tags];
     }
 
     private function keepRevision(int $articleId, ArticleInput $input, int $now): void

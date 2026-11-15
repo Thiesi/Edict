@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Edict\Http;
 
 use Edict\Auth\Session;
+use Edict\Backup\Export;
 use Edict\Config;
 use Edict\Content\Article;
 use Edict\Content\ArticleInput;
@@ -25,7 +26,13 @@ use Twig\Environment;
  */
 final readonly class ArticleAdminController
 {
-    public function __construct(private Environment $twig, private Articles $articles, private Config $config, private Votes $votes) {}
+    public function __construct(
+        private Environment $twig,
+        private Articles $articles,
+        private Config $config,
+        private Votes $votes,
+        private Export $export,
+    ) {}
 
     public function index(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
     {
@@ -140,12 +147,12 @@ final readonly class ArticleAdminController
     }
 
     /**
-     * Everything written, as one JSON file: articles, pages, their drafts and tags.
-     * Media are plain files already, in the backups.
+     * The backup as one JSON file: articles, pages, drafts, tags, settings and the
+     * media rows. The media files are on disk, in the host's backup. Restore reads it.
      */
     public function export(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
     {
-        $response->getBody()->write(json_encode($this->articles->export(), JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT));
+        $response->getBody()->write($this->export->json());
 
         return $response
             ->withHeader('Content-Type', 'application/json; charset=utf-8')
@@ -173,11 +180,9 @@ final readonly class ArticleAdminController
         }
 
         // Refused rather than cut down: saving must never drop text without saying so.
-        if (Body::isTooDeep($draft['body'] ?? null)) {
-            return self::json($response->withStatus(422), ['error' => 'The lists or quotes are nested too deeply.']);
-        }
-        if (Body::hasOversizedGallery($draft['body'] ?? null)) {
-            return self::json($response->withStatus(422), ['error' => 'A gallery can have up to 100 images.']);
+        $problem = Body::problem($draft['body'] ?? null);
+        if ($problem !== null) {
+            return self::json($response->withStatus(422), ['error' => $problem]);
         }
         $json = ArticleInput::fromArray($draft)->toJson();
         if (strlen($json) > ArticleInput::MAX_DRAFT_BYTES) {
