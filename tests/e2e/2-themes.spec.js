@@ -4,25 +4,39 @@ import { expect, test } from '@playwright/test';
 const THEMES = ['decree', 'broadsheet', 'quiet', 'almanac', 'terminal', 'zine'];
 
 // The admin is signed in, so ?theme= previews each theme without applying it.
+// The error page is missing here on purpose: tests run in development mode, where
+// Slim's own detailed error page appears instead of the themed one.
 for (const colorScheme of ['light', 'dark']) {
     test.describe(`in ${colorScheme}`, () => {
         test.use({ colorScheme });
 
         for (const theme of THEMES) {
-            test(`${theme} meets WCAG AA on the home page and an article`, async ({ page }) => {
-                await page.goto(`/?theme=${theme}`);
-                await expect(page.locator('body')).toHaveClass(`theme-${theme}`);
-                const article = await page.locator('.articles h2 a').first().getAttribute('href');
-                await page.evaluate(() => document.fonts.ready);
-                const home = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
+            test(`${theme} meets WCAG AA on the pages readers see`, async ({ page }) => {
+                const problems = [];
+                const check = async (path) => {
+                    await page.goto(path);
+                    await expect(page.locator('body')).toHaveClass(`theme-${theme}`);
+                    await page.evaluate(() => document.fonts.ready);
+                    const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
+                    problems.push(...result.violations.flatMap((violation) => violation.nodes.map(
+                        (node) => `${path} ${violation.id}: ${node.target.join(' ')} ${node.any.map((check) => check.message).join('; ')}`,
+                    )));
+                };
 
-                await page.goto(`${article}?theme=${theme}`);
-                await page.evaluate(() => document.fonts.ready);
-                const reading = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
+                // The home page, then an article with whatever the earlier tests left on it.
+                await check(`/?theme=${theme}`);
+                const first = page.locator('.articles h2 a').first();
+                const article = await first.getAttribute('href');
+                // Its longest word: a short one may be a stop word, which the search ignores.
+                const word = ((await first.textContent()) ?? '').split(/[^\p{L}\p{N}]+/u).sort((a, b) => b.length - a.length)[0] ?? '';
+                await check(`${article}?theme=${theme}`);
 
-                const problems = [...home.violations, ...reading.violations].flatMap((violation) => violation.nodes.map(
-                    (node) => `${violation.id}: ${node.target.join(' ')} ${node.any.map((check) => check.message).join('; ')}`,
-                ));
+                // A list with its pager, a search with results, and the sign-in page.
+                await check(`/archive?theme=${theme}`);
+                await check(`/search?q=${encodeURIComponent(word)}&theme=${theme}`);
+                await expect(page.locator('.search-results li').first()).toBeVisible();
+                await check(`/login?theme=${theme}`);
+
                 expect(problems).toEqual([]);
             });
         }

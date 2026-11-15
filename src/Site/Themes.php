@@ -37,6 +37,28 @@ final class Themes
         'zine' => ['light' => '#fffdf2', 'dark' => '#0d0d0d'],
     ];
 
+    /**
+     * The header's background where a theme gives it one of its own, as in its
+     * theme.css. An accent that reads well on the page can vanish on such a header,
+     * so it is fitted a second time against these; the same test keeps them in step.
+     *
+     * @var array<string, array{light: string, dark: string}>
+     */
+    public const HEADER_BACKGROUNDS = [
+        'decree' => ['light' => '#1d1a2e', 'dark' => '#0c0b14'],
+        'zine' => ['light' => '#0d0d0d', 'dark' => '#ffe600'],
+    ];
+
+    /**
+     * What sits behind the header in this theme: its own background, or the page's.
+     *
+     * @return array{light: string, dark: string}|null
+     */
+    public static function headerBackgrounds(string $id): ?array
+    {
+        return self::HEADER_BACKGROUNDS[$id] ?? self::BACKGROUNDS[$id] ?? null;
+    }
+
     public static function exists(string $id): bool
     {
         return isset(self::ALL[$id]);
