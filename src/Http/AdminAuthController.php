@@ -13,6 +13,8 @@ use Edict\Backup\Restore;
 use Edict\Backup\RestoreRefused;
 use Edict\Content\Articles;
 use Edict\Content\Comments;
+use Edict\Content\ViewChart;
+use Edict\Content\Views;
 use Edict\Http\Middleware\CsrfMiddleware;
 use Edict\Http\Middleware\SessionMiddleware;
 use Edict\Media\MediaLibrary;
@@ -40,6 +42,7 @@ final readonly class AdminAuthController
         private Articles $articles,
         private StepUp $stepUp,
         private Restore $restorer,
+        private Views $views,
     ) {}
 
     public function showLogin(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
@@ -144,6 +147,8 @@ final readonly class AdminAuthController
             'drafts' => $this->articles->unfinished(self::DASHBOARD_DRAFTS),
             'scheduled' => $this->articles->scheduled(self::DASHBOARD_SCHEDULED),
             'storage' => $this->library->usage(),
+            'views' => ViewChart::build($this->views->daily()),
+            'recent_days' => Views::RECENT_DAYS,
             'restore_possible' => $this->restorer->isPossible(),
             'restore_error' => null,
             'restore_result' => null,

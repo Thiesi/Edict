@@ -335,7 +335,11 @@ final class RestoreFlowTest extends DbTestCase
     public function testAnExportRestoresIntoAnEmptyInstallUnchanged(): void
     {
         $ids = $this->site();
+        $browser = ['User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:132.0) Gecko/20100101 Firefox/132.0'];
+        $this->get('/keepers', [], $browser);
+        self::assertSame(1, $this->rows('article_view_day'));
         $before = $this->export();
+        self::assertStringNotContainsString('views', json_encode($before, JSON_THROW_ON_ERROR), 'view counts stay out of the export');
         $this->loseContent();
 
         $result = $this->restore($before);
@@ -368,6 +372,9 @@ final class RestoreFlowTest extends DbTestCase
         self::assertStringContainsString('href="/keepers"', (string) $this->get('/search?q=lighthouse')->getBody(), 'the search index is rebuilt');
         self::assertStringContainsString('href="/keepers"', (string) $this->get('/tag/sea')->getBody());
         self::assertSame(404, $this->get('/regretted')->getStatusCode(), 'still in the trash');
+        self::assertSame(0, $this->rows('article_view_day'), 'the counts start again');
+        $this->get('/keepers', [], ['User-Agent' => 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) Version/18.1 Mobile/15E148 Safari/604.1']);
+        self::assertSame(1, $this->rows('article_view_day'));
 
         // New rows continue after the restored ids.
         self::assertGreaterThan(max($ids), $this->newRow());

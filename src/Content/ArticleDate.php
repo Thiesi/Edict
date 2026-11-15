@@ -42,6 +42,14 @@ final class ArticleDate
     }
 
     /**
+     * The calendar day of this moment in the site's time, as a SQL date: "2026-11-15".
+     */
+    public static function day(int $timestamp): string
+    {
+        return self::local($timestamp)->format('Y-m-d');
+    }
+
+    /**
      * The value of a datetime-local field showing this moment in the site's time.
      */
     public static function fieldValue(int $timestamp): string

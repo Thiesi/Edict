@@ -28,7 +28,7 @@
 
     {% if articles %}
         <table class="list" role="table">
-            <thead><tr role="row"><th role="columnheader">Title</th><th role="columnheader">Status</th><th role="columnheader">Language</th>{% if likes %}<th role="columnheader" class="num">Likes</th>{% endif %}<th role="columnheader">Actions</th></tr></thead>
+            <thead><tr role="row"><th role="columnheader">Title</th><th role="columnheader">Status</th><th role="columnheader">Language</th>{% if likes %}<th role="columnheader" class="num">Likes</th>{% endif %}<th role="columnheader" class="num">Views</th><th role="columnheader">Actions</th></tr></thead>
             <tbody>
                 {% for article in articles %}
                     <tr role="row">
@@ -42,6 +42,8 @@
                             {% set count = likes[article.id] ?? {real: 0, adjustment: 0, shown: 0} %}
                             <td role="cell" class="num">{{ count.shown }}{% if count.adjustment != 0 %} <small>({{ count.real }} real, {{ count.adjustment > 0 ? '+' : '' }}{{ count.adjustment }})</small>{% endif %}<span class="cell-unit"> {{ count.shown == 1 ? 'like' : 'likes' }}</span></td>
                         {% endif %}
+                        {% set seen = views[article.id] ?? {total: 0, recent: 0} %}
+                        <td role="cell" class="num">{{ seen.total|number_format }}<span class="cell-unit"> {{ seen.total == 1 ? 'view' : 'views' }}</span><span class="visually-hidden">, </span> <small class="views-recent">{{ seen.recent|number_format }} in {{ recent_days }} days</small></td>
                         {% if trash %}
                             <td role="cell" class="cell-wide">
                                 <form method="post" action="/admin/articles/{{ article.id }}/restore">

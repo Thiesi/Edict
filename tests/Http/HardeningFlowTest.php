@@ -58,6 +58,7 @@ final class HardeningFlowTest extends DbTestCase
         self::assertSame('datenschutz', $input->slug);
         self::assertSame('de', $input->lang);
         self::assertStringContainsString('Anmeldung mit Google oder Twitch', $input->body);
+        self::assertStringContainsString('Aufrufzahlen', $input->body, 'the view counts are explained');
         self::assertStringContainsString('[eckigen Klammern]', $input->body);
         self::assertSame(404, $this->post('/admin/site/legal/other', ['_csrf' => $admin['csrf']], $admin['cookies'])->getStatusCode());
     }
