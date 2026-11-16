@@ -160,7 +160,7 @@ final class LookFlowTest extends DbTestCase
         ]);
         self::assertSame(303, $saved->getStatusCode(), (string) $saved->getBody());
         self::assertStringContainsString('being prepared', (string) $this->get('/admin/themes', $this->cookies)->getBody());
-        self::assertStringContainsString('href="/favicon.svg"', $this->home(), 'Edict’s seal until the icons exist');
+        self::assertStringContainsString('href="/assets/themes/decree/favicon.svg?v=', $this->home(), 'the theme’s icon until the own icons exist');
 
         while ($this->service(JobRunner::class)->runNext()) {
             // Images, then the icons.
@@ -181,6 +181,19 @@ final class LookFlowTest extends DbTestCase
         $home = $this->home();
         self::assertStringNotContainsString('site-logo', $home);
         self::assertStringContainsString('<a href="/">Edict</a>', $home);
-        self::assertStringContainsString('href="/favicon.svg"', $home);
+        self::assertStringContainsString('href="/assets/themes/decree/favicon.svg?v=', $home, 'back to the theme’s icon');
+    }
+
+    public function testTheIconFollowsTheThemeAndItsPreview(): void
+    {
+        $home = $this->home();
+        self::assertStringContainsString('<link rel="icon" href="/assets/themes/decree/favicon.svg?v=', $home);
+        self::assertStringContainsString('<link rel="icon" href="/assets/themes/decree/icon-192.png?v=', $home);
+        self::assertStringContainsString('<link rel="apple-touch-icon" href="/assets/themes/decree/apple-touch-icon.png?v=', $home);
+        self::assertStringNotContainsString('href="/favicon.ico"', $home, 'one set, the theme’s');
+
+        self::assertStringContainsString('href="/assets/themes/terminal/favicon.svg?v=', (string) $this->get('/?theme=terminal', $this->cookies)->getBody(), 'a preview shows the previewed theme’s icon');
+        self::assertStringContainsString('href="/assets/themes/decree/favicon.svg?v=', (string) $this->get('/no-such-page')->getBody(), 'the error page too');
+        self::assertStringContainsString('href="/favicon.svg"', (string) $this->get('/admin/login')->getBody(), 'the admin keeps Edict’s seal');
     }
 }
