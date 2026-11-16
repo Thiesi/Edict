@@ -464,6 +464,41 @@ a.button-primary {
     color: inherit;
 }
 
+/*
+ * The admin's "New article" and "New page" are forms, because starting a piece creates
+ * it. Their buttons are dressed as the links beside them: every button style is undone
+ * here, and each theme gives `.site-nav button.nav-link` what it gives `.site-nav a`.
+ */
+.site-nav .nav-form {
+    display: inline;
+    margin: 0;
+}
+
+.site-nav button.nav-link {
+    display: inline;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    color: inherit;
+    font: inherit;
+    letter-spacing: inherit;
+    line-height: inherit;
+    text-align: inherit;
+    text-decoration: underline;
+    text-transform: inherit;
+    text-underline-offset: 0.15em;
+    cursor: pointer;
+}
+
+/* Themes press and lift their buttons; a link does neither. */
+.site-nav button.nav-link:is(:hover, :active) {
+    box-shadow: none;
+    transform: none;
+}
+
 .site-footer {
     margin-top: 3rem;
     padding: 1.5rem var(--gutter) 2rem;
@@ -556,6 +591,17 @@ article > p:has(> time) {
     border: 1px dashed var(--border);
     color: var(--muted);
     text-align: center;
+}
+
+/* On a site with nothing published yet, the admin's way to start. */
+.first-article {
+    margin: calc(-1 * var(--space-3)) 0 var(--space-6);
+    text-align: center;
+}
+
+.first-article button {
+    padding: 0.6em 1.4em;
+    font-size: var(--text-md);
 }
 
 .pager {
@@ -1308,6 +1354,14 @@ figure.media-file figcaption {
 .comment-actions button,
 .comment-actions select {
     padding: 0.15em 0.5em;
+    font-size: var(--text-xs);
+}
+
+/* Deleting an account asks for a tick first, in the same quiet row. */
+.comment-actions .check {
+    display: inline-flex;
+    gap: 0.25rem;
+    color: var(--muted);
     font-size: var(--text-xs);
 }
 

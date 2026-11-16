@@ -17,6 +17,8 @@
     <header class="page-head">
         <h1>Comments</h1>
     </header>
+    {% if account_deleted %}<p class="notice notice-ok" role="status">The account was deleted. Its comments stay, under “[deleted user]”.</p>{% endif %}
+    {% if alert %}<p class="notice notice-error" role="alert">{{ alert }}</p>{% endif %}
 
     <section class="panel" aria-labelledby="held-heading">
         <h2 id="held-heading">Waiting for approval ({{ held|length }})</h2>
@@ -31,6 +33,14 @@
                             {{ self.action(comment.id, 'delete', 'Remove', csrf_field, csrf_token, 'button-danger') }}
                             {% if comment.authorId and not comment.trusted %}{{ self.action(comment.id, 'trust', 'Approve author', csrf_field, csrf_token) }}{% endif %}
                             {% if comment.authorId %}{{ self.action(comment.id, 'ban', 'Ban author for 7 days', csrf_field, csrf_token) }}{% endif %}
+                            {% if comment.authorId and not comment.authorDeleted %}
+                                <form method="post" action="/admin/comments/{{ comment.id }}/delete-account" class="inline">
+                                    <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                                    <input type="hidden" name="back" value="queue">
+                                    <label class="check"><input type="checkbox" name="confirm" value="yes" required> Delete permanently</label>
+                                    <button class="button-small button-danger" type="submit">Delete account<span class="visually-hidden"> of {{ comment.author }}</span></button>
+                                </form>
+                            {% endif %}
                         </div>
                     </li>
                 {% endfor %}

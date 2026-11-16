@@ -749,29 +749,74 @@ final readonly class Articles
                 $this->pdo->prepare('UPDATE tag SET slug = ?, name = ? WHERE slug = ?')->execute([$newSlug, $name, $slug]);
             }
 
-            $drafts = $this->pdo->query("SELECT id, draft::text AS draft FROM article WHERE draft IS NOT NULL AND draft->>'tags' <> ''");
-            $update = $this->pdo->prepare('UPDATE article SET draft = ?::jsonb WHERE id = ?');
-            foreach ($drafts === false ? [] : $drafts->fetchAll() as $row) {
-                if (!is_array($row)) {
-                    continue;
-                }
-                $input = ArticleInput::fromJson(Row::str($row, 'draft'));
-                $names = [];
-                $changed = false;
-                foreach ($input->tagList() as $tag) {
-                    $changed = $changed || $tag['slug'] === $slug;
-                    $names[] = $tag['slug'] === $slug ? $name : $tag['name'];
-                }
-                if ($changed) {
-                    $data = json_decode(Row::str($row, 'draft'), true);
-                    if (is_array($data)) {
-                        $data['tags'] = implode(', ', array_unique($names));
-                        $update->execute([json_encode($data, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE), Row::int($row, 'id')]);
-                    }
-                }
-            }
+            $this->retagDrafts($slug, $name);
+
             return null;
         });
+    }
+
+    /**
+     * Takes a tag off every article and page, drafts included, and deletes it. Nothing
+     * else about them changes. With the tag goes its page and its feed; the sitemap,
+     * related articles and the editor's suggestions follow from the links.
+     *
+     * @return array{name: string, count: int}|null the tag and how many pieces had it, or null if there is no such tag
+     */
+    public function deleteTag(string $slug): ?array
+    {
+        return $this->transaction(function () use ($slug): ?array {
+            $stmt = $this->pdo->prepare('SELECT id, name FROM tag WHERE slug = ? FOR UPDATE');
+            $stmt->execute([$slug]);
+            $tag = $stmt->fetch();
+            if (!is_array($tag)) {
+                return null;
+            }
+            $count = $this->pdo->prepare('SELECT count(*) FROM article_tag WHERE tag_id = ?');
+            $count->execute([Row::int($tag, 'id')]);
+            $pieces = (int) $count->fetchColumn();
+
+            // The links go with it (ON DELETE CASCADE).
+            $this->pdo->prepare('DELETE FROM tag WHERE id = ?')->execute([Row::int($tag, 'id')]);
+            $this->retagDrafts($slug, null);
+
+            return ['name' => Row::str($tag, 'name'), 'count' => $pieces];
+        });
+    }
+
+    /**
+     * Renames a tag in every draft, or with null takes it out, so that publishing a
+     * draft doesn't bring the old tag back.
+     */
+    private function retagDrafts(string $slug, ?string $newName): void
+    {
+        $drafts = $this->pdo->query("SELECT id, draft::text AS draft FROM article WHERE draft IS NOT NULL AND draft->>'tags' <> ''");
+        $update = $this->pdo->prepare('UPDATE article SET draft = ?::jsonb WHERE id = ?');
+        foreach ($drafts === false ? [] : $drafts->fetchAll() as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $input = ArticleInput::fromJson(Row::str($row, 'draft'));
+            $names = [];
+            $changed = false;
+            foreach ($input->tagList() as $tag) {
+                if ($tag['slug'] !== $slug) {
+                    $names[] = $tag['name'];
+
+                    continue;
+                }
+                $changed = true;
+                if ($newName !== null) {
+                    $names[] = $newName;
+                }
+            }
+            if ($changed) {
+                $data = json_decode(Row::str($row, 'draft'), true);
+                if (is_array($data)) {
+                    $data['tags'] = implode(', ', array_unique($names));
+                    $update->execute([json_encode($data, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE), Row::int($row, 'id')]);
+                }
+            }
+        }
     }
 
     private function setTags(int $articleId, ArticleInput $input): void

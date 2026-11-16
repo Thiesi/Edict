@@ -9,11 +9,12 @@
         <h1>Tags</h1>
     </header>
     {% if renamed %}<p class="notice" role="status">Renamed everywhere, drafts included.</p>{% endif %}
+    {% if deleted %}<p class="notice notice-ok" role="status">Tag “{{ deleted.name }}” deleted; it was on {{ deleted.count }} {{ deleted.count == 1 ? 'piece' : 'pieces' }}.</p>{% endif %}
     {% if error %}<p class="notice notice-error" role="alert">{{ error }}</p>{% endif %}
-    <p class="page-lede">Renaming changes the tag on every article and in drafts. Renaming it to a tag that exists merges the two. The tag's address changes with its name.</p>
+    <p class="page-lede">Renaming changes the tag on every article and in drafts. Renaming it to a tag that exists merges the two. The tag's address changes with its name. Deleting a tag takes it off every article and page, drafts included; they stay as they are otherwise.</p>
     {% if tags %}
         <table class="list" role="table">
-            <thead><tr role="row"><th role="columnheader">Tag</th><th role="columnheader" class="num">Articles</th><th role="columnheader">Rename to</th></tr></thead>
+            <thead><tr role="row"><th role="columnheader">Tag</th><th role="columnheader" class="num">Articles</th><th role="columnheader">Rename to</th><th role="columnheader">Delete</th></tr></thead>
             <tbody>
                 {% for tag in tags %}
                     <tr role="row">
@@ -25,6 +26,13 @@
                                 <label class="visually-hidden" for="rename-{{ tag.slug }}">New name for {{ tag.name }}</label>
                                 <input id="rename-{{ tag.slug }}" name="name" value="{{ tag.name }}" maxlength="64" required>
                                 <button class="button-small" type="submit">Rename</button>
+                            </form>
+                        </td>
+                        <td role="cell" class="cell-wide">
+                            <form method="post" action="/admin/tags/{{ tag.slug }}/delete">
+                                <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                                <label class="check"><input type="checkbox" name="confirm" value="yes" required> Delete permanently</label>
+                                <button class="button-small button-danger" type="submit">Delete tag<span class="visually-hidden"> {{ tag.name }}</span></button>
                             </form>
                         </td>
                     </tr>

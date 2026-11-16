@@ -159,7 +159,7 @@ final readonly class Comments
             "SELECT c.id, c.parent_id, c.depth, c.body, c.state, c.pinned, c.user_id,
                     EXTRACT(EPOCH FROM c.created_at)::bigint AS created_at, c.edited_at IS NOT NULL AS edited,
                     coalesce(u.display_name, ?) AS author, coalesce(u.trusted, false) AS trusted,
-                    coalesce(u.banned_until > to_timestamp(?), false) AS banned,
+                    coalesce(u.banned_until > to_timestamp(?), false) AS banned, u.deleted_at IS NOT NULL AS author_deleted,
                     coalesce(root.pinned, false) AS root_pinned
              FROM comment c
              LEFT JOIN app_user u ON u.id = c.user_id
@@ -224,6 +224,7 @@ final readonly class Comments
                 Row::bool($row, 'banned'),
                 $parent !== null && isset($rows[$parent]) ? Row::str($rows[$parent], 'author') : null,
                 array_map($build, $children[$id] ?? []),
+                Row::bool($row, 'author_deleted'),
             );
         };
 
@@ -313,13 +314,14 @@ final readonly class Comments
     /**
      * For the queue: what waits, newest first, and the latest of the rest.
      *
-     * @return list<array{id: int, body: string, state: string, createdAt: int, author: string, authorId: int|null, trusted: bool, slug: string, title: string}>
+     * @return list<array{id: int, body: string, state: string, createdAt: int, author: string, authorId: int|null, authorDeleted: bool, trusted: bool, slug: string, title: string}>
      */
     public function queue(string $state, int $limit): array
     {
         $stmt = $this->pdo->prepare(
             "SELECT c.id, c.body, c.state, EXTRACT(EPOCH FROM c.created_at)::bigint AS created_at, c.user_id,
-                    coalesce(u.display_name, '[deleted user]') AS author, coalesce(u.trusted, false) AS trusted, a.slug, a.title
+                    coalesce(u.display_name, '[deleted user]') AS author, coalesce(u.deleted_at IS NOT NULL, true) AS author_deleted,
+                    coalesce(u.trusted, false) AS trusted, a.slug, a.title
              FROM comment c JOIN article a ON a.id = c.article_id LEFT JOIN app_user u ON u.id = c.user_id
              WHERE c.state = ? ORDER BY c.created_at DESC, c.id DESC LIMIT ?",
         );
@@ -334,6 +336,7 @@ final readonly class Comments
                     'createdAt' => Row::int($row, 'created_at'),
                     'author' => Row::str($row, 'author'),
                     'authorId' => Row::intOrNull($row, 'user_id'),
+                    'authorDeleted' => Row::bool($row, 'author_deleted'),
                     'trusted' => Row::bool($row, 'trusted'),
                     'slug' => Row::str($row, 'slug'),
                     'title' => Row::str($row, 'title'),

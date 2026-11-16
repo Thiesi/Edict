@@ -47,6 +47,12 @@
                         {% if session and node.state == 'visible' and comments.status != 'closed' %}
                             <a href="/{{ article.slug }}?reply={{ node.id }}#reply-{{ node.id }}">Reply</a>
                         {% endif %}
+                        {% if session and not admin and node.authorId and node.authorId == session.userId and node.state != 'removed' %}
+                            <form method="post" action="/account/comments/{{ node.id }}/delete">
+                                <input type="hidden" name="{{ csrf_field }}" value="{{ session.csrfToken }}">
+                                <button type="submit">Delete<span class="visually-hidden"> your comment from {{ node.createdAt|article_date(article.lang) }}</span></button>
+                            </form>
+                        {% endif %}
                         {% if admin %}
                             {{ self.action(node.id, 'approve', 'Approve', session, csrf_field, node.state == 'held') }}
                             {% if node.state != 'removed' %}<a href="/{{ article.slug }}?edit={{ node.id }}#comment-{{ node.id }}">Edit</a>{% endif %}
@@ -69,6 +75,13 @@
                                             <option value="1">1 day</option><option value="7" selected>7 days</option><option value="30">30 days</option><option value="365">a year</option><option value="forever">for good</option>
                                         </select>
                                         <button type="submit">Ban author</button>
+                                    </form>
+                                {% endif %}
+                                {% if not node.authorDeleted %}
+                                    <form method="post" action="/admin/comments/{{ node.id }}/delete-account">
+                                        <input type="hidden" name="{{ csrf_field }}" value="{{ session.csrfToken }}">
+                                        <label class="check"><input type="checkbox" name="confirm" value="yes" required> Delete permanently</label>
+                                        <button type="submit">Delete account<span class="visually-hidden"> of {{ node.author }}</span></button>
                                     </form>
                                 {% endif %}
                             {% endif %}
@@ -117,6 +130,8 @@
     {% endif %}
 
     {% if comments.posted %}<p class="notice notice-ok" role="status">Thanks, your comment is saved.</p>{% endif %}
+    {% if comments.done %}<p class="notice notice-ok" role="status">{{ comments.done }}</p>{% endif %}
+    {% if comments.alert %}<p class="notice notice-error" role="alert">{{ comments.alert }}</p>{% endif %}
 
     {% if comments.thread %}
         {{ self.thread(comments.thread, article, comments, session, csrf_field) }}

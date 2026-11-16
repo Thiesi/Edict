@@ -51,6 +51,7 @@ body {
 
 /* Small capitals for everything that labels rather than says. */
 .site-nav a,
+.site-nav button.nav-link,
 .site-description,
 .summary-meta,
 .article-meta,
@@ -100,12 +101,14 @@ button,
     justify-content: flex-end;
 }
 
-.site-nav a {
+.site-nav a,
+.site-nav button.nav-link {
     color: var(--muted);
     text-decoration: none;
 }
 
-.site-nav a:hover {
+.site-nav a:hover,
+.site-nav button.nav-link:hover {
     color: var(--fg);
 }
 

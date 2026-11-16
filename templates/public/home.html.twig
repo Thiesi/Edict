@@ -17,6 +17,13 @@
             {% if has_more %}<p class="more"><a class="button" href="/archive{{ lang_filter ? '?lang=' ~ lang_filter : '' }}">All articles</a></p>{% endif %}
         {% else %}
             <p class="empty">A CMS for one sovereign. Nothing to read yet.</p>
+            {% if is_admin|default(false) and nothing_yet|default(false) %}
+                <form class="first-article" method="post" action="/admin/articles">
+                    <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                    <input type="hidden" name="kind" value="article">
+                    <button class="button-primary" type="submit">Write the first article</button>
+                </form>
+            {% endif %}
         {% endif %}
     </main>
 {% endblock %}

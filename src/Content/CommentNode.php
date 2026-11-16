@@ -27,5 +27,6 @@ final readonly class CommentNode
         public bool $banned,
         public ?string $replyTo,
         public array $replies,
+        public bool $authorDeleted = false,
     ) {}
 }

@@ -54,6 +54,7 @@ return static function (App $app): void {
         $group->post('/logout', [AccountController::class, 'logout']);
         $group->post('/logout-everywhere', [AccountController::class, 'logoutEverywhere']);
         $group->post('/delete', [AccountController::class, 'delete']);
+        $group->post('/comments/{id:[0-9]+}/delete', [CommentController::class, 'deleteOwn']);
     })->add(RequireLogin::class);
 
     $app->get('/admin/login', [AdminAuthController::class, 'showLogin']);
@@ -100,6 +101,7 @@ return static function (App $app): void {
         $group->post('/restore', [AdminAuthController::class, 'restore']);
         $group->get('/tags', [ArticleAdminController::class, 'tags']);
         $group->post('/tags/{slug:[a-z0-9-]+}', [ArticleAdminController::class, 'renameTag']);
+        $group->post('/tags/{slug:[a-z0-9-]+}/delete', [ArticleAdminController::class, 'deleteTag']);
         $group->post('/articles/{id:[0-9]+}/votes', [VoteController::class, 'adjust']);
 
         $group->get('/comments', [CommentController::class, 'queue']);

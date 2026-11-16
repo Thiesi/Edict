@@ -50,13 +50,15 @@ body {
     font-size: 0.95rem;
 }
 
-.site-nav a {
+.site-nav a,
+.site-nav button.nav-link {
     color: var(--muted);
     font-size: 0.95rem;
     text-decoration: none;
 }
 
-.site-nav a:hover {
+.site-nav a:hover,
+.site-nav button.nav-link:hover {
     color: var(--fg);
 }
 

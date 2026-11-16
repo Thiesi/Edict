@@ -32,10 +32,19 @@ final readonly class SecurityNotice
      */
     public function record(string $what, ?string $alsoTo = null): void
     {
+        $this->log($what);
+        $this->jobs->enqueue(self::JOB, ['what' => $what, 'at' => $this->clock->now(), 'also_to' => $alsoTo]);
+    }
+
+    /**
+     * Only the log line, for what the admin does on purpose to someone else's account,
+     * such as deleting a reader: a mail about it would tell the admin what they just did.
+     */
+    public function log(string $what): void
+    {
         if ($this->config->env !== 'test') {
             error_log('Edict security: ' . $what);
         }
-        $this->jobs->enqueue(self::JOB, ['what' => $what, 'at' => $this->clock->now(), 'also_to' => $alsoTo]);
     }
 
     /**

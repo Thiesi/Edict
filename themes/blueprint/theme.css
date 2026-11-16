@@ -95,6 +95,7 @@ body {
 }
 
 .site-nav a,
+.site-nav button.nav-link,
 .summary-meta,
 .article-meta,
 .lang-filter,
@@ -109,11 +110,13 @@ figcaption::before {
     text-transform: uppercase;
 }
 
-.site-nav a {
+.site-nav a,
+.site-nav button.nav-link {
     text-decoration: none;
 }
 
-.site-nav a:hover {
+.site-nav a:hover,
+.site-nav button.nav-link:hover {
     color: var(--accent);
     text-decoration: underline;
 }

@@ -349,4 +349,186 @@ final class CommentFlowTest extends DbTestCase
         self::assertStringContainsString('[deleted user]', $page);
         self::assertStringNotContainsString('Alice', $page);
     }
+
+    private function state(int $comment): string
+    {
+        $stmt = $this->pdo->prepare('SELECT state FROM comment WHERE id = ?');
+        $stmt->execute([$comment]);
+
+        return (string) $stmt->fetchColumn();
+    }
+
+    /**
+     * @param array{id: int, cookies: array<string, string>, csrf: string}|null $who
+     */
+    private function deleteOwn(?array $who, int $comment, bool $withToken = true): ResponseInterface
+    {
+        return $this->post("/account/comments/$comment/delete", $who !== null && $withToken ? ['_csrf' => $who['csrf']] : [], $who === null ? [] : $who['cookies']);
+    }
+
+    public function testReadersDeleteTheirOwnCommentsAndRepliesStay(): void
+    {
+        $alice = $this->reader('Alice');
+        $bob = $this->reader('Bob');
+        $root = $this->posted($alice, 'I take this back');
+        $reply = $this->posted($bob, 'Too late, I saw it', $root);
+
+        $form = '<form method="post" action="/account/comments/' . $root . '/delete">';
+        $page = $this->page($alice);
+        self::assertStringContainsString($form, $page);
+        self::assertStringContainsString('<input type="hidden" name="_csrf" value="' . $alice['csrf'] . '">', $page);
+        self::assertMatchesRegularExpression('~Delete<span class="visually-hidden"> your comment from [^<]+</span></button>~', $page);
+        self::assertStringNotContainsString('/account/comments/' . $reply . '/delete', $page, 'only on their own');
+        self::assertStringNotContainsString($form, $this->page($bob));
+        self::assertStringNotContainsString($form, $this->page());
+
+        $response = $this->deleteOwn($alice, $root);
+        self::assertSame(303, $response->getStatusCode());
+        self::assertSame('/talk?done=comment-deleted#comments', $response->getHeaderLine('Location'));
+        self::assertSame('removed', $this->state($root));
+        self::assertSame('visible', $this->state($reply));
+
+        $page = $this->page();
+        self::assertStringContainsString('[removed]', $page, 'as the admin’s “Remove only this”');
+        self::assertStringNotContainsString('I take this back', $page);
+        self::assertStringContainsString('Too late, I saw it', $page);
+        self::assertStringContainsString('role="status">Your comment was deleted.</p>', (string) $this->get('/talk?done=comment-deleted', $alice['cookies'])->getBody());
+        self::assertStringNotContainsString('Your comment was deleted.', (string) $this->get('/talk?done=comment-deleted')->getBody());
+        self::assertStringNotContainsString($form, $this->page($alice), 'nothing left to delete');
+    }
+
+    public function testNobodyDeletesSomeoneElsesComment(): void
+    {
+        $alice = $this->reader('Alice');
+        $bob = $this->reader('Bob');
+        $id = $this->posted($alice, 'Mine alone');
+
+        self::assertSame(404, $this->deleteOwn($bob, $id)->getStatusCode(), 'not 403: it doesn’t confirm the comment exists');
+        self::assertSame(404, $this->deleteOwn($bob, $id + 1000)->getStatusCode());
+        $admin = $this->admin();
+        self::assertSame(404, $this->deleteOwn($admin, $id)->getStatusCode(), 'the admin has the Remove tools for that');
+
+        $signedOut = $this->deleteOwn(null, $id);
+        self::assertSame(303, $signedOut->getStatusCode());
+        self::assertSame('/login', $signedOut->getHeaderLine('Location'));
+        self::assertSame(403, $this->deleteOwn($alice, $id, false)->getStatusCode(), 'without the token');
+        self::assertSame('visible', $this->state($id));
+
+        $page = $this->page($admin);
+        self::assertStringNotContainsString('/account/comments/', $page, 'the admin sees Remove, not Delete');
+        self::assertStringContainsString('>Remove</button>', $page);
+    }
+
+    public function testABannedReaderMayStillDeleteTheirComments(): void
+    {
+        $admin = $this->admin();
+        $alice = $this->reader('Alice');
+        $id = $this->posted($alice, 'Regrettable');
+        $this->moderate($admin, $id, 'ban', ['days' => 'forever']);
+
+        $again = $this->signIn($alice['id']);
+        self::assertStringContainsString('/account/comments/' . $id . '/delete', $this->page($again));
+        self::assertSame(303, $this->deleteOwn($again, $id)->getStatusCode());
+        self::assertSame('removed', $this->state($id));
+    }
+
+    private function deletedAt(int $userId): ?string
+    {
+        $stmt = $this->pdo->prepare('SELECT deleted_at FROM app_user WHERE id = ?');
+        $stmt->execute([$userId]);
+        $value = $stmt->fetchColumn();
+
+        return is_string($value) ? $value : null;
+    }
+
+    private function countFor(string $table, int $userId): int
+    {
+        $stmt = $this->pdo->prepare("SELECT count(*) FROM $table WHERE user_id = ?");
+        $stmt->execute([$userId]);
+
+        return (int) $stmt->fetchColumn();
+    }
+
+    public function testTheAdminDeletesAReaderAccountOnlyWhenConfirmed(): void
+    {
+        $admin = $this->admin();
+        $alice = $this->reader('Alice');
+        $id = $this->posted($alice, 'Words that stay');
+        $this->pdo->prepare("INSERT INTO user_identity (provider, subject, user_id) VALUES ('google', 'alice-sub', ?)")->execute([$alice['id']]);
+        $this->pdo->prepare('INSERT INTO vote (article_id, user_id, created_at) VALUES (?, ?, now())')->execute([$this->article, $alice['id']]);
+
+        $form = '<form method="post" action="/admin/comments/' . $id . '/delete-account">';
+        $page = $this->page($admin);
+        self::assertStringContainsString($form, $page);
+        self::assertStringContainsString('Delete account<span class="visually-hidden"> of Alice</span>', $page);
+        self::assertStringNotContainsString($form, $this->page($alice), 'readers get no such tool');
+
+        $refused = $this->moderate($admin, $id, 'delete-account');
+        self::assertSame(422, $refused->getStatusCode());
+        self::assertStringContainsString('role="alert">Please tick “Delete permanently” to delete the account.', (string) $refused->getBody());
+        self::assertNull($this->deletedAt($alice['id']));
+        self::assertSame(403, $this->post("/admin/comments/$id/delete-account", ['confirm' => 'yes'], $admin['cookies'])->getStatusCode(), 'without the token');
+        self::assertNull($this->deletedAt($alice['id']));
+
+        $response = $this->moderate($admin, $id, 'delete-account', ['confirm' => 'yes']);
+        self::assertSame(303, $response->getStatusCode());
+        self::assertSame('/talk?done=account-deleted#comments', $response->getHeaderLine('Location'));
+
+        // Exactly what deleting it herself does.
+        self::assertNotNull($this->deletedAt($alice['id']));
+        self::assertSame(0, $this->countFor('user_identity', $alice['id']));
+        self::assertSame(0, $this->countFor('session', $alice['id']));
+        self::assertSame(0, $this->countFor('vote', $alice['id']));
+        $page = (string) $this->get('/talk?done=account-deleted', $admin['cookies'])->getBody();
+        self::assertStringContainsString('role="status">The account was deleted. Its comments stay, under “[deleted user]”.</p>', $page);
+        self::assertStringContainsString('Words that stay', $page);
+        self::assertStringContainsString('[deleted user]', $page);
+        self::assertStringNotContainsString('Alice', $page);
+        self::assertStringNotContainsString($form, $page, 'nothing left to delete');
+        self::assertStringNotContainsString('The account was deleted', (string) $this->get('/talk?done=account-deleted')->getBody());
+    }
+
+    public function testTheQueueDeletesAnAccountToo(): void
+    {
+        $admin = $this->admin();
+        $this->rules($admin, ['comment_default' => 'hold']);
+        $bob = $this->reader('Bob');
+        $id = $this->posted($bob, 'Buy my stuff');
+
+        $queue = (string) $this->get('/admin/comments', $admin['cookies'])->getBody();
+        self::assertStringContainsString('<form method="post" action="/admin/comments/' . $id . '/delete-account" class="inline">', $queue);
+
+        $refused = $this->moderate($admin, $id, 'delete-account', ['back' => 'queue']);
+        self::assertSame(422, $refused->getStatusCode());
+        self::assertStringContainsString('role="alert">Please tick “Delete permanently” to delete the account.', (string) $refused->getBody());
+        self::assertStringContainsString('<h1>Comments</h1>', (string) $refused->getBody());
+        self::assertNull($this->deletedAt($bob['id']));
+
+        $response = $this->moderate($admin, $id, 'delete-account', ['back' => 'queue', 'confirm' => 'yes']);
+        self::assertSame('/admin/comments?done=account-deleted', $response->getHeaderLine('Location'));
+        self::assertNotNull($this->deletedAt($bob['id']));
+        $queue = (string) $this->get('/admin/comments?done=account-deleted', $admin['cookies'])->getBody();
+        self::assertStringContainsString('The account was deleted.', $queue);
+        self::assertStringNotContainsString('/admin/comments/' . $id . '/delete-account', $queue);
+    }
+
+    public function testTheAdminAccountIsNeverDeletedAndReadersCannotDeleteAccounts(): void
+    {
+        $admin = $this->admin();
+        $own = $this->posted($admin, 'The sovereign speaks');
+        $alice = $this->reader('Alice');
+        $bob = $this->reader('Bob');
+        $bobs = $this->posted($bob, 'Hello');
+
+        self::assertStringNotContainsString('/admin/comments/' . $own . '/delete-account', $this->page($admin));
+        $refused = $this->moderate($admin, $own, 'delete-account', ['confirm' => 'yes']);
+        self::assertSame(422, $refused->getStatusCode());
+        self::assertStringContainsString('The admin account can’t be deleted.', (string) $refused->getBody());
+        self::assertNull($this->deletedAt($admin['id']));
+        self::assertSame(200, $this->get('/admin', $admin['cookies'])->getStatusCode(), 'still signed in');
+
+        self::assertSame(403, $this->post("/admin/comments/$bobs/delete-account", ['confirm' => 'yes', '_csrf' => $alice['csrf']], $alice['cookies'])->getStatusCode());
+        self::assertSame(303, $this->post("/admin/comments/$bobs/delete-account", ['confirm' => 'yes'])->getStatusCode(), 'signed out: to the sign-in');
+        self::assertNull($this->deletedAt($bob['id']));
+    }
 }
