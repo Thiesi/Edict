@@ -94,13 +94,15 @@ body {
     gap: 0.15rem;
 }
 
-.site-nav a {
+.site-nav a,
+.site-nav button.nav-link {
     font-weight: 700;
     text-decoration: none;
     text-transform: uppercase;
 }
 
-.site-nav a:hover {
+.site-nav a:hover,
+.site-nav button.nav-link:hover {
     background: var(--accent);
     color: var(--accent-fg);
 }

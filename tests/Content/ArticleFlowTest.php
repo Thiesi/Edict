@@ -378,6 +378,75 @@ final class ArticleFlowTest extends DbTestCase
         self::assertSame(422, $this->adminPost('/admin/tags/nonesuch', ['name' => 'X'])->getStatusCode());
     }
 
+    public function testATagIsDeletedEverywhereOnlyWhenConfirmed(): void
+    {
+        $one = $this->published(['slug' => 'one', 'tags' => 'Fotografie, Reisen']);
+        $two = $this->published(['slug' => 'two', 'tags' => 'Fotografie']);
+        $this->published(['slug' => 'about', 'tags' => 'Fotografie'], 'page');
+        $this->saved(['slug' => 'draft', 'tags' => 'fotografie, Notes']);
+        $articles = $this->service(Articles::class);
+        self::assertSame([$two], array_map(static fn(Article $a): int => $a->id, $articles->related($this->articleById($one), 3)));
+
+        $refused = $this->adminPost('/admin/tags/fotografie/delete');
+        self::assertSame(422, $refused->getStatusCode());
+        self::assertStringContainsString('Please tick “Delete permanently” to delete a tag.', (string) $refused->getBody());
+        self::assertSame(422, $this->adminPost('/admin/tags/fotografie/delete', ['confirm' => 'no'])->getStatusCode());
+        self::assertSame(200, $this->get('/tag/fotografie')->getStatusCode(), 'nothing happened');
+        self::assertSame(403, $this->post('/admin/tags/fotografie/delete', ['confirm' => 'yes'], $this->admin)->getStatusCode(), 'without the token');
+        self::assertSame(200, $this->get('/tag/fotografie')->getStatusCode());
+
+        $response = $this->adminPost('/admin/tags/fotografie/delete', ['confirm' => 'yes']);
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
+        $page = (string) $response->getBody();
+        self::assertStringContainsString('Tag “Fotografie” deleted; it was on 3 pieces.', $page, 'two articles and a page');
+        self::assertStringNotContainsString('href="/tag/fotografie"', $page);
+        self::assertStringContainsString('href="/tag/reisen"', $page);
+
+        // The tag's page and feed are gone, and nothing points at them any more.
+        self::assertSame(404, $this->get('/tag/fotografie')->getStatusCode());
+        self::assertSame(404, $this->get('/tag/fotografie/feed.atom')->getStatusCode());
+        $sitemap = (string) $this->get('/sitemap.xml')->getBody();
+        self::assertStringNotContainsString('/tag/fotografie', $sitemap);
+        self::assertStringContainsString('/tag/reisen', $sitemap);
+        self::assertStringNotContainsString('term="fotografie"', (string) $this->get('/feed.atom')->getBody());
+        $article = (string) $this->get('/one')->getBody();
+        self::assertStringNotContainsString('href="/tag/fotografie"', $article);
+        self::assertStringContainsString('href="/tag/reisen"', $article);
+        self::assertSame([], $articles->related($this->articleById($one), 3), 'they shared only that tag');
+        self::assertSame(200, $this->get('/two')->getStatusCode(), 'the pieces stay');
+        self::assertSame(200, $this->get('/about')->getStatusCode());
+        self::assertSame('published', $this->articleById($two)->status);
+
+        $drafts = $this->pdo->query("SELECT draft->>'tags' FROM article WHERE draft IS NOT NULL");
+        self::assertNotFalse($drafts);
+        self::assertSame(['Notes'], $drafts->fetchAll(\PDO::FETCH_COLUMN), 'publishing the draft won’t bring it back');
+        $tags = $this->pdo->query('SELECT slug FROM tag ORDER BY slug');
+        self::assertNotFalse($tags);
+        self::assertSame(['reisen'], $tags->fetchAll(\PDO::FETCH_COLUMN));
+
+        $again = $this->adminPost('/admin/tags/fotografie/delete', ['confirm' => 'yes']);
+        self::assertSame(422, $again->getStatusCode());
+        self::assertStringContainsString('That tag no longer exists.', (string) $again->getBody());
+    }
+
+    public function testTheTagsPageOffersDeletingWithAConfirmation(): void
+    {
+        $this->published(['slug' => 'one', 'tags' => 'Alpha']);
+
+        $page = (string) $this->get('/admin/tags', $this->admin)->getBody();
+        self::assertStringContainsString('<form method="post" action="/admin/tags/alpha/delete">', $page);
+        self::assertStringContainsString('<input type="hidden" name="_csrf" value="' . $this->csrf . '">', $page);
+        self::assertStringContainsString('<input type="checkbox" name="confirm" value="yes" required> Delete permanently', $page);
+    }
+
+    private function articleById(int $id): Article
+    {
+        $article = $this->service(Articles::class)->find($id);
+        self::assertNotNull($article);
+
+        return $article;
+    }
+
     public function testTheEditorSuggestsTagsInUse(): void
     {
         $this->published(['slug' => 'one', 'tags' => 'Alpha, Beta']);

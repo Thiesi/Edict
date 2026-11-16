@@ -143,6 +143,7 @@ final readonly class ArticleAdminController
             'tags' => $this->articles->tags(),
             'error' => null,
             'renamed' => ($request->getQueryParams()['renamed'] ?? null) === '1',
+            'deleted' => null,
         ]);
     }
 
@@ -158,10 +159,40 @@ final readonly class ArticleAdminController
             return $response->withStatus(303)->withHeader('Location', '/admin/tags?renamed=1');
         }
 
-        return $this->html($request, $response->withStatus(422), 'admin/tags.html.twig', [
+        return $this->tagsPage($request, $response->withStatus(422), $error);
+    }
+
+    /**
+     * Takes the tag off everything and deletes it. The page comes back directly rather
+     * than through a redirect, so the notice can name the tag without the address
+     * carrying text onto the page.
+     *
+     * @param array<string, string> $args
+     */
+    public function deleteTag(ServerRequestInterface $request, ResponseInterface $response, array $args): ResponseInterface
+    {
+        $body = $request->getParsedBody();
+        if (!is_array($body) || ($body['confirm'] ?? null) !== 'yes') {
+            return $this->tagsPage($request, $response->withStatus(422), 'Please tick “Delete permanently” to delete a tag.');
+        }
+        $deleted = $this->articles->deleteTag($args['slug'] ?? '');
+        if ($deleted === null) {
+            return $this->tagsPage($request, $response->withStatus(422), 'That tag no longer exists.');
+        }
+
+        return $this->tagsPage($request, $response, null, $deleted);
+    }
+
+    /**
+     * @param array{name: string, count: int}|null $deleted
+     */
+    private function tagsPage(ServerRequestInterface $request, ResponseInterface $response, ?string $error, ?array $deleted = null): ResponseInterface
+    {
+        return $this->html($request, $response, 'admin/tags.html.twig', [
             'tags' => $this->articles->tags(),
             'error' => $error,
             'renamed' => false,
+            'deleted' => $deleted,
         ]);
     }
 

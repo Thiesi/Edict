@@ -32,9 +32,12 @@ final readonly class PublicController
     public function home(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
     {
         $lang = self::lang($request);
+        $articles = $this->articles->publicList(self::HOME_ARTICLES, 0, $lang);
 
         return $this->render($request, $response, 'public/home.html.twig', [
-            'articles' => $this->articles->publicList(self::HOME_ARTICLES, 0, $lang),
+            'articles' => $articles,
+            // Nothing published at all, in any language: the admin gets a way to start.
+            'nothing_yet' => $articles === [] && $this->articles->publicCount() === 0,
             'has_more' => $this->articles->publicCount($lang) > self::HOME_ARTICLES,
             'lang_filter' => $lang,
             'base_path' => '/',
@@ -140,9 +143,9 @@ final readonly class PublicController
 
     /**
      * The article with its likes and comments. A refused comment comes back here, with
-     * the reader's text and what was wrong.
+     * the reader's text and what was wrong; a refused moderation action with an alert.
      *
-     * @param array{error?: string, text?: string, parent?: int|null} $comment
+     * @param array{error?: string, text?: string, parent?: int|null, alert?: string} $comment
      */
     public function showArticle(ServerRequestInterface $request, ResponseInterface $response, Article $article, array $comment = []): ResponseInterface
     {
@@ -172,6 +175,13 @@ final readonly class PublicController
                 'error' => $comment['error'] ?? null,
                 'text' => $comment['text'] ?? '',
                 'posted' => self::id($query['posted'] ?? null),
+                'alert' => $comment['alert'] ?? null,
+                // After a redirect: only a key comes through the address, never text.
+                'done' => match ($query['done'] ?? null) {
+                    'comment-deleted' => $session !== null ? 'Your comment was deleted.' : null,
+                    'account-deleted' => $isAdmin ? 'The account was deleted. Its comments stay, under “[deleted user]”.' : null,
+                    default => null,
+                },
             ] : null,
         ]);
     }
@@ -206,9 +216,15 @@ final readonly class PublicController
     {
         $session = $request->getAttribute(SessionMiddleware::ATTRIBUTE);
         $signedIn = $session instanceof Session;
-        // The admin gets links into the admin and the editor; readers never see them.
+        // The admin gets links into the admin and the editor, and forms to start writing,
+        // which need the session's token; readers never see them.
         $isAdmin = $session instanceof Session && $session->isAdmin;
-        $response->getBody()->write($this->twig->render($template, $data + ['signed_in' => $signedIn, 'is_admin' => $isAdmin]));
+        $response->getBody()->write($this->twig->render($template, $data + [
+            'signed_in' => $signedIn,
+            'is_admin' => $isAdmin,
+            'csrf_field' => CsrfMiddleware::FIELD,
+            'csrf_token' => $isAdmin ? $session->csrfToken : '',
+        ]));
         $response = $response->withHeader('Content-Type', 'text/html; charset=utf-8');
 
         // A signed-in page carries the reader's own like and token: never for a shared cache.

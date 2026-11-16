@@ -80,7 +80,8 @@ body {
     justify-content: center;
 }
 
-.site-nav a {
+.site-nav a,
+.site-nav button.nav-link {
     font-size: 0.85rem;
     font-weight: 700;
     letter-spacing: 0.08em;
@@ -88,7 +89,8 @@ body {
     text-transform: uppercase;
 }
 
-.site-nav a:hover {
+.site-nav a:hover,
+.site-nav button.nav-link:hover {
     text-decoration: underline;
 }
 

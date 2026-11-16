@@ -70,7 +70,17 @@
                     <ul>
                         {% for link in site.menu %}<li><a href="{{ link.url }}">{{ link.label }}</a></li>{% endfor %}
                         <li><a href="/archive">Archive</a></li>
-                        {% if is_admin|default(false) %}<li><a href="/admin">Admin</a></li>{% endif %}
+                        {% if is_admin|default(false) %}
+                            <li><a href="/admin">Admin</a></li>
+                            {# Forms, not links: starting a piece creates its row. #}
+                            {% for kind, label in {article: 'New article', page: 'New page'} %}
+                                <li><form class="nav-form" method="post" action="/admin/articles">
+                                    <input type="hidden" name="{{ csrf_field }}" value="{{ csrf_token }}">
+                                    <input type="hidden" name="kind" value="{{ kind }}">
+                                    <button class="nav-link" type="submit">{{ label }}</button>
+                                </form></li>
+                            {% endfor %}
+                        {% endif %}
                         <li>{% if signed_in|default(false) %}<a href="/account">Your account</a>{% else %}<a href="/login">Sign in</a>{% endif %}</li>
                     </ul>
                 </nav>

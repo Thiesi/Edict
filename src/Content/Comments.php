@@ -159,7 +159,7 @@ final readonly class Comments
             "SELECT c.id, c.parent_id, c.depth, c.body, c.state, c.pinned, c.user_id,
                     EXTRACT(EPOCH FROM c.created_at)::bigint AS created_at, c.edited_at IS NOT NULL AS edited,
                     coalesce(u.display_name, ?) AS author, coalesce(u.trusted, false) AS trusted,
-                    coalesce(u.banned_until > to_timestamp(?), false) AS banned,
+                    coalesce(u.banned_until > to_timestamp(?), false) AS banned, u.deleted_at IS NOT NULL AS author_deleted,
                     coalesce(root.pinned, false) AS root_pinned
              FROM comment c
              LEFT JOIN app_user u ON u.id = c.user_id
@@ -224,6 +224,7 @@ final readonly class Comments
                 Row::bool($row, 'banned'),
                 $parent !== null && isset($rows[$parent]) ? Row::str($rows[$parent], 'author') : null,
                 array_map($build, $children[$id] ?? []),
+                Row::bool($row, 'author_deleted'),
             );
         };
 
@@ -266,6 +267,55 @@ final readonly class Comments
             return;
         }
         $this->pdo->prepare("UPDATE comment SET state = 'removed' WHERE id = ?")->execute([$id]);
+    }
+
+    /**
+     * A reader deleting their own comment: the text is erased, not kept, unlike the
+     * admin's remove. With replies under it (in any state, so a removed reply isn't lost
+     * to the cascade), the row stays as an empty "[removed]" placeholder without author;
+     * without, the row goes, and so do erased placeholders above it that held nothing
+     * else. A comment alert still queued holds only the ID, and finds nothing to send.
+     */
+    public function erase(int $id): void
+    {
+        $this->pdo->beginTransaction();
+        try {
+            $lock = $this->pdo->prepare('SELECT parent_id FROM comment WHERE id = ? FOR UPDATE');
+            $lock->execute([$id]);
+            $row = $lock->fetch();
+            if (is_array($row) && $this->hasReplies($id)) {
+                $this->pdo->prepare(
+                    "UPDATE comment SET body = '', state = 'removed', user_id = NULL, pinned = false, edited_at = NULL WHERE id = ?",
+                )->execute([$id]);
+            } elseif (is_array($row)) {
+                $this->pdo->prepare('DELETE FROM comment WHERE id = ?')->execute([$id]);
+                $parent = Row::intOrNull($row, 'parent_id');
+                $placeholder = $this->pdo->prepare("SELECT parent_id FROM comment WHERE id = ? AND state = 'removed' AND body = '' FOR UPDATE");
+                while ($parent !== null) {
+                    $placeholder->execute([$parent]);
+                    $up = $placeholder->fetch();
+                    if (!is_array($up) || $this->hasReplies($parent)) {
+                        break;
+                    }
+                    $this->pdo->prepare('DELETE FROM comment WHERE id = ?')->execute([$parent]);
+                    $parent = Row::intOrNull($up, 'parent_id');
+                }
+            }
+            $this->pdo->commit();
+        } catch (\Throwable $e) {
+            $this->pdo->rollBack();
+
+            throw $e;
+        }
+    }
+
+    private function hasReplies(int $id): bool
+    {
+        $stmt = $this->pdo->prepare('SELECT EXISTS (SELECT 1 FROM comment WHERE parent_id = ?) AS replies');
+        $stmt->execute([$id]);
+        $row = $stmt->fetch();
+
+        return is_array($row) && Row::bool($row, 'replies');
     }
 
     public function edit(int $id, string $body): bool
@@ -313,13 +363,14 @@ final readonly class Comments
     /**
      * For the queue: what waits, newest first, and the latest of the rest.
      *
-     * @return list<array{id: int, body: string, state: string, createdAt: int, author: string, authorId: int|null, trusted: bool, slug: string, title: string}>
+     * @return list<array{id: int, body: string, state: string, createdAt: int, author: string, authorId: int|null, authorDeleted: bool, trusted: bool, slug: string, title: string}>
      */
     public function queue(string $state, int $limit): array
     {
         $stmt = $this->pdo->prepare(
             "SELECT c.id, c.body, c.state, EXTRACT(EPOCH FROM c.created_at)::bigint AS created_at, c.user_id,
-                    coalesce(u.display_name, '[deleted user]') AS author, coalesce(u.trusted, false) AS trusted, a.slug, a.title
+                    coalesce(u.display_name, '[deleted user]') AS author, coalesce(u.deleted_at IS NOT NULL, true) AS author_deleted,
+                    coalesce(u.trusted, false) AS trusted, a.slug, a.title
              FROM comment c JOIN article a ON a.id = c.article_id LEFT JOIN app_user u ON u.id = c.user_id
              WHERE c.state = ? ORDER BY c.created_at DESC, c.id DESC LIMIT ?",
         );
@@ -334,6 +385,7 @@ final readonly class Comments
                     'createdAt' => Row::int($row, 'created_at'),
                     'author' => Row::str($row, 'author'),
                     'authorId' => Row::intOrNull($row, 'user_id'),
+                    'authorDeleted' => Row::bool($row, 'author_deleted'),
                     'trusted' => Row::bool($row, 'trusted'),
                     'slug' => Row::str($row, 'slug'),
                     'title' => Row::str($row, 'title'),

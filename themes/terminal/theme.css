@@ -115,25 +115,31 @@ h3 {
     content: '# ' / '';
 }
 
-.site-nav a {
+.site-nav a,
+.site-nav button.nav-link {
     text-decoration: none;
 }
 
-.site-nav a::before {
+.site-nav a::before,
+.site-nav button.nav-link::before {
     color: var(--muted);
     content: '[';
     content: '[' / '';
 }
 
-.site-nav a::after {
+.site-nav a::after,
+.site-nav button.nav-link::after {
     color: var(--muted);
     content: ']';
     content: ']' / '';
 }
 
 .site-nav a:hover,
+.site-nav button.nav-link:hover,
 .site-nav a:hover::before,
-.site-nav a:hover::after {
+.site-nav button.nav-link:hover::before,
+.site-nav a:hover::after,
+.site-nav button.nav-link:hover::after {
     background: var(--fg);
     color: var(--bg);
     text-shadow: none;
