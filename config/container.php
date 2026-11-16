@@ -96,6 +96,7 @@ return [
         $twig->addFunction(new TwigFunction('site_look', static fn(): Look => $services->get(Look::class)));
         // For the admin menu's badge. Asked only by admin pages, so nobody else pays for the query.
         $twig->addFunction(new TwigFunction('admin_held_comments', static fn(): int => $services->get(Comments::class)->heldCount()));
+        $twig->addFunction(new TwigFunction('theme_icons', static fn(string $id): ?array => Themes::icons($id, $config->projectDir . '/public')));
         $twig->addFunction(new TwigFunction('theme_name', static fn(string $id): string => Themes::ALL[$id]['name'] ?? $id));
         $twig->addFilter(new TwigFilter('article_date', ArticleDate::format(...)));
         $twig->addFilter(new TwigFilter('article_iso', ArticleDate::iso(...)));

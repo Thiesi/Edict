@@ -63,6 +63,31 @@ final class Themes
         return self::HEADER_BACKGROUNDS[$id] ?? self::BACKGROUNDS[$id] ?? null;
     }
 
+    /** The files a theme's own site icon is made of, in public/assets/themes/<id>/. */
+    public const ICON_FILES = ['svg' => 'favicon.svg', 'png' => 'icon-192.png', 'touch' => 'apple-touch-icon.png'];
+
+    /**
+     * The theme's own site icon, as addresses, or null when the theme has none (or only
+     * part of one): then Edict's seal stands in.
+     *
+     * @return array{svg: string, png: string, touch: string}|null
+     */
+    public static function icons(string $id, string $publicDir): ?array
+    {
+        if (!self::exists($id)) {
+            return null;
+        }
+        $icons = [];
+        foreach (self::ICON_FILES as $key => $file) {
+            if (!is_file($publicDir . '/assets/themes/' . $id . '/' . $file)) {
+                return null;
+            }
+            $icons[$key] = '/assets/themes/' . $id . '/' . $file;
+        }
+
+        return $icons;
+    }
+
     public static function exists(string $id): bool
     {
         return isset(self::ALL[$id]);

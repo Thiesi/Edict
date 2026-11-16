@@ -36,12 +36,18 @@
     {% if look.accentVersion %}<link rel="stylesheet" href="/accent.css?theme={{ site.theme }}&amp;v={{ look.accentVersion }}">{% endif %}
 {% endblock %}
 
+{# The admin's own icon first, then the theme's (the previewed one in a preview), then Edict's seal. #}
 {% block icons %}
     {% set icons = look.icons %}
+    {% set themed = icons ? null : theme_icons(site.theme) %}
     {% if icons %}
         <link rel="icon" href="{{ icons[32] }}" sizes="32x32" type="image/png">
         <link rel="icon" href="{{ icons[192] }}" sizes="192x192" type="image/png">
         <link rel="apple-touch-icon" href="{{ icons[180] }}">
+    {% elseif themed %}
+        <link rel="icon" href="{{ themed.svg }}?v={{ asset_version }}" type="image/svg+xml">
+        <link rel="icon" href="{{ themed.png }}?v={{ asset_version }}" sizes="192x192" type="image/png">
+        <link rel="apple-touch-icon" href="{{ themed.touch }}?v={{ asset_version }}">
     {% else %}
         {{ parent() }}
     {% endif %}
