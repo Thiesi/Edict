@@ -269,6 +269,55 @@ final readonly class Comments
         $this->pdo->prepare("UPDATE comment SET state = 'removed' WHERE id = ?")->execute([$id]);
     }
 
+    /**
+     * A reader deleting their own comment: the text is erased, not kept, unlike the
+     * admin's remove. With replies under it (in any state, so a removed reply isn't lost
+     * to the cascade), the row stays as an empty "[removed]" placeholder without author;
+     * without, the row goes, and so do erased placeholders above it that held nothing
+     * else. A comment alert still queued holds only the ID, and finds nothing to send.
+     */
+    public function erase(int $id): void
+    {
+        $this->pdo->beginTransaction();
+        try {
+            $lock = $this->pdo->prepare('SELECT parent_id FROM comment WHERE id = ? FOR UPDATE');
+            $lock->execute([$id]);
+            $row = $lock->fetch();
+            if (is_array($row) && $this->hasReplies($id)) {
+                $this->pdo->prepare(
+                    "UPDATE comment SET body = '', state = 'removed', user_id = NULL, pinned = false, edited_at = NULL WHERE id = ?",
+                )->execute([$id]);
+            } elseif (is_array($row)) {
+                $this->pdo->prepare('DELETE FROM comment WHERE id = ?')->execute([$id]);
+                $parent = Row::intOrNull($row, 'parent_id');
+                $placeholder = $this->pdo->prepare("SELECT parent_id FROM comment WHERE id = ? AND state = 'removed' AND body = '' FOR UPDATE");
+                while ($parent !== null) {
+                    $placeholder->execute([$parent]);
+                    $up = $placeholder->fetch();
+                    if (!is_array($up) || $this->hasReplies($parent)) {
+                        break;
+                    }
+                    $this->pdo->prepare('DELETE FROM comment WHERE id = ?')->execute([$parent]);
+                    $parent = Row::intOrNull($up, 'parent_id');
+                }
+            }
+            $this->pdo->commit();
+        } catch (\Throwable $e) {
+            $this->pdo->rollBack();
+
+            throw $e;
+        }
+    }
+
+    private function hasReplies(int $id): bool
+    {
+        $stmt = $this->pdo->prepare('SELECT EXISTS (SELECT 1 FROM comment WHERE parent_id = ?) AS replies');
+        $stmt->execute([$id]);
+        $row = $stmt->fetch();
+
+        return is_array($row) && Row::bool($row, 'replies');
+    }
+
     public function edit(int $id, string $body): bool
     {
         $body = trim(str_replace(["\r\n", "\r", "\0"], ["\n", "\n", ''], $body));

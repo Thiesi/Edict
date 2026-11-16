@@ -65,9 +65,9 @@ final readonly class CommentController
     }
 
     /**
-     * A reader deletes their own comment, as the admin's "Remove only this" does: replies
-     * stay, under "[removed]". Anyone else's comment, or one that doesn't exist, is
-     * not found, so the answer doesn't tell which. Behind RequireLogin.
+     * A reader deletes their own comment, and its text is erased (Comments::erase):
+     * replies stay, under "[removed]". Anyone else's comment, or one that doesn't exist,
+     * is not found, so the answer doesn't tell which. Behind RequireLogin.
      *
      * @param array<string, string> $args
      */
@@ -79,7 +79,7 @@ final readonly class CommentController
         if (!$session instanceof Session || $comment === null || $comment['userId'] !== $session->userId) {
             throw new HttpNotFoundException($request);
         }
-        $this->comments->remove($id, false);
+        $this->comments->erase($id);
 
         return self::redirect($response, '/' . $comment['slug'] . '?done=comment-deleted#comments');
     }

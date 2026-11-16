@@ -18,8 +18,9 @@
             {% set admin = session and session.isAdmin %}
             <li class="comment depth-{{ min(node.depth, 5) }}{% if node.pinned %} is-pinned{% endif %}{% if node.state != 'visible' %} is-{{ node.state }}{% endif %}" id="comment-{{ node.id }}">
                 <article class="comment-body" aria-label="Comment{% if node.author %} by {{ node.author }}{% endif %}">
-                    {% if node.state == 'removed' and not admin %}
-                        <p class="comment-removed">[removed]</p>
+                    {# Erased by its author: no text left, for the admin either. #}
+                    {% if node.state == 'removed' and (not admin or node.body == '') %}
+                        <p class="comment-removed">{{ admin ? '[deleted by its author]' : '[removed]' }}</p>
                     {% else %}
                         <header class="comment-meta">
                             <strong class="comment-author">{{ node.author }}</strong>

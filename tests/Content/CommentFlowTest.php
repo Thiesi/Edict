@@ -303,9 +303,14 @@ final class CommentFlowTest extends DbTestCase
         self::assertStringNotContainsString('Lonely leaf', $page);
         self::assertSame(1, substr_count($page, '[removed]'), 'a removed comment without replies is simply gone');
 
+        $own = $this->page($admin);
+        self::assertStringContainsString('Root comment', $own, 'the admin’s removal keeps the text, as evidence');
+        self::assertStringContainsString('Lonely leaf', $own);
+
         $this->moderate($admin, $root, 'delete-thread');
         self::assertStringNotContainsString('A reply', $this->page());
         self::assertStringNotContainsString('[removed]', $this->page());
+        self::assertStringContainsString('A reply', $this->page($admin));
     }
 
     public function testTheSovereignEditsAndPins(): void
@@ -389,12 +394,91 @@ final class CommentFlowTest extends DbTestCase
         self::assertSame('visible', $this->state($reply));
 
         $page = $this->page();
-        self::assertStringContainsString('[removed]', $page, 'as the admin’s “Remove only this”');
+        self::assertStringContainsString('[removed]', $page, 'a placeholder, as replies hang off it');
         self::assertStringNotContainsString('I take this back', $page);
         self::assertStringContainsString('Too late, I saw it', $page);
+        self::assertTextIsGone($root, 'I take this back');
         self::assertStringContainsString('role="status">Your comment was deleted.</p>', (string) $this->get('/talk?done=comment-deleted', $alice['cookies'])->getBody());
         self::assertStringNotContainsString('Your comment was deleted.', (string) $this->get('/talk?done=comment-deleted')->getBody());
         self::assertStringNotContainsString($form, $this->page($alice), 'nothing left to delete');
+    }
+
+    /**
+     * The text is nowhere any more: not in the row, not for the admin on the article or
+     * in the queue, not in a queued alert.
+     */
+    private function assertTextIsGone(int $comment, string $text): void
+    {
+        $stmt = $this->pdo->prepare('SELECT body, user_id FROM comment WHERE id = ?');
+        $stmt->execute([$comment]);
+        $row = $stmt->fetch(\PDO::FETCH_ASSOC);
+        if (is_array($row)) {
+            self::assertSame(['body' => '', 'user_id' => null], $row, 'an empty placeholder, without author');
+        }
+        $found = $this->pdo->prepare('SELECT count(*) FROM comment WHERE body LIKE ?');
+        $found->execute(['%' . $text . '%']);
+        self::assertSame(0, (int) $found->fetchColumn());
+        $jobs = $this->pdo->query('SELECT payload::text FROM job');
+        self::assertNotFalse($jobs);
+        foreach ($jobs->fetchAll(\PDO::FETCH_COLUMN) as $payload) {
+            self::assertIsString($payload);
+            self::assertStringNotContainsString($text, $payload);
+        }
+
+        $session = $this->signIn($this->adminId());
+        foreach (['/talk', '/admin/comments'] as $path) {
+            self::assertStringNotContainsString($text, (string) $this->get($path, $session['cookies'])->getBody(), $path);
+        }
+    }
+
+    public function testADeletedCommentWithoutRepliesLeavesNoRow(): void
+    {
+        $alice = $this->reader('Alice');
+        $bob = $this->reader('Bob');
+        $root = $this->posted($alice, 'Opening words');
+        $reply = $this->posted($bob, 'An answer', $root);
+        $this->clock->advance(700); // Under the rate limit.
+        $leaf = $this->posted($alice, 'Alone and regretted');
+
+        self::assertSame(303, $this->deleteOwn($alice, $leaf)->getStatusCode());
+        self::assertSame('', $this->state($leaf), 'nothing hangs off it: the row goes');
+        self::assertTextIsGone($leaf, 'Alone and regretted');
+
+        // Alice's placeholder stays while Bob's reply is there, and goes with it.
+        self::assertSame(303, $this->deleteOwn($alice, $root)->getStatusCode());
+        self::assertSame('removed', $this->state($root));
+        self::assertStringContainsString('[deleted by its author]', $this->page($this->signIn($this->adminId())));
+        self::assertSame(303, $this->deleteOwn($bob, $reply)->getStatusCode());
+        self::assertSame('', $this->state($reply));
+        self::assertSame('', $this->state($root), 'an erased placeholder holding nothing goes too');
+        self::assertStringContainsString('0 comments', $this->page());
+        self::assertStringNotContainsString('[removed]', $this->page());
+    }
+
+    public function testAHeldCommentIsErasedFromTheQueue(): void
+    {
+        $admin = $this->admin();
+        $this->rules($admin, ['comment_default' => 'hold']);
+        $alice = $this->reader('Alice');
+        $id = $this->posted($alice, 'Second thoughts already');
+        self::assertStringContainsString('Second thoughts already', (string) $this->get('/admin/comments', $admin['cookies'])->getBody());
+
+        self::assertSame(303, $this->deleteOwn($alice, $id)->getStatusCode());
+        self::assertTextIsGone($id, 'Second thoughts already');
+    }
+
+    private function adminId(): int
+    {
+        $id = $this->pdo->query('SELECT id FROM app_user WHERE is_admin');
+        self::assertNotFalse($id);
+        $value = $id->fetchColumn();
+        if ($value === false) {
+            $this->service(AdminAccount::class)->create('sovereign', 'correct horse battery');
+
+            return $this->adminId();
+        }
+
+        return (int) $value;
     }
 
     public function testNobodyDeletesSomeoneElsesComment(): void
@@ -429,7 +513,7 @@ final class CommentFlowTest extends DbTestCase
         $again = $this->signIn($alice['id']);
         self::assertStringContainsString('/account/comments/' . $id . '/delete', $this->page($again));
         self::assertSame(303, $this->deleteOwn($again, $id)->getStatusCode());
-        self::assertSame('removed', $this->state($id));
+        self::assertSame('', $this->state($id), 'no replies: the row is gone');
     }
 
     private function deletedAt(int $userId): ?string
